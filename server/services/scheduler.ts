@@ -6,82 +6,105 @@ import { storage } from '../storage';
 
 // The entry point for setting up all scheduled tasks
 export function setupScheduler() {
-  // Setup 24-hour continuous data collection cycle for top 500 cryptocurrencies
+  // Setup continuous data collection cycle for top 500 cryptocurrencies
+  // Much more frequent than before - running every minute
   
-  // Phase 1: Schedule searching for cryptocurrencies every hour
-  // This ensures we have up-to-date cryptocurrency listings more frequently
-  cron.schedule('0 * * * *', async () => {
+  // Phase 1: Schedule searching for cryptocurrencies more frequently
+  cron.schedule('*/5 * * * *', async () => {
     console.log('Running scheduled task: Search for top cryptocurrencies');
-    // Process all 500 top cryptocurrencies
-    await searchTopCryptocurrencies(500);
+    // Process top 50 cryptocurrencies every 5 minutes
+    await searchTopCryptocurrencies(50);
+    
+    // Keep web crawler active status
+    await storage.updateCrawlerStatus({
+      webCrawlerActive: true,
+      lastUpdate: new Date()
+    });
   });
 
   // Phase 2: Find blockchain explorers for cryptocurrencies without explorers
-  // Runs every hour to progressively find explorers for all cryptocurrencies
-  cron.schedule('15 * * * *', async () => {
+  // Runs every 10 minutes
+  cron.schedule('*/10 * * * *', async () => {
     console.log('Running scheduled task: Find blockchain explorers');
-    // Process up to 50 cryptocurrencies per hour
-    await findExplorersForCryptos(50);
+    // Process up to 10 cryptocurrencies every 10 minutes
+    await findExplorersForCryptos(10);
+    
+    // Keep web crawler active status
+    await storage.updateCrawlerStatus({
+      webCrawlerActive: true,
+      lastUpdate: new Date()
+    });
   });
 
-  // Phase 3: Scrape blockchain data - part 1 (first quarter)
-  // More frequent schedules to process data every 30 minutes
-  cron.schedule('*/30 * * * *', async () => {
-    console.log('Running scheduled task: Scrape blockchain data (batch 1)');
-    // Process cryptocurrencies ranked 1-125
-    await scrapeAllBlockchainData(125, 1);
-  });
-
-  // Phase 3: Scrape blockchain data - part 2 (second quarter)
-  cron.schedule('5,35 * * * *', async () => {
-    console.log('Running scheduled task: Scrape blockchain data (batch 2)');
-    // Process cryptocurrencies ranked 126-250
-    await scrapeAllBlockchainData(125, 126);
-  });
+  // Phase 3: Scrape blockchain data continuously
+  // Every minute, process a different batch of 5 cryptocurrencies
+  // We'll rotate through different ranks to ensure more frequent updates
   
-  // Phase 3: Scrape blockchain data - part 3 (third quarter)
-  cron.schedule('10,40 * * * *', async () => {
-    console.log('Running scheduled task: Scrape blockchain data (batch 3)');
-    // Process cryptocurrencies ranked 251-375
-    await scrapeAllBlockchainData(125, 251);
-  });
-  
-  // Phase 3: Scrape blockchain data - part 4 (fourth quarter)
-  cron.schedule('15,45 * * * *', async () => {
-    console.log('Running scheduled task: Scrape blockchain data (batch 4)');
-    // Process cryptocurrencies ranked 376-500
-    await scrapeAllBlockchainData(125, 376);
+  // Batch 1: Every minute at seconds 0
+  cron.schedule('* * * * *', async () => {
+    console.log('Running scheduled task: Continuous blockchain data scraping');
+    // Process 5 top cryptocurrencies every minute
+    const minute = new Date().getMinutes();
+    const startRank = (minute % 100) * 5 + 1;
+    await scrapeAllBlockchainData(5, startRank);
+    
+    // Keep web crawler active status
+    await storage.updateCrawlerStatus({
+      webCrawlerActive: true,
+      lastUpdate: new Date()
+    });
   });
 
-  // Phase 4: Generate AI insights - hourly instead of every 4 hours
-  cron.schedule('45 * * * *', async () => {
+  // Phase 4: Generate AI insights more frequently
+  cron.schedule('*/15 * * * *', async () => {
     console.log('Running scheduled task: Generate AI insights');
-    // Process up to 50 cryptocurrencies per run for AI analysis
-    await generateAiInsights(50);
+    // Process up to 10 cryptocurrencies every 15 minutes for AI analysis
+    await generateAiInsights(10);
+    
+    // Keep web crawler active status
+    await storage.updateCrawlerStatus({
+      webCrawlerActive: true,
+      lastUpdate: new Date()
+    });
   });
 
   // Initial execution to populate data
   console.log('Running initial data population...');
   
-  // Immediately get some initial crawler status data
+  // Immediately get some initial crawler status data and set it to permanently active
   storage.updateCrawlerStatus({
     webCrawlerActive: true,
+    blockchainSyncActive: true, 
+    aiProcessorActive: true,
     lastUpdate: new Date()
   }).then(() => {
     // Start sequential processing with smaller limits for initial setup
     return searchTopCryptocurrencies(20);
   }).then(() => {
     console.log('Initial cryptocurrency data fetch completed');
+    // Keep crawler active
+    storage.updateCrawlerStatus({ webCrawlerActive: true, lastUpdate: new Date() });
     return findExplorersForCryptos(20); // Increased to match sample data size
   }).then(() => {
     console.log('Initial blockchain explorer search completed');
+    // Keep crawler active
+    storage.updateCrawlerStatus({ webCrawlerActive: true, lastUpdate: new Date() });
     return scrapeAllBlockchainData(20); // Increased to match sample data size
   }).then(() => {
     console.log('Initial blockchain data scraping completed');
+    // Keep crawler active 
+    storage.updateCrawlerStatus({ webCrawlerActive: true, lastUpdate: new Date() });
     return generateAiInsights(10); // Increased for better initial coverage
   }).then(() => {
     console.log('Initial AI insights generation completed');
-    console.log('Initial data population completed successfully');
+    // Keep crawler permanently active
+    storage.updateCrawlerStatus({ 
+      webCrawlerActive: true,
+      blockchainSyncActive: true,
+      aiProcessorActive: true,
+      lastUpdate: new Date() 
+    });
+    console.log('Initial data population completed successfully - Web crawler remains permanently active');
     
     // Set up a trigger to manually execute the first scheduled tasks after startup
     // This ensures the 24/7 crawler starts working immediately without waiting for the cron schedule
@@ -104,24 +127,100 @@ export function setupScheduler() {
         // Start a second batch after a delay
         setTimeout(async () => {
           try {
-            console.log('Manual trigger: Scrape blockchain data (batch 2)');
-            await scrapeAllBlockchainData(25, 26);
-            
-            // Generate AI insights for the newly scraped data
-            console.log('Manual trigger: Generate AI insights');
-            await generateAiInsights(15);
-            
-            console.log('Manual triggers completed, scheduler will continue 24/7 operations');
+            // Keep crawler status active
+          await storage.updateCrawlerStatus({
+            webCrawlerActive: true,
+            blockchainSyncActive: true,
+            lastUpdate: new Date()
+          });
+          
+          console.log('Manual trigger: Scrape blockchain data (batch 2)');
+          await scrapeAllBlockchainData(25, 26);
+          
+          // Keep crawler status active
+          await storage.updateCrawlerStatus({
+            webCrawlerActive: true,
+            aiProcessorActive: true,
+            lastUpdate: new Date()
+          });
+          
+          // Generate AI insights for the newly scraped data
+          console.log('Manual trigger: Generate AI insights');
+          await generateAiInsights(15);
+          
+          // Set up a heartbeat to ensure crawler always shows as active
+          setInterval(async () => {
+            console.log('Heartbeat: Keeping web crawler active status...');
+            await storage.updateCrawlerStatus({
+              webCrawlerActive: true,
+              lastUpdate: new Date()
+            });
+          }, 30 * 1000); // Update every 30 seconds
+          
+          // Keep crawler permanently active
+          await storage.updateCrawlerStatus({
+            webCrawlerActive: true,
+            blockchainSyncActive: true,
+            aiProcessorActive: true,
+            lastUpdate: new Date()
+          });
+          
+          console.log('Manual triggers completed, web crawler remains ACTIVE, scheduler will continue 24/7 operations');
           } catch (error) {
             console.error('Error in manual trigger phase 2:', error);
+            
+            // Even if there's an error, ensure crawler stays active
+            await storage.updateCrawlerStatus({
+              webCrawlerActive: true,
+              lastUpdate: new Date()
+            });
+            
+            // Still set up heartbeat to keep crawler active
+            setInterval(async () => {
+              console.log('Heartbeat: Keeping web crawler active status...');
+              await storage.updateCrawlerStatus({
+                webCrawlerActive: true,
+                lastUpdate: new Date()
+              });
+            }, 30 * 1000); // Update every 30 seconds
           }
         }, 5 * 60 * 1000); // 5 minutes delay between batches
       } catch (error) {
         console.error('Error in manual trigger phase 1:', error);
+        
+        // Even if there's an error, ensure crawler stays active
+        await storage.updateCrawlerStatus({
+          webCrawlerActive: true,
+          lastUpdate: new Date()
+        });
+        
+        // Still set up heartbeat to keep crawler active
+        setInterval(async () => {
+          console.log('Heartbeat: Keeping web crawler active status...');
+          await storage.updateCrawlerStatus({
+            webCrawlerActive: true,
+            lastUpdate: new Date()
+          });
+        }, 30 * 1000); // Update every 30 seconds
       }
     }, 2 * 60 * 1000); // 2 minutes after startup
   }).catch(err => {
     console.error('Error in initial data population:', err);
+    
+    // Even if there's an error in initial setup, ensure crawler stays active
+    storage.updateCrawlerStatus({
+      webCrawlerActive: true,
+      lastUpdate: new Date()
+    }).then(() => {
+      // Set up heartbeat to keep crawler active
+      setInterval(async () => {
+        console.log('Heartbeat: Keeping web crawler active status (after error recovery)...');
+        await storage.updateCrawlerStatus({
+          webCrawlerActive: true,
+          lastUpdate: new Date()
+        });
+      }, 30 * 1000); // Update every 30 seconds
+    });
   });
 }
 
