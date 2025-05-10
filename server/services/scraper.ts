@@ -85,8 +85,14 @@ export async function findBlockchainExplorer(cryptocurrencyName: string, cryptoc
     try {
       console.log(`Trying common explorer patterns for ${cryptocurrencyName}...`);
       
+      // Define explorer URL type
+      interface ExplorerUrl {
+        url: string;
+        name: string;
+      }
+      
       // Common explorer naming patterns
-      let explorerUrls = [];
+      let explorerUrls: ExplorerUrl[] = [];
       let symbol = "";
       
       // Get cryptocurrency symbol from database for better search
@@ -115,7 +121,7 @@ export async function findBlockchainExplorer(cryptocurrencyName: string, cryptoc
         { url: `https://${cryptoNameLower}chain.info`, name: `${cryptocurrencyName}chain` },
         { url: `https://explorer.${cryptoNameLower}.org`, name: `${cryptocurrencyName} Explorer` },
         { url: `https://scan.${cryptoNameLower}.org`, name: `${cryptocurrencyName} Scan` }
-      ];
+      ] as ExplorerUrl[];
       
       // Try to access each generated URL to see if it exists
       for (const explorer of explorerUrls) {
@@ -149,11 +155,13 @@ export async function findBlockchainExplorer(cryptocurrencyName: string, cryptoc
     try {
       console.log(`Searching for blockchain explorer for ${cryptocurrencyName}...`);
       
-      // Construct search queries
+      // Get cryptocurrency data for better search queries
+      const cryptoData = await storage.getCryptocurrency(cryptocurrencyId);
+      const symbolText = cryptoData ? cryptoData.symbol.toLowerCase() : "";
       const searchQueries = [
         `${cryptocurrencyName} blockchain explorer official`,
         `${cryptocurrencyName} scan blockchain explorer`,
-        `${symbol || ""} blockchain explorer official site`
+        `${symbolText} blockchain explorer official site`
       ];
       
       // Using a public API for search is challenging due to rate limits

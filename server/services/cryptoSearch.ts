@@ -20,7 +20,8 @@ function makeHttpsRequest(url: string): Promise<string> {
   });
 }
 
-// Sample cryptocurrency data for initial setup
+// Sample cryptocurrency data for when APIs are not available
+// This is an extended dataset with 20 cryptocurrencies to enable more comprehensive testing
 const sampleCryptocurrencies = [
   {
     name: "Bitcoin",
@@ -67,6 +68,141 @@ const sampleCryptocurrencies = [
     volume24h: 2975431800,
     rank: 5
   },
+  {
+    name: "XRP",
+    symbol: "XRP",
+    price: 0.5284,
+    priceChange24h: -0.34,
+    marketCap: 28924610700,
+    volume24h: 782145600,
+    rank: 6
+  },
+  {
+    name: "USDC",
+    symbol: "USDC",
+    price: 1.0,
+    priceChange24h: 0.01,
+    marketCap: 26931046200,
+    volume24h: 1956732400,
+    rank: 7
+  },
+  {
+    name: "Cardano",
+    symbol: "ADA",
+    price: 0.4581,
+    priceChange24h: -2.15,
+    marketCap: 16132594300,
+    volume24h: 321345600,
+    rank: 8
+  },
+  {
+    name: "Avalanche",
+    symbol: "AVAX",
+    price: 36.87,
+    priceChange24h: 2.14,
+    marketCap: 14289453700,
+    volume24h: 689432100,
+    rank: 9
+  },
+  {
+    name: "Dogecoin",
+    symbol: "DOGE",
+    price: 0.1384,
+    priceChange24h: -1.05,
+    marketCap: 13621859400,
+    volume24h: 542781900,
+    rank: 10
+  },
+  {
+    name: "Polkadot",
+    symbol: "DOT",
+    price: 7.32,
+    priceChange24h: 1.63,
+    marketCap: 9421567800,
+    volume24h: 312654700,
+    rank: 11
+  },
+  {
+    name: "Polygon",
+    symbol: "MATIC",
+    price: 0.6745,
+    priceChange24h: -0.87,
+    marketCap: 6542198300,
+    volume24h: 271543600,
+    rank: 12
+  },
+  {
+    name: "Chainlink",
+    symbol: "LINK",
+    price: 14.52,
+    priceChange24h: 3.21,
+    marketCap: 8452187600,
+    volume24h: 456781200,
+    rank: 13
+  },
+  {
+    name: "Litecoin",
+    symbol: "LTC",
+    price: 84.21,
+    priceChange24h: 0.54,
+    marketCap: 6245871300,
+    volume24h: 321546800,
+    rank: 14
+  },
+  {
+    name: "Shiba Inu",
+    symbol: "SHIB",
+    price: 0.00002158,
+    priceChange24h: -2.37,
+    marketCap: 8745621400,
+    volume24h: 245873100,
+    rank: 15
+  },
+  {
+    name: "Uniswap",
+    symbol: "UNI",
+    price: 7.82,
+    priceChange24h: 1.24,
+    marketCap: 5873245600,
+    volume24h: 198742300,
+    rank: 16
+  },
+  {
+    name: "Stellar",
+    symbol: "XLM",
+    price: 0.1075,
+    priceChange24h: -0.43,
+    marketCap: 3021546800,
+    volume24h: 87321500,
+    rank: 17
+  },
+  {
+    name: "Cosmos",
+    symbol: "ATOM",
+    price: 9.43,
+    priceChange24h: 2.18,
+    marketCap: 3542187900,
+    volume24h: 132546700,
+    rank: 18
+  },
+  {
+    name: "Monero",
+    symbol: "XMR",
+    price: 162.74,
+    priceChange24h: 1.05,
+    marketCap: 2987456200,
+    volume24h: 65432100,
+    rank: 19
+  },
+  {
+    name: "Filecoin",
+    symbol: "FIL",
+    price: 5.24,
+    priceChange24h: -1.17, 
+    marketCap: 2654321800,
+    volume24h: 98765400,
+    rank: 20
+  }
 ];
 
 // Function to search for the top cryptocurrencies by market cap

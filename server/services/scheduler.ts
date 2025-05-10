@@ -59,16 +59,54 @@ export function setupScheduler() {
     return searchTopCryptocurrencies(20);
   }).then(() => {
     console.log('Initial cryptocurrency data fetch completed');
-    return findExplorersForCryptos(10);
+    return findExplorersForCryptos(20); // Increased to match sample data size
   }).then(() => {
     console.log('Initial blockchain explorer search completed');
-    return scrapeAllBlockchainData(10);
+    return scrapeAllBlockchainData(20); // Increased to match sample data size
   }).then(() => {
     console.log('Initial blockchain data scraping completed');
-    return generateAiInsights(5);
+    return generateAiInsights(10); // Increased for better initial coverage
   }).then(() => {
     console.log('Initial AI insights generation completed');
     console.log('Initial data population completed successfully');
+    
+    // Set up a trigger to manually execute the first scheduled tasks after startup
+    // This ensures the 24/7 crawler starts working immediately without waiting for the cron schedule
+    setTimeout(async () => {
+      try {
+        console.log('Starting first scheduled tasks manually...');
+        
+        // Trigger the cryptocurrency search task
+        console.log('Manual trigger: Search for top cryptocurrencies');
+        await searchTopCryptocurrencies(50); // Start with 50 cryptocurrencies
+        
+        // Trigger the blockchain explorer finder task
+        console.log('Manual trigger: Find blockchain explorers');
+        await findExplorersForCryptos(30);
+        
+        // Trigger the blockchain data scraper task (first batch)
+        console.log('Manual trigger: Scrape blockchain data (batch 1)');
+        await scrapeAllBlockchainData(25, 1);
+        
+        // Start a second batch after a delay
+        setTimeout(async () => {
+          try {
+            console.log('Manual trigger: Scrape blockchain data (batch 2)');
+            await scrapeAllBlockchainData(25, 26);
+            
+            // Generate AI insights for the newly scraped data
+            console.log('Manual trigger: Generate AI insights');
+            await generateAiInsights(15);
+            
+            console.log('Manual triggers completed, scheduler will continue 24/7 operations');
+          } catch (error) {
+            console.error('Error in manual trigger phase 2:', error);
+          }
+        }, 5 * 60 * 1000); // 5 minutes delay between batches
+      } catch (error) {
+        console.error('Error in manual trigger phase 1:', error);
+      }
+    }, 2 * 60 * 1000); // 2 minutes after startup
   }).catch(err => {
     console.error('Error in initial data population:', err);
   });
