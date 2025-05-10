@@ -81,9 +81,11 @@ export async function searchTopCryptocurrencies(count: number = 500): Promise<bo
       blockchainSyncActive: false
     });
     
-    // First attempt: try to fetch data from CoinGecko API
+    // Collection of cryptocurrencies from multiple sources
     const cryptocurrencies = [];
+    let sourceUsed = "none";
     
+    // First attempt: try CoinGecko API
     try {
       console.log("Attempting to use CoinGecko API...");
       const apiUrl = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=${count}&page=1`;
@@ -103,15 +105,55 @@ export async function searchTopCryptocurrencies(count: number = 500): Promise<bo
       }
       
       console.log(`Successfully fetched ${cryptocurrencies.length} cryptocurrencies from CoinGecko API.`);
+      sourceUsed = "coingecko";
     } catch (apiError) {
-      console.log("CoinGecko API failed, using backup data source...");
+      console.log("CoinGecko API failed, trying CoinMarketCap API...");
       
-      // If API fails, use sample data as fallback for demonstration
-      for (let i = 0; i < Math.min(count, sampleCryptocurrencies.length); i++) {
-        cryptocurrencies.push(sampleCryptocurrencies[i]);
+      // Second attempt: try CoinMarketCap API (if permitted based on terms of service)
+      try {
+        const cmcUrl = `https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest?limit=${count}`;
+        // Note: This is a paid API that requires an API key, commented out as it needs credentials
+        // If user provides API key, this could be used
+        throw new Error("CoinMarketCap API requires credentials");
+      } catch (cmcError) {
+        console.log("CoinMarketCap API failed, trying CoinCap API...");
+        
+        // Third attempt: try CoinCap API
+        try {
+          const coincapUrl = `https://api.coincap.io/v2/assets?limit=${Math.min(count, 100)}`;
+          const coincapResponse = await makeHttpsRequest(coincapUrl);
+          const coincapData = JSON.parse(coincapResponse);
+          
+          if (coincapData.data && Array.isArray(coincapData.data)) {
+            for (const coin of coincapData.data) {
+              cryptocurrencies.push({
+                name: coin.name,
+                symbol: coin.symbol,
+                price: parseFloat(coin.priceUsd) || 0,
+                priceChange24h: parseFloat(coin.changePercent24Hr) || 0,
+                marketCap: parseFloat(coin.marketCapUsd) || 0,
+                volume24h: parseFloat(coin.volumeUsd24Hr) || 0,
+                rank: parseInt(coin.rank) || 0
+              });
+            }
+            
+            console.log(`Successfully fetched ${cryptocurrencies.length} cryptocurrencies from CoinCap API.`);
+            sourceUsed = "coincap";
+          } else {
+            throw new Error("Invalid data format from CoinCap API");
+          }
+        } catch (coincapError) {
+          console.log("All API sources failed, using sample data as fallback...");
+          
+          // Last resort: use sample data
+          for (let i = 0; i < Math.min(count, sampleCryptocurrencies.length); i++) {
+            cryptocurrencies.push(sampleCryptocurrencies[i]);
+          }
+          
+          console.log(`Using ${cryptocurrencies.length} sample cryptocurrencies.`);
+          sourceUsed = "sample";
+        }
       }
-      
-      console.log(`Using ${cryptocurrencies.length} sample cryptocurrencies.`);
     }
     
     // Store the cryptocurrencies
