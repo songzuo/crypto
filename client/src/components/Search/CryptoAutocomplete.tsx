@@ -75,7 +75,8 @@ export function CryptoAutocomplete() {
 
   // Get color for crypto symbol
   const getCryptoColor = (symbol: string) => {
-    return cryptoColors[symbol.toLowerCase()] || '#7c3aed'; // Default to purple
+    const upperSymbol = symbol.toUpperCase();
+    return cryptoColors[upperSymbol] || '#7c3aed'; // Default to purple if no color defined
   };
 
   return (
