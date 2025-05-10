@@ -1,6 +1,7 @@
 import { pgTable, text, serial, integer, boolean, timestamp, jsonb, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { relations } from "drizzle-orm";
 
 // Users table (inherited from template, keeping it)
 export const users = pgTable("users", {
@@ -41,6 +42,13 @@ export const insertCryptocurrencySchema = createInsertSchema(cryptocurrencies).o
 export type InsertCryptocurrency = z.infer<typeof insertCryptocurrencySchema>;
 export type Cryptocurrency = typeof cryptocurrencies.$inferSelect;
 
+// Define cryptocurrency relations
+export const cryptocurrenciesRelations = relations(cryptocurrencies, ({ many }) => ({
+  blockchainExplorers: many(blockchainExplorers),
+  metrics: many(metrics),
+  aiInsights: many(aiInsights)
+}));
+
 // Blockchain Explorer table
 export const blockchainExplorers = pgTable("blockchain_explorers", {
   id: serial("id").primaryKey(),
@@ -57,6 +65,14 @@ export const insertBlockchainExplorerSchema = createInsertSchema(blockchainExplo
 
 export type InsertBlockchainExplorer = z.infer<typeof insertBlockchainExplorerSchema>;
 export type BlockchainExplorer = typeof blockchainExplorers.$inferSelect;
+
+// Define blockchain explorer relations
+export const blockchainExplorersRelations = relations(blockchainExplorers, ({ one }) => ({
+  cryptocurrency: one(cryptocurrencies, {
+    fields: [blockchainExplorers.cryptocurrencyId],
+    references: [cryptocurrencies.id]
+  })
+}));
 
 // Metrics table
 export const metrics = pgTable("metrics", {

@@ -302,4 +302,270 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+import { db } from "./db";
+import { eq, and, like, desc, asc } from "drizzle-orm";
+
+// Database Storage implementation
+export class DatabaseStorage implements IStorage {
+  // Users
+  async getUser(id: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user || undefined;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user || undefined;
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values(insertUser)
+      .returning();
+    return user;
+  }
+  
+  // Cryptocurrencies
+  async getCryptocurrencies(page: number, limit: number, sort: string, order: string): Promise<{ data: Cryptocurrency[], total: number }> {
+    const offset = (page - 1) * limit;
+    
+    // Determine sort column
+    let sortColumn;
+    switch (sort) {
+      case 'rank':
+        sortColumn = cryptocurrencies.rank;
+        break;
+      case 'price':
+        sortColumn = cryptocurrencies.price;
+        break;
+      case 'marketCap':
+        sortColumn = cryptocurrencies.marketCap;
+        break;
+      case 'volume24h':
+        sortColumn = cryptocurrencies.volume24h;
+        break;
+      case 'priceChange24h':
+        sortColumn = cryptocurrencies.priceChange24h;
+        break;
+      default:
+        sortColumn = cryptocurrencies.rank;
+    }
+    
+    // Get total count
+    const [countResult] = await db
+      .select({ count: sql`COUNT(*)` })
+      .from(cryptocurrencies);
+    
+    // Get data with sorting and pagination
+    const data = await db
+      .select()
+      .from(cryptocurrencies)
+      .orderBy(order === 'asc' ? asc(sortColumn) : desc(sortColumn))
+      .limit(limit)
+      .offset(offset);
+    
+    return {
+      data,
+      total: Number(countResult?.count || 0)
+    };
+  }
+
+  async getCryptocurrency(id: number): Promise<Cryptocurrency | undefined> {
+    const [crypto] = await db
+      .select()
+      .from(cryptocurrencies)
+      .where(eq(cryptocurrencies.id, id));
+    
+    return crypto || undefined;
+  }
+
+  async createCryptocurrency(insertCrypto: InsertCryptocurrency): Promise<Cryptocurrency> {
+    const [crypto] = await db
+      .insert(cryptocurrencies)
+      .values(insertCrypto)
+      .returning();
+    
+    return crypto;
+  }
+
+  async updateCryptocurrency(id: number, data: Partial<InsertCryptocurrency>): Promise<Cryptocurrency | undefined> {
+    const [updated] = await db
+      .update(cryptocurrencies)
+      .set(data)
+      .where(eq(cryptocurrencies.id, id))
+      .returning();
+    
+    return updated || undefined;
+  }
+  
+  // Blockchain Explorers
+  async getBlockchainExplorers(cryptocurrencyId: number): Promise<BlockchainExplorer[]> {
+    return await db
+      .select()
+      .from(blockchainExplorers)
+      .where(eq(blockchainExplorers.cryptocurrencyId, cryptocurrencyId));
+  }
+
+  async getRecentExplorers(limit: number): Promise<(BlockchainExplorer & { cryptocurrencyName: string })[]> {
+    const result = await db
+      .select({
+        ...blockchainExplorers,
+        cryptocurrencyName: cryptocurrencies.name
+      })
+      .from(blockchainExplorers)
+      .innerJoin(cryptocurrencies, eq(blockchainExplorers.cryptocurrencyId, cryptocurrencies.id))
+      .orderBy(desc(blockchainExplorers.id))
+      .limit(limit);
+    
+    return result;
+  }
+
+  async createBlockchainExplorer(insertExplorer: InsertBlockchainExplorer): Promise<BlockchainExplorer> {
+    const [explorer] = await db
+      .insert(blockchainExplorers)
+      .values(insertExplorer)
+      .returning();
+    
+    return explorer;
+  }
+  
+  // Metrics
+  async getMetrics(cryptocurrencyId: number): Promise<Metric | undefined> {
+    const [metric] = await db
+      .select()
+      .from(metrics)
+      .where(eq(metrics.cryptocurrencyId, cryptocurrencyId));
+    
+    return metric || undefined;
+  }
+
+  async createMetrics(insertMetric: InsertMetric): Promise<Metric> {
+    const [metric] = await db
+      .insert(metrics)
+      .values(insertMetric)
+      .returning();
+    
+    return metric;
+  }
+
+  async updateMetrics(id: number, data: Partial<InsertMetric>): Promise<Metric | undefined> {
+    const [updated] = await db
+      .update(metrics)
+      .set(data)
+      .where(eq(metrics.id, id))
+      .returning();
+    
+    return updated || undefined;
+  }
+  
+  // AI Insights
+  async getAiInsights(limit: number): Promise<(AiInsight & { cryptocurrencyName: string })[]> {
+    const result = await db
+      .select({
+        ...aiInsights,
+        cryptocurrencyName: cryptocurrencies.name
+      })
+      .from(aiInsights)
+      .innerJoin(cryptocurrencies, eq(aiInsights.cryptocurrencyId, cryptocurrencies.id))
+      .orderBy(desc(aiInsights.id))
+      .limit(limit);
+    
+    return result;
+  }
+
+  async getAiInsightsForCrypto(cryptocurrencyId: number): Promise<AiInsight[]> {
+    return await db
+      .select()
+      .from(aiInsights)
+      .where(eq(aiInsights.cryptocurrencyId, cryptocurrencyId))
+      .orderBy(desc(aiInsights.id));
+  }
+
+  async createAiInsight(insertInsight: InsertAiInsight): Promise<AiInsight> {
+    const [insight] = await db
+      .insert(aiInsights)
+      .values(insertInsight)
+      .returning();
+    
+    return insight;
+  }
+  
+  // Crawler Status
+  async getCrawlerStatus(): Promise<CrawlerStatus | undefined> {
+    const [status] = await db
+      .select()
+      .from(crawlerStatus)
+      .limit(1);
+    
+    return status || undefined;
+  }
+
+  async updateCrawlerStatus(data: Partial<InsertCrawlerStatus>): Promise<CrawlerStatus | undefined> {
+    // First check if any status exists
+    const existingStatus = await this.getCrawlerStatus();
+    
+    if (existingStatus) {
+      // Update existing status
+      const [updated] = await db
+        .update(crawlerStatus)
+        .set(data)
+        .where(eq(crawlerStatus.id, existingStatus.id))
+        .returning();
+      
+      return updated || undefined;
+    } else {
+      // Create new status
+      const insertData: InsertCrawlerStatus = {
+        webCrawlerActive: data.webCrawlerActive ?? false,
+        aiProcessorActive: data.aiProcessorActive ?? false,
+        blockchainSyncActive: data.blockchainSyncActive ?? false,
+        lastUpdate: data.lastUpdate ?? new Date(),
+        newEntriesCount: data.newEntriesCount ?? 0
+      };
+      
+      const [created] = await db
+        .insert(crawlerStatus)
+        .values(insertData)
+        .returning();
+      
+      return created;
+    }
+  }
+  
+  // Comparison
+  async compareCryptocurrencies(ids: number[]): Promise<Cryptocurrency[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+    
+    return await db
+      .select()
+      .from(cryptocurrencies)
+      .where(inArray(cryptocurrencies.id, ids));
+  }
+  
+  // Search
+  async searchCryptocurrencies(query: string): Promise<Cryptocurrency[]> {
+    const searchPattern = `%${query}%`;
+    
+    return await db
+      .select()
+      .from(cryptocurrencies)
+      .where(
+        or(
+          like(cryptocurrencies.name, searchPattern),
+          like(cryptocurrencies.symbol, searchPattern),
+          like(cryptocurrencies.slug, searchPattern)
+        )
+      )
+      .limit(20);
+  }
+}
+
+// Import necessary functions after defining Database class
+import { sql } from "drizzle-orm";
+import { inArray, or } from "drizzle-orm";
+
+// Use DatabaseStorage
+export const storage = new DatabaseStorage();
