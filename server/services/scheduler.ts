@@ -8,9 +8,9 @@ import { storage } from '../storage';
 export function setupScheduler() {
   // Setup 24-hour continuous data collection cycle for top 500 cryptocurrencies
   
-  // Phase 1: Schedule searching for cryptocurrencies every 6 hours
-  // This ensures we have up-to-date cryptocurrency listings
-  cron.schedule('0 */6 * * *', async () => {
+  // Phase 1: Schedule searching for cryptocurrencies every hour
+  // This ensures we have up-to-date cryptocurrency listings more frequently
+  cron.schedule('0 * * * *', async () => {
     console.log('Running scheduled task: Search for top cryptocurrencies');
     // Process all 500 top cryptocurrencies
     await searchTopCryptocurrencies(500);
@@ -24,24 +24,37 @@ export function setupScheduler() {
     await findExplorersForCryptos(50);
   });
 
-  // Phase 3: Scrape blockchain data - part 1 (first half)
-  // Use multiple schedules to distribute load and process all cryptocurrencies
-  cron.schedule('30 */2 * * *', async () => {
+  // Phase 3: Scrape blockchain data - part 1 (first quarter)
+  // More frequent schedules to process data every 30 minutes
+  cron.schedule('*/30 * * * *', async () => {
     console.log('Running scheduled task: Scrape blockchain data (batch 1)');
-    // Process cryptocurrencies ranked 1-250
-    await scrapeAllBlockchainData(250, 1);
+    // Process cryptocurrencies ranked 1-125
+    await scrapeAllBlockchainData(125, 1);
   });
 
-  // Phase 3: Scrape blockchain data - part 2 (second half)
-  cron.schedule('30 1-23/2 * * *', async () => {
+  // Phase 3: Scrape blockchain data - part 2 (second quarter)
+  cron.schedule('5,35 * * * *', async () => {
     console.log('Running scheduled task: Scrape blockchain data (batch 2)');
-    // Process cryptocurrencies ranked 251-500
-    await scrapeAllBlockchainData(250, 251);
+    // Process cryptocurrencies ranked 126-250
+    await scrapeAllBlockchainData(125, 126);
+  });
+  
+  // Phase 3: Scrape blockchain data - part 3 (third quarter)
+  cron.schedule('10,40 * * * *', async () => {
+    console.log('Running scheduled task: Scrape blockchain data (batch 3)');
+    // Process cryptocurrencies ranked 251-375
+    await scrapeAllBlockchainData(125, 251);
+  });
+  
+  // Phase 3: Scrape blockchain data - part 4 (fourth quarter)
+  cron.schedule('15,45 * * * *', async () => {
+    console.log('Running scheduled task: Scrape blockchain data (batch 4)');
+    // Process cryptocurrencies ranked 376-500
+    await scrapeAllBlockchainData(125, 376);
   });
 
-  // Phase 4: Generate AI insights
-  // Runs every 4 hours for deeper analysis
-  cron.schedule('45 */4 * * *', async () => {
+  // Phase 4: Generate AI insights - hourly instead of every 4 hours
+  cron.schedule('45 * * * *', async () => {
     console.log('Running scheduled task: Generate AI insights');
     // Process up to 50 cryptocurrencies per run for AI analysis
     await generateAiInsights(50);
