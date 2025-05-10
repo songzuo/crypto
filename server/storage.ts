@@ -303,6 +303,32 @@ export class MemStorage implements IStorage {
       )
       .slice(0, 10);
   }
+  
+  // Autocomplete for prefix-based search
+  async autocompleteCryptocurrencies(prefix: string, limit: number = 10): Promise<Cryptocurrency[]> {
+    const lowerPrefix = prefix.toLowerCase();
+    const cryptos = Array.from(this.cryptocurrencies.values());
+    
+    // First prioritize exact matches at the beginning of names/symbols
+    const exactMatches = cryptos.filter(crypto => 
+      crypto.name.toLowerCase().startsWith(lowerPrefix) || 
+      crypto.symbol.toLowerCase().startsWith(lowerPrefix)
+    );
+    
+    // Then add matches that contain the prefix elsewhere
+    const partialMatches = cryptos.filter(crypto => 
+      !exactMatches.includes(crypto) && (
+        crypto.name.toLowerCase().includes(lowerPrefix) || 
+        crypto.symbol.toLowerCase().includes(lowerPrefix)
+      )
+    );
+    
+    // Sort by rank for more relevant results
+    const sortedResults = [...exactMatches, ...partialMatches]
+      .sort((a, b) => (a.rank || Infinity) - (b.rank || Infinity));
+    
+    return sortedResults.slice(0, limit);
+  }
 }
 
 import { db } from "./db";
@@ -563,6 +589,61 @@ export class DatabaseStorage implements IStorage {
         )
       )
       .limit(20);
+  }
+  
+  async autocompleteCryptocurrencies(prefix: string, limit: number = 10): Promise<Cryptocurrency[]> {
+    // Handle empty prefix - return top ranked coins
+    if (!prefix) {
+      return await db
+        .select()
+        .from(cryptocurrencies)
+        .orderBy(asc(cryptocurrencies.rank))
+        .limit(limit);
+    }
+    
+    // For exact prefix matches (starts with)
+    const exactMatches = await db
+      .select()
+      .from(cryptocurrencies)
+      .where(
+        or(
+          like(cryptocurrencies.name, `${prefix}%`),
+          like(cryptocurrencies.symbol, `${prefix}%`)
+        )
+      )
+      .orderBy(asc(cryptocurrencies.rank))
+      .limit(limit);
+    
+    // If we have enough results, return them
+    if (exactMatches.length >= limit) {
+      return exactMatches;
+    }
+    
+    // If we need more results, get partial matches (contains)
+    // but exclude the ones we already have
+    const exactIds = exactMatches.map(crypto => crypto.id);
+    const partialMatchPattern = `%${prefix}%`;
+    
+    const partialMatches = await db
+      .select()
+      .from(cryptocurrencies)
+      .where(
+        and(
+          or(
+            like(cryptocurrencies.name, partialMatchPattern),
+            like(cryptocurrencies.symbol, partialMatchPattern),
+            like(cryptocurrencies.slug, partialMatchPattern)
+          ),
+          exactIds.length > 0 
+            ? sql`${cryptocurrencies.id} NOT IN (${exactIds.join(',')})` 
+            : sql`1=1` // No-op condition when exactIds is empty
+        )
+      )
+      .orderBy(asc(cryptocurrencies.rank))
+      .limit(limit - exactMatches.length);
+    
+    // Combine results
+    return [...exactMatches, ...partialMatches];
   }
 }
 
