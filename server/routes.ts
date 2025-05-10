@@ -120,7 +120,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Search cryptocurrencies
+  // Search cryptocurrencies (full search)
   app.get("/api/search", async (req, res) => {
     try {
       const query = req.query.q as string;
@@ -130,6 +130,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const results = await storage.searchCryptocurrencies(query);
+      res.json(results);
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // API route for autocomplete suggestions as user types
+  // This supports single-character searches to enable instant feedback
+  app.get("/api/autocomplete", async (req, res) => {
+    try {
+      const query = req.query.q as string;
+      const limit = parseInt(req.query.limit as string) || 10;
+      
+      if (!query) {
+        // If no query provided, return top cryptocurrencies
+        const topCryptos = await storage.getCryptocurrencies(1, limit, 'rank', 'asc');
+        return res.json(topCryptos.data);
+      }
+      
+      // Even allow single character for autocomplete
+      const results = await storage.autocompleteCryptocurrencies(query, limit);
       res.json(results);
     } catch (error) {
       res.status(500).json({ error: (error as Error).message });

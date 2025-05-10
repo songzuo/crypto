@@ -43,6 +43,9 @@ export interface IStorage {
   
   // Search
   searchCryptocurrencies(query: string): Promise<Cryptocurrency[]>;
+  
+  // Autocomplete for fast prefix-based search
+  autocompleteCryptocurrencies(prefix: string, limit?: number): Promise<Cryptocurrency[]>;
 }
 
 export class MemStorage implements IStorage {
