@@ -244,10 +244,40 @@ export async function searchTopCryptocurrencies(count: number = 500): Promise<bo
       }
     }
     
-    console.log(`Using ${cryptocurrencies.length} cryptocurrencies from ${sourceUsed}.`);
+    // Sort cryptocurrencies by market cap (highest to lowest)
+    cryptocurrencies.sort((a, b) => {
+      const marketCapA = a.marketCap || 0;
+      const marketCapB = b.marketCap || 0;
+      return marketCapB - marketCapA; // Descending order - highest market cap first
+    });
+    
+    console.log(`Using ${cryptocurrencies.length} cryptocurrencies from ${sourceUsed}, sorted by market cap (descending).`);
     
     // Store the cryptocurrencies with strict validation
     let newEntriesCount = 0;
+    
+    // First, get all existing cryptocurrencies to check for duplicates more efficiently
+    const allExistingCryptos = await storage.getCryptocurrencies(1, 1000, "marketCap", "desc");
+    console.log(`Found ${allExistingCryptos.total} existing cryptocurrencies in the database.`);
+    
+    // Create a set of existing websites and explorers for faster duplicate checking
+    const existingWebsites = new Set();
+    const existingExplorers = new Set();
+    
+    // Get all existing blockchain explorers
+    for (const crypto of allExistingCryptos.data) {
+      if (crypto.officialWebsite) {
+        existingWebsites.add(crypto.officialWebsite.toLowerCase());
+      }
+      
+      // Get explorers for this cryptocurrency
+      const explorers = await storage.getBlockchainExplorers(crypto.id);
+      for (const explorer of explorers) {
+        if (explorer.url) {
+          existingExplorers.add(explorer.url.toLowerCase());
+        }
+      }
+    }
     
     for (const crypto of cryptocurrencies) {
       const { name, symbol, price, priceChange24h, marketCap, volume24h, rank } = crypto;
@@ -261,127 +291,144 @@ export async function searchTopCryptocurrencies(count: number = 500): Promise<bo
       // Create slug from name
       const slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
       
-      // Check if this cryptocurrency already exists
+      // Check if this cryptocurrency already exists by name or symbol
       const existingCryptos = await storage.searchCryptocurrencies(name);
-      const existingCrypto = existingCryptos.find(c => 
+      const existingBySymbol = await storage.searchCryptocurrencies(symbol);
+      
+      // Combine results
+      const allMatches = [...existingCryptos, ...existingBySymbol];
+      
+      // Look for exact matches (case-insensitive)
+      const existingCrypto = allMatches.find(c => 
         c.name.toLowerCase() === name.toLowerCase() || 
         c.symbol.toLowerCase() === symbol.toLowerCase()
       );
       
-      if (existingCrypto) {
-        // Update existing cryptocurrency's market data
-        await storage.updateCryptocurrency(existingCrypto.id, {
-          price,
-          priceChange24h,
-          marketCap,
-          volume24h,
-          rank,
-          lastUpdated: new Date()
-        });
+      // Check for duplicates
+      let isDuplicate = !!existingCrypto; // Already have a name/symbol match
+      let websiteForCrypto = null;
+      
+      // Try to generate a standard website format for checking duplicates
+      try {
+        // Common pattern for cryptocurrency websites
+        websiteForCrypto = `https://${slug}.org`;
         
-        // If we don't have an official website yet, try to find one
-        if (!existingCrypto.officialWebsite) {
-          console.log(`Attempting to find official website for ${name}...`);
-          
-          // Simulate finding an official website (in production, use web scraping)
-          // Common patterns for cryptocurrency websites
-          const officialWebsite = `https://${slug}.org`;
-          
+        // Check if this website already exists in our database
+        if (websiteForCrypto && existingWebsites.has(websiteForCrypto.toLowerCase())) {
+          console.log(`Skipping duplicate cryptocurrency: ${name} - Website ${websiteForCrypto} already exists.`);
+          isDuplicate = true;
+        }
+      } catch (error) {
+        console.log(`Error generating website pattern for ${name}: ${error}`);
+      }
+      
+      // If this is a duplicate cryptocurrency, update the existing entry
+      if (isDuplicate) {
+        if (existingCrypto) {
+          // Update existing cryptocurrency's market data
           await storage.updateCryptocurrency(existingCrypto.id, {
-            officialWebsite,
-            lastUpdated: new Date()
+            price,
+            priceChange24h, 
+            marketCap,
+            volume24h,
+            rank,
+            // Don't update these if already exist
+            officialWebsite: existingCrypto.officialWebsite || websiteForCrypto
           });
           
-          console.log(`Updated ${name} with official website: ${officialWebsite}`);
+          console.log(`Updated existing cryptocurrency: ${name} (ID: ${existingCrypto.id})`);
         }
-      } else {
-        // For new cryptocurrencies, try to find either an official website or blockchain explorer (OR condition)
-        console.log(`Finding official website for ${name}...`);
+        continue; // Skip to next cryptocurrency
+      }
+      
+      // At this point, we have a new cryptocurrency to add
+      console.log(`Adding new cryptocurrency: ${name} (${symbol}), market cap: ${marketCap})`);
+      
+      // Try to find official website through various patterns
+      let officialWebsite = websiteForCrypto; // Start with our basic pattern
+      
+      try {
+        // In production, would use proper web scraping or Google search API
+        // For this implementation, we'll try different URL patterns
+        const possibleDomains = [
+          `${slug}.org`,
+          `${slug}.io`,
+          `${slug}.com`,
+          `${slug}.network`,
+          `${slug}.finance`,
+          `${name.toLowerCase().replace(/\s+/g, '')}.org`
+        ];
         
-        // First attempt to find an official website
-        let officialWebsite = null;
+        // Already set above, but could be enhanced with more sophisticated check
+        officialWebsite = `https://${possibleDomains[0]}`; // Simplified for testing
+        console.log(`Using website for ${name}: ${officialWebsite}`);
+      } catch (websiteError) {
+        console.log(`Error finding better website for ${name}:`, websiteError);
+      }
+      
+      // Now create the cryptocurrency entry with whatever website we found (might be null)
+      const newCrypto: InsertCryptocurrency = {
+        name,
+        symbol,
+        slug,
+        price: price || 0,
+        priceChange24h: priceChange24h || 0,
+        marketCap: marketCap || 0,
+        volume24h: volume24h || 0,
+        rank: rank || 0,
+        officialWebsite,
+        logoUrl: null
+      };
+      
+      // To ensure we get a blockchain explorer too
+      let hasExplorer = false;
+      let explorerUrl = null;
+      
+      try {
+        // Create cryptocurrency in database to get an ID
+        const createdCrypto = await storage.createCryptocurrency(newCrypto);
+        console.log(`Added cryptocurrency ${name} (ID: ${createdCrypto.id}) with website: ${officialWebsite || 'unknown'}`);
+        newEntriesCount++;
+        
+        // Check for a blockchain explorer as a secondary validation source
         try {
-          // In production, would use proper web scraping or Google search API
-          // For this implementation, we'll try different URL patterns
-          const possibleDomains = [
-            `${slug}.org`,
-            `${slug}.io`,
-            `${slug}.com`,
-            `${slug}.network`,
-            `${slug}.finance`,
-            `${name.toLowerCase().replace(/\s+/g, '')}.org`
-          ];
+          explorerUrl = await import('./scraper').then(module => 
+            module.findBlockchainExplorer(name, createdCrypto.id)
+          );
           
-          officialWebsite = `https://${possibleDomains[0]}`; // Simplified for testing
-          console.log(`Found possible website for ${name}: ${officialWebsite}`);
-        } catch (websiteError) {
-          console.log(`Error finding website for ${name}, will try explorer instead:`, websiteError);
-        }
-        
-        // Now create the cryptocurrency entry with whatever website we found (might be null)
-        const newCrypto: InsertCryptocurrency = {
-          name,
-          symbol,
-          slug,
-          price: price || 0,
-          priceChange24h: priceChange24h || 0,
-          marketCap: marketCap || 0,
-          volume24h: volume24h || 0,
-          rank: rank || 0,
-          officialWebsite,
-          logoUrl: null
-        };
-        
-        // To ensure we get a blockchain explorer too
-        let hasExplorer = false;
-        let explorerUrl = null;
-        
-        try {
-          // Create cryptocurrency in database to get an ID
-          const createdCrypto = await storage.createCryptocurrency(newCrypto);
-          console.log(`Added cryptocurrency ${name} (ID: ${createdCrypto.id}) with website: ${officialWebsite || 'unknown'}`);
-          newEntriesCount++;
-          
-          // Check for a blockchain explorer as a secondary validation source
-          try {
-            explorerUrl = await import('./scraper').then(module => 
-              module.findBlockchainExplorer(name, createdCrypto.id)
-            );
-            
-            if (explorerUrl) {
-              console.log(`Found blockchain explorer for ${name}: ${explorerUrl}`);
-              hasExplorer = true;
-            } else {
-              console.log(`No blockchain explorer found for ${name}`);
-            }
-            
-            // Update with new information
-            await storage.updateCryptocurrency(createdCrypto.id, {
-              lastUpdated: new Date()
-            });
-          } catch (explorerError) {
-            console.error(`Error finding blockchain explorer for ${name}:`, explorerError);
+          if (explorerUrl) {
+            console.log(`Found blockchain explorer for ${name}: ${explorerUrl}`);
+            hasExplorer = true;
+          } else {
+            console.log(`No blockchain explorer found for ${name}`);
           }
           
-          // New condition: Keep crypto if it has EITHER an official website OR an explorer (OR logic)
-          if (!officialWebsite && !hasExplorer) {
-            console.log(`${name} has neither website nor explorer - marking as low priority`);
-            // We'll keep it but mark it with a higher rank to indicate lower priority
-            await storage.updateCryptocurrency(createdCrypto.id, {
-              rank: 5000, // High rank indicates lower priority but we still keep it
-              lastUpdated: new Date()
-            });
-          }
-        } catch (createError) {
-          console.error(`Failed to create cryptocurrency ${name}:`, createError);
+          // Update with new information
+          await storage.updateCryptocurrency(createdCrypto.id, {
+            lastUpdated: new Date()
+          });
+        } catch (explorerError) {
+          console.error(`Error finding blockchain explorer for ${name}:`, explorerError);
         }
+          
+        // New condition: Keep crypto if it has EITHER an official website OR an explorer (OR logic)
+        if (!officialWebsite && !hasExplorer) {
+          console.log(`${name} has neither website nor explorer - marking as low priority`);
+          // We'll keep it but mark it with a higher rank to indicate lower priority
+          await storage.updateCryptocurrency(createdCrypto.id, {
+            rank: 5000, // High rank indicates lower priority but we still keep it
+            lastUpdated: new Date()
+          });
+        }
+      } catch (createError) {
+        console.error(`Failed to create cryptocurrency ${name}:`, createError);
       }
     }
     
     // Update crawler status
     await storage.updateCrawlerStatus({
       webCrawlerActive: true, // Keep this true at all times to maintain 24/7 operation
-      newEntriesCount,
+      newEntriesCount: newEntriesCount,
       lastUpdate: new Date()
     });
     
