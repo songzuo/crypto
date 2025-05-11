@@ -563,6 +563,44 @@ export class DatabaseStorage implements IStorage {
     return updated || undefined;
   }
   
+  // Completely purge all cryptocurrency data
+  async purgeAllCryptoData(): Promise<{ success: boolean, message: string }> {
+    try {
+      console.log("Purging all cryptocurrency data from database...");
+      
+      // Delete from ai_insights first (has foreign key constraints)
+      await db.execute(sql`DELETE FROM ai_insights`);
+      
+      // Delete from metrics
+      await db.execute(sql`DELETE FROM metrics`);
+      
+      // Delete from blockchain_explorers
+      await db.execute(sql`DELETE FROM blockchain_explorers`);
+      
+      // Finally delete from cryptocurrencies
+      await db.execute(sql`DELETE FROM cryptocurrencies`);
+      
+      // Reset sequence for primary keys (optional, but helps keep IDs consistent)
+      await db.execute(sql`ALTER SEQUENCE cryptocurrencies_id_seq RESTART WITH 1`);
+      await db.execute(sql`ALTER SEQUENCE blockchain_explorers_id_seq RESTART WITH 1`);
+      await db.execute(sql`ALTER SEQUENCE metrics_id_seq RESTART WITH 1`);
+      await db.execute(sql`ALTER SEQUENCE ai_insights_id_seq RESTART WITH 1`);
+      
+      console.log("All cryptocurrency data has been successfully purged from the database.");
+      
+      return {
+        success: true,
+        message: "All cryptocurrency data has been purged from the database."
+      };
+    } catch (error) {
+      console.error("Error purging cryptocurrency data:", error);
+      return {
+        success: false,
+        message: `Failed to purge data: ${(error as Error).message}`
+      };
+    }
+  }
+  
   // AI Insights
   async getAiInsights(limit: number): Promise<(AiInsight & { cryptocurrencyName: string })[]> {
     const result = await db
