@@ -49,6 +49,9 @@ export interface IStorage {
   
   // Cleanup fake data
   cleanupFakeData(): Promise<{ removedCount: number, remainingCount: number }>;
+  
+  // Completely purge all cryptocurrency data
+  purgeAllCryptoData(): Promise<{ success: boolean, message: string }>;
 }
 
 export class MemStorage implements IStorage {
@@ -738,12 +741,13 @@ export class DatabaseStorage implements IStorage {
       threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
       
       // Use raw SQL for more complex deletion criteria to avoid parameter size limitations
+      // Using correct column names (market_cap instead of marketCap) 
       await db.execute(sql`
         DELETE FROM cryptocurrencies 
         WHERE 
           name SIMILAR TO '%(Crypto|Token|Coin)\\s*[0-9]+%'
-          OR (marketCap IS NULL AND price IS NULL)
-          OR (lastUpdated < ${threeMonthsAgo.toISOString()})
+          OR (market_cap IS NULL AND price IS NULL)
+          OR (last_updated < ${threeMonthsAgo.toISOString()})
           OR (rank > 500)
       `);
       
