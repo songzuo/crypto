@@ -14,16 +14,16 @@ export async function runInitialDataCollection() {
     lastUpdate: new Date()
   });
   
-  // Immediately search for cryptocurrencies
-  await searchTopCryptocurrencies(50);
+  // Immediately search for cryptocurrencies - increased to 250 to get more initially
+  await searchTopCryptocurrencies(250);
   console.log('Initial cryptocurrency data fetch completed');
   
   // Immediately search for blockchain explorers
-  await findExplorersForCryptos(20);
+  await findExplorersForCryptos(50);
   console.log('Initial blockchain explorer search completed');
   
   // Immediately scrape blockchain data
-  await scrapeAllBlockchainData(20, 1);
+  await scrapeAllBlockchainData(50, 1);
   console.log('Initial blockchain data scraping completed');
   
   // Return to ensure proper startup sequence
@@ -42,11 +42,36 @@ export function setupScheduler() {
   // Phase 1: Schedule searching for cryptocurrencies very frequently (every minute)
   cron.schedule('* * * * *', async () => {
     console.log('Running scheduled task: Search for top cryptocurrencies');
-    // Process top 50 cryptocurrencies every minute for continuous growth
-    // This will ensure rapid growth toward 500+ cryptocurrencies
-    await searchTopCryptocurrencies(50);
     
-    // Keep web crawler active status
+    try {
+      // Check current count
+      const currentCryptos = await storage.getCryptocurrencies(1, 1, "marketCap", "desc");
+      const totalCount = currentCryptos.total || 0;
+      
+      // Dynamically adjust batch size based on current count
+      let batchSize = 100; // Default bigger batch
+      
+      if (totalCount < 100) {
+        batchSize = 100; // Start with 100
+      } else if (totalCount < 200) {
+        batchSize = 200; // Increase to 200
+      } else if (totalCount < 300) {
+        batchSize = 300; // Continue increasing
+      } else if (totalCount < 400) {
+        batchSize = 400; // More aggressive
+      } else {
+        batchSize = 500; // Go for all 500
+      }
+      
+      console.log(`Current crypto count: ${totalCount}, fetching batch of ${batchSize}`);
+      await searchTopCryptocurrencies(batchSize);
+    } catch (error) {
+      console.error("Error in cryptocurrency search scheduler:", error);
+      // Even on error, still try with default size
+      await searchTopCryptocurrencies(200);
+    }
+    
+    // Keep web crawler active status 24/7
     await storage.updateCrawlerStatus({
       webCrawlerActive: true,
       lastUpdate: new Date()
@@ -57,10 +82,31 @@ export function setupScheduler() {
   // Runs every 3 minutes for faster discovery
   cron.schedule('*/3 * * * *', async () => {
     console.log('Running scheduled task: Find blockchain explorers');
-    // Process up to 15 cryptocurrencies every 3 minutes for faster discovery
-    await findExplorersForCryptos(15);
     
-    // Keep web crawler active status
+    try {
+      // Check current count to dynamically adjust batch size
+      const currentCryptos = await storage.getCryptocurrencies(1, 1, "marketCap", "desc");
+      const totalCount = currentCryptos.total || 0;
+      
+      let batchSize = 30; // Default
+      
+      if (totalCount < 100) {
+        batchSize = 30;
+      } else if (totalCount < 200) {
+        batchSize = 50;
+      } else {
+        batchSize = 75; // Increased for large datasets
+      }
+      
+      console.log(`Processing blockchain explorers: Batch size ${batchSize} cryptocurrencies`);
+      await findExplorersForCryptos(batchSize);
+    } catch (error) {
+      console.error("Error in explorer discovery scheduler:", error);
+      // Fallback to smaller size to ensure operation continues
+      await findExplorersForCryptos(30);
+    }
+    
+    // Keep web crawler active status continuously
     await storage.updateCrawlerStatus({
       webCrawlerActive: true,
       lastUpdate: new Date()
@@ -68,18 +114,43 @@ export function setupScheduler() {
   });
 
   // Phase 3: Scrape blockchain data continuously
-  // Every minute, process a different batch of 5 cryptocurrencies
-  // We'll rotate through different ranks to ensure more frequent updates
-  
-  // Batch 1: Every minute at seconds 0
+  // Process a larger batch of cryptocurrencies every minute 
+  // with dynamic ranking to cover the whole database
   cron.schedule('* * * * *', async () => {
     console.log('Running scheduled task: Continuous blockchain data scraping');
-    // Process 5 top cryptocurrencies every minute
-    const minute = new Date().getMinutes();
-    const startRank = (minute % 100) * 5 + 1;
-    await scrapeAllBlockchainData(5, startRank);
     
-    // Keep web crawler active status
+    try {
+      // Check current count to dynamically adjust batch size
+      const currentCryptos = await storage.getCryptocurrencies(1, 1, "marketCap", "desc");
+      const totalCount = currentCryptos.total || 0;
+      
+      // Calculate batch size and starting position based on total count
+      const minute = new Date().getMinutes();
+      let batchSize = 15; // Increased default batch size
+      
+      if (totalCount < 100) {
+        batchSize = 15;
+      } else if (totalCount < 300) {
+        batchSize = 25;
+      } else {
+        batchSize = 35;
+      }
+      
+      // Dynamically calculate starting rank to ensure full coverage of all cryptos
+      // This will cycle through all cryptocurrencies, not just top ones
+      let segments = Math.ceil(totalCount / batchSize);
+      let currentSegment = minute % segments;
+      let startRank = (currentSegment * batchSize) + 1;
+      
+      console.log(`Scraping blockchain data: Batch size ${batchSize}, starting at rank ${startRank} (total cryptos: ${totalCount})`);
+      await scrapeAllBlockchainData(batchSize, startRank);
+    } catch (error) {
+      console.error("Error in blockchain scraper scheduler:", error);
+      // Fallback to smaller size and beginning
+      await scrapeAllBlockchainData(10, 1);
+    }
+    
+    // Keep web crawler active status continuously
     await storage.updateCrawlerStatus({
       webCrawlerActive: true,
       lastUpdate: new Date()
