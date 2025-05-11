@@ -194,24 +194,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // PURGE AND RESET DATABASE on server start (as requested)
+  // Check if we have existing data before starting scheduler
   try {
-    console.log("PURGING ALL CRYPTOCURRENCY DATA ON STARTUP (as requested)...");
+    console.log("Checking for existing cryptocurrency data...");
     
     setTimeout(async () => {
       try {
-        // First completely purge all data
-        const purgeResult = await storage.purgeAllCryptoData();
-        console.log(purgeResult.message);
-        
-        // Then run initial data population with strict validation (only verified cryptos)
-        console.log("Now starting fresh data population with verified crypto only...");
-      } catch (purgeError) {
-        console.error('Error during initial database purge:', purgeError);
+        // Check if we already have data
+        const existingData = await storage.getCryptocurrencies(1, 1, 'id', 'asc');
+        if (existingData.total === 0) {
+          console.log("No existing cryptocurrency data found. Starting initial data collection...");
+        } else {
+          console.log(`Found ${existingData.total} existing cryptocurrencies. Skipping purge to preserve data.`);
+        }
+      } catch (error) {
+        console.error('Error checking for existing data:', error);
       }
-    }, 5000); // Slight delay to allow server to start properly
+    }, 2000); // Slight delay to allow server to start properly
   } catch (err) {
-    console.error('Failed to schedule initial purge:', err);
+    console.error('Failed during startup check:', err);
   }
 
   // Setup the crawler scheduler

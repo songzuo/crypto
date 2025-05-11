@@ -8,23 +8,43 @@ import { storage } from '../storage';
 export async function runInitialDataCollection() {
   console.log('Running initial data population...');
   
+  // First check if we already have data in the database
+  const existingData = await storage.getCryptocurrencies(1, 1, 'id', 'asc');
+  
   // Always start with the crawler active
   await storage.updateCrawlerStatus({
     webCrawlerActive: true,
     lastUpdate: new Date()
   });
   
-  // Immediately search for cryptocurrencies - increased to 250 to get more initially
-  await searchTopCryptocurrencies(250);
-  console.log('Initial cryptocurrency data fetch completed');
-  
-  // Immediately search for blockchain explorers
-  await findExplorersForCryptos(50);
-  console.log('Initial blockchain explorer search completed');
-  
-  // Immediately scrape blockchain data
-  await scrapeAllBlockchainData(50, 1);
-  console.log('Initial blockchain data scraping completed');
+  if (existingData.total > 0) {
+    console.log(`Found ${existingData.total} existing cryptocurrencies. Continuing data collection without starting over.`);
+    
+    // Continue scraping for new data without erasing existing data
+    // Search for new cryptocurrencies on a smaller scale to supplement existing data
+    await searchTopCryptocurrencies(100);
+    
+    // Search for blockchain explorers for recent cryptocurrencies
+    await findExplorersForCryptos(20);
+    
+    // Scrape blockchain data for recent cryptocurrencies
+    await scrapeAllBlockchainData(20, 1);
+    
+  } else {
+    console.log('No existing data found. Starting fresh data collection...');
+    
+    // Immediately search for cryptocurrencies - increased to 250 to get more initially
+    await searchTopCryptocurrencies(250);
+    console.log('Initial cryptocurrency data fetch completed');
+    
+    // Immediately search for blockchain explorers
+    await findExplorersForCryptos(50);
+    console.log('Initial blockchain explorer search completed');
+    
+    // Immediately scrape blockchain data
+    await scrapeAllBlockchainData(50, 1);
+    console.log('Initial blockchain data scraping completed');
+  }
   
   // Return to ensure proper startup sequence
   return true;
