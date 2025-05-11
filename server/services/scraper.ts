@@ -101,7 +101,7 @@ export async function findBlockchainExplorer(cryptocurrencyName: string, cryptoc
         name: string;
       }
       
-      // Common explorer naming patterns
+      // Enhanced explorer naming patterns with more variations
       let explorerUrls: ExplorerUrl[] = [];
       let symbol = "";
       
@@ -115,25 +115,63 @@ export async function findBlockchainExplorer(cryptocurrencyName: string, cryptoc
         console.log(`Could not get symbol for cryptocurrency ${cryptocurrencyId}`);
       }
       
-      // Generate potential explorer URLs based on common patterns
-      if (symbol) {
-        explorerUrls = [
-          { url: `https://${symbol}scan.io`, name: `${symbol.toUpperCase()}scan` },
-          { url: `https://${symbol}explorer.io`, name: `${symbol.toUpperCase()} Explorer` },
-          { url: `https://${symbol}chain.info`, name: `${symbol.toUpperCase()}chain` }
-        ];
-      }
-      
       // For URL safety, strip spaces and non-alphanumeric characters
       const safeNameForUrl = cryptoNameLower.replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
       
+      // Extract first word/token if it's a multi-word name
+      const firstToken = cryptocurrencyName.split(' ')[0].toLowerCase();
+      const shortenedName = safeNameForUrl.substring(0, Math.min(safeNameForUrl.length, 12));
+      
+      // Generate potential explorer URLs based on common patterns
+      // First with symbol-based URLs (usually more accurate)
+      if (symbol) {
+        explorerUrls = [
+          // Symbol-based URLs (typically more common)
+          { url: `https://${symbol}scan.io`, name: `${symbol.toUpperCase()}scan` },
+          { url: `https://${symbol}explorer.io`, name: `${symbol.toUpperCase()} Explorer` },
+          { url: `https://${symbol}chain.info`, name: `${symbol.toUpperCase()}chain` },
+          { url: `https://${symbol}scan.com`, name: `${symbol.toUpperCase()}scan` },
+          { url: `https://${symbol}explorer.com`, name: `${symbol.toUpperCase()} Explorer` },
+          { url: `https://${symbol}chain.com`, name: `${symbol.toUpperCase()}chain` },
+          
+          // Additional symbol-based patterns
+          { url: `https://${symbol}-explorer.io`, name: `${symbol.toUpperCase()} Explorer` },
+          { url: `https://${symbol}-scan.io`, name: `${symbol.toUpperCase()}scan` },
+          { url: `https://scan.${symbol}.network`, name: `${symbol.toUpperCase()} Network Scan` },
+          { url: `https://explorer.${symbol}.finance`, name: `${symbol.toUpperCase()} Finance Explorer` },
+        ];
+      }
+      
+      // Then add full name URLs
       explorerUrls = [
         ...explorerUrls,
+        // Standard domain patterns (.io)
         { url: `https://${safeNameForUrl}scan.io`, name: `${cryptocurrencyName}scan` },
         { url: `https://${safeNameForUrl}explorer.io`, name: `${cryptocurrencyName} Explorer` },
         { url: `https://${safeNameForUrl}chain.info`, name: `${cryptocurrencyName}chain` },
+        
+        // Alternative domain patterns (.com)
+        { url: `https://${safeNameForUrl}scan.com`, name: `${cryptocurrencyName}scan` },
+        { url: `https://${safeNameForUrl}explorer.com`, name: `${cryptocurrencyName} Explorer` },
+        { url: `https://${safeNameForUrl}chain.com`, name: `${cryptocurrencyName}chain` },
+        
+        // First token patterns (for compound names)
+        { url: `https://${firstToken}scan.io`, name: `${firstToken.toUpperCase()}scan` },
+        { url: `https://${firstToken}explorer.io`, name: `${firstToken.toUpperCase()} Explorer` },
+        
+        // Subdomain patterns
         { url: `https://explorer.${safeNameForUrl}.org`, name: `${cryptocurrencyName} Explorer` },
-        { url: `https://scan.${safeNameForUrl}.org`, name: `${cryptocurrencyName} Scan` }
+        { url: `https://scan.${safeNameForUrl}.org`, name: `${cryptocurrencyName} Scan` },
+        { url: `https://explorer.${safeNameForUrl}.com`, name: `${cryptocurrencyName} Explorer` },
+        { url: `https://scan.${safeNameForUrl}.com`, name: `${cryptocurrencyName} Scan` },
+        
+        // Network extensions
+        { url: `https://${safeNameForUrl}.network`, name: `${cryptocurrencyName} Network` },
+        { url: `https://explorer.${safeNameForUrl}.network`, name: `${cryptocurrencyName} Network Explorer` },
+        
+        // Blockchain specific
+        { url: `https://${safeNameForUrl}blockchain.com`, name: `${cryptocurrencyName} Blockchain` },
+        { url: `https://${shortenedName}-explorer.com`, name: `${cryptocurrencyName} Explorer` }
       ] as ExplorerUrl[];
       
       // Try to access each generated URL to see if it exists

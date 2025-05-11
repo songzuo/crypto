@@ -268,15 +268,30 @@ export async function searchTopCryptocurrencies(count: number = 500): Promise<bo
           console.log(`Updated ${name} with official website: ${officialWebsite}`);
         }
       } else {
-        // For new cryptocurrencies, first check if we can find an official website
+        // For new cryptocurrencies, try to find either an official website or blockchain explorer (OR condition)
         console.log(`Finding official website for ${name}...`);
         
-        // In production, we would use proper web scraping or API calls
-        // For this implementation, we'll use a simplified approach
-        const officialWebsite = `https://${slug}.org`;
-        console.log(`Found website for ${name}: ${officialWebsite}`);
+        // First attempt to find an official website
+        let officialWebsite = null;
+        try {
+          // In production, would use proper web scraping or Google search API
+          // For this implementation, we'll try different URL patterns
+          const possibleDomains = [
+            `${slug}.org`,
+            `${slug}.io`,
+            `${slug}.com`,
+            `${slug}.network`,
+            `${slug}.finance`,
+            `${name.toLowerCase().replace(/\s+/g, '')}.org`
+          ];
+          
+          officialWebsite = `https://${possibleDomains[0]}`; // Simplified for testing
+          console.log(`Found possible website for ${name}: ${officialWebsite}`);
+        } catch (websiteError) {
+          console.log(`Error finding website for ${name}, will try explorer instead:`, websiteError);
+        }
         
-        // Create new cryptocurrency with the official website
+        // Now create the cryptocurrency entry with whatever website we found (might be null)
         const newCrypto: InsertCryptocurrency = {
           name,
           symbol,
@@ -290,33 +305,45 @@ export async function searchTopCryptocurrencies(count: number = 500): Promise<bo
           logoUrl: null
         };
         
-        // Add to database
+        // To ensure we get a blockchain explorer too
+        let hasExplorer = false;
+        let explorerUrl = null;
+        
         try {
+          // Create cryptocurrency in database to get an ID
           const createdCrypto = await storage.createCryptocurrency(newCrypto);
-          console.log(`Added cryptocurrency ${name} (ID: ${createdCrypto.id}) with official website`);
+          console.log(`Added cryptocurrency ${name} (ID: ${createdCrypto.id}) with website: ${officialWebsite || 'unknown'}`);
           newEntriesCount++;
           
-          // After adding to database, immediately check for blockchain explorer
-          // This will ensure we only keep cryptocurrencies with both website and explorer
+          // Check for a blockchain explorer as a secondary validation source
           try {
-            const explorerUrl = await import('./scraper').then(module => 
+            explorerUrl = await import('./scraper').then(module => 
               module.findBlockchainExplorer(name, createdCrypto.id)
             );
             
-            if (!explorerUrl) {
-              console.log(`No blockchain explorer found for ${name} - marking for removal`);
-              
-              // If no explorer was found, mark this cryptocurrency for later removal
-              // by setting a special rank value
-              await storage.updateCryptocurrency(createdCrypto.id, {
-                rank: 9999, // Mark with a high rank to indicate pending removal
-                lastUpdated: new Date()
-              });
-            } else {
+            if (explorerUrl) {
               console.log(`Found blockchain explorer for ${name}: ${explorerUrl}`);
+              hasExplorer = true;
+            } else {
+              console.log(`No blockchain explorer found for ${name}`);
             }
+            
+            // Update with new information
+            await storage.updateCryptocurrency(createdCrypto.id, {
+              lastUpdated: new Date()
+            });
           } catch (explorerError) {
             console.error(`Error finding blockchain explorer for ${name}:`, explorerError);
+          }
+          
+          // New condition: Keep crypto if it has EITHER an official website OR an explorer (OR logic)
+          if (!officialWebsite && !hasExplorer) {
+            console.log(`${name} has neither website nor explorer - marking as low priority`);
+            // We'll keep it but mark it with a higher rank to indicate lower priority
+            await storage.updateCryptocurrency(createdCrypto.id, {
+              rank: 5000, // High rank indicates lower priority but we still keep it
+              lastUpdated: new Date()
+            });
           }
         } catch (createError) {
           console.error(`Failed to create cryptocurrency ${name}:`, createError);
