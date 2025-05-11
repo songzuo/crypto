@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import { searchTopCryptocurrencies } from './cryptoSearch';
+import { searchTopCryptocurrencies, searchRankedCryptocurrencies } from './cryptoSearch';
 import { findBlockchainExplorer, scrapeBlockchainData } from './scraper';
 import { getAiInsightsForCrypto } from './aiInsights';
 import { storage } from '../storage';
@@ -61,6 +61,24 @@ export function setupScheduler() {
         batchSize = 400; // More aggressive
       } else {
         batchSize = 500; // Go for all 500
+      }
+      
+      // If we're still far from our 500 target, use multiple approaches
+      if (totalCount < 400 && (totalCount % 50 === 0)) {
+        // Every 50 cryptocurrencies, try to widen the search beyond top ranks
+        // This helps find more niche cryptocurrencies
+        console.log(`Only ${totalCount}/500 cryptocurrencies found, adding diversity to search`);
+        
+        // Use our ranked search to find coins in different rank ranges
+        const startRank = Math.max(totalCount, 50);
+        const endRank = startRank + 100;
+        
+        // Now that we import the function directly, we can call it
+        try {
+          await searchRankedCryptocurrencies(startRank, endRank);
+        } catch (error) {
+          console.error("Error in additional ranked search:", error);
+        }
       }
       
       console.log(`Current crypto count: ${totalCount}, fetching batch of ${batchSize}`);

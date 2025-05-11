@@ -47,12 +47,160 @@ async function isDuplicate(crypto: { name: string, symbol: string }): Promise<bo
   return false;
 }
 
+// Function to search cryptocurrencies in a specific ranking range
+export async function searchRankedCryptocurrencies(startRank: number = 1, endRank: number = 100): Promise<number> {
+  try {
+    console.log(`Searching for cryptocurrencies in rank range ${startRank}-${endRank}...`);
+    let cryptocurrencies: any[] = [];
+    let sourceUsed = "unknown";
+    
+    // Use CryptoCompare API to get a broader range
+    try {
+      console.log('Attempting to use CryptoCompare API for ranked search...');
+      const url = `https://min-api.cryptocompare.com/data/top/mktcapfull?limit=${endRank - startRank + 1}&tsym=USD&page=${Math.floor(startRank/100)}`;
+      const response = await makeHttpsRequest(url);
+      const data = JSON.parse(response);
+      
+      if (data.Data && data.Data.length > 0) {
+        cryptocurrencies = data.Data.map((item: any, index: number) => {
+          const coinInfo = item.CoinInfo || {};
+          const rawData = item.RAW?.USD || {};
+          
+          return {
+            name: coinInfo.FullName || `Unknown ${index}`,
+            symbol: coinInfo.Name || 'UNK',
+            slug: (coinInfo.FullName || `unknown-${index}`).toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+            price: rawData.PRICE || 0,
+            priceChange24h: rawData.CHANGEPCT24HOUR || 0,
+            marketCap: rawData.MKTCAP || 0,
+            volume24h: rawData.VOLUME24HOUR || 0,
+            rank: startRank + index
+          };
+        }).filter((c: any) => c.marketCap > 0); // Filter out coins with no market cap
+        
+        sourceUsed = "cryptocompare";
+      }
+    } catch (cryptoCompareError) {
+      console.error('CryptoCompare API failed:', cryptoCompareError);
+    }
+    
+    // Process the cryptocurrencies and add them to our database
+    let newEntriesCount = 0;
+    
+    // First, get all existing cryptocurrencies to check for duplicates
+    const allExistingCryptos = await storage.getCryptocurrencies(1, 1000, "marketCap", "desc");
+    
+    // Create sets for faster duplicate checking
+    const existingNames = new Set(allExistingCryptos.data.map(c => c.name.toLowerCase()));
+    const existingSymbols = new Set(allExistingCryptos.data.map(c => c.symbol.toLowerCase()));
+    const existingWebsites = new Set(
+      allExistingCryptos.data
+        .map(c => c.officialWebsite?.toLowerCase())
+        .filter(Boolean)
+    );
+    
+    // Process each cryptocurrency
+    for (const crypto of cryptocurrencies) {
+      const { name, symbol, slug, price, priceChange24h, marketCap, volume24h, rank } = crypto;
+      
+      // Skip if name or symbol already exists
+      if (existingNames.has(name.toLowerCase()) || existingSymbols.has(symbol.toLowerCase())) {
+        continue;
+      }
+      
+      console.log(`Adding new cryptocurrency: ${name} (${symbol}), market cap: ${marketCap})`);
+      
+      // Generate a standard website format
+      const officialWebsite = `https://${slug}.org`;
+      
+      // Skip if website already exists
+      if (existingWebsites.has(officialWebsite.toLowerCase())) {
+        continue;
+      }
+      
+      console.log(`Using website for ${name}: ${officialWebsite}`);
+      
+      // Create the cryptocurrency entry
+      const newCrypto: InsertCryptocurrency = {
+        name,
+        symbol,
+        slug,
+        price: price || 0,
+        priceChange24h: priceChange24h || 0,
+        marketCap: marketCap || 0,
+        volume24h: volume24h || 0,
+        rank: rank || 0,
+        officialWebsite,
+        logoUrl: null
+      };
+      
+      let hasExplorer = false;
+      
+      try {
+        // Create cryptocurrency to get an ID
+        const createdCrypto = await storage.createCryptocurrency(newCrypto);
+        console.log(`Added cryptocurrency ${name} (ID: ${createdCrypto.id}) with website: ${officialWebsite}`);
+        newEntriesCount++;
+        
+        // Find a blockchain explorer
+        try {
+          const explorerUrl = await import('./scraper').then(module => 
+            module.findBlockchainExplorer(name, createdCrypto.id)
+          );
+          
+          if (explorerUrl) {
+            console.log(`Found blockchain explorer for ${name}: ${explorerUrl}`);
+            hasExplorer = true;
+          }
+          
+          await storage.updateCryptocurrency(createdCrypto.id, {
+            lastUpdated: new Date()
+          });
+        } catch (explorerError) {
+          console.error(`Error finding blockchain explorer for ${name}:`, explorerError);
+        }
+        
+        // Accept cryptocurrency if it has EITHER website OR explorer
+        if (!officialWebsite && !hasExplorer) {
+          console.log(`${name} has neither website nor explorer - marking as low priority`);
+          await storage.updateCryptocurrency(createdCrypto.id, {
+            rank: 5000, // Lower priority
+            lastUpdated: new Date()
+          });
+        }
+      } catch (createError) {
+        console.error(`Failed to create cryptocurrency ${name}:`, createError);
+      }
+    }
+    
+    return newEntriesCount;
+  } catch (error) {
+    console.error('Error in ranked cryptocurrency search:', error);
+    return 0;
+  }
+}
+
 // Function to search for the top cryptocurrencies by market cap
 export async function searchTopCryptocurrencies(count: number = 500): Promise<boolean> {
   try {
     // Get current count to avoid unnecessary API calls
     const currentCryptos = await storage.getCryptocurrencies(1, 1, "marketCap", "desc");
     const totalCount = currentCryptos.total || 0;
+    
+    // If we're below our target, expand the search to include more lower-ranked coins
+    if (totalCount > 0 && totalCount < 500) {
+      const lowerBound = Math.max(1, Math.floor(totalCount / 2));
+      const upperBound = lowerBound + Math.min(500, count);
+      console.log(`Expanding search to rank range ${lowerBound}-${upperBound} to find more data`);
+      
+      // This will find coins that might not be in the top rankings but still have data
+      try {
+        const extraCount = await searchRankedCryptocurrencies(lowerBound, upperBound);
+        console.log(`Found ${extraCount} cryptocurrencies in expanded rank range`);
+      } catch (error) {
+        console.error("Error in expanded search:", error);
+      }
+    }
     
     // Calculate how many more we need to fetch (aim for count, but fetch at least 100 more)
     const fetchBatchSize = Math.max(100, count - totalCount);
