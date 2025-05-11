@@ -6,8 +6,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 const CryptocurrencyTable: React.FC = () => {
   const [page, setPage] = useState(1);
-  const [sort, setSort] = useState("rank");
-  const [order, setOrder] = useState("asc");
+  const [sort, setSort] = useState("marketCap");
+  const [order, setOrder] = useState("desc"); // Changed to market cap descending
   const [limit] = useState(50);
 
   const { data, isLoading, isError, refetch } = useQuery({

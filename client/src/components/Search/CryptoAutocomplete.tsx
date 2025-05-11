@@ -46,11 +46,11 @@ export function CryptoAutocomplete() {
     enabled: searchValue.length > 0,
   });
 
-  // Fetch top cryptocurrencies when no search value
+  // Fetch top cryptocurrencies by market cap when no search value
   const { data: topCryptos = [] } = useQuery({
     queryKey: ['autocomplete', 'top'],
     queryFn: async () => {
-      const res = await fetch('/api/autocomplete');
+      const res = await fetch('/api/autocomplete?sort=marketCap&order=desc&limit=10');
       if (!res.ok) throw new Error('Failed to fetch top cryptocurrencies');
       return res.json();
     },

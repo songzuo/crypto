@@ -25,8 +25,8 @@ import {
 const Markets: React.FC = () => {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(50);
-  const [sort, setSort] = useState("rank");
-  const [order, setOrder] = useState("asc");
+  const [sort, setSort] = useState("marketCap");
+  const [order, setOrder] = useState("desc"); // Changed to descending for highest market cap first
   const [searchQuery, setSearchQuery] = useState("");
   const [timeframe, setTimeframe] = useState("7d");
 
