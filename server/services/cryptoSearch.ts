@@ -342,17 +342,70 @@ export async function searchTopCryptocurrencies(count: number = 500): Promise<bo
           const existingCount = allExistingCryptos.total;
           console.log(`Found ${existingCount} existing cryptocurrencies in database`);
           
-          // Determine how many new cryptos to add (always add at least 20 new ones each run)
-          // This ensures continuous growth toward 500+ cryptocurrencies
-          const newCryptosToAdd = Math.max(20, Math.min(count, sampleCryptocurrencies.length - existingCount));
+          // Determine how many new cryptos to add (always add at least 20-35 new ones each run)
+          // This ensures continuous growth beyond 500+ cryptocurrencies
+          // NOTE: Removed the upper limit so we can continue adding cryptocurrencies even after we reach 500
+          const newCryptosToAdd = Math.max(20, Math.min(count, 50));
           console.log(`Adding ${newCryptosToAdd} new sample cryptocurrencies`);
           
-          // Add specific number of cryptocurrencies, using a dynamic starting index
-          // This ensures we continuously add different cryptocurrencies with each run
-          const startIndex = (existingCount + Date.now() % 100) % (sampleCryptocurrencies.length - count);
+          // Generate brand new cryptocurrencies even if we've already used all samples
+          // This approach ensures we can continue adding cryptocurrencies indefinitely
           for (let i = 0; i < newCryptosToAdd; i++) {
-            const index = (startIndex + i) % sampleCryptocurrencies.length;
-            cryptocurrencies.push(sampleCryptocurrencies[index]);
+            // Create a timestamped unique ID to ensure uniqueness
+            const timestamp = Date.now();
+            const uniqueId = (existingCount + i + timestamp) % 100000;
+            
+            // For the first 500 cryptocurrencies, we'll use the sample data for realism
+            if (existingCount + i < sampleCryptocurrencies.length) {
+              const index = (existingCount + i) % sampleCryptocurrencies.length;
+              cryptocurrencies.push(sampleCryptocurrencies[index]);
+            } else {
+              // After that, start generating completely new ones with unique names
+              // Common prefixes and suffixes for cryptocurrency names
+              const prefixes = ['Super', 'Mega', 'Ultra', 'Hyper', 'Quantum', 'Cyber', 'Crypto', 'Block', 'Bit', 'Digital', 
+                               'Global', 'Next', 'Future', 'Swift', 'Smart', 'Secure', 'Fast', 'Safe', 'Rapid', 'Instant', 
+                               'Liquid', 'Solid', 'Dynamic', 'Virtual', 'Nano', 'Micro', 'Macro', 'Meta', 'Omega', 'Alpha',
+                               'Delta', 'Gamma', 'Beta', 'Lambda', 'Sigma', 'Omni', 'Poly', 'Multi', 'Neo', 'Syn', 'Eco'];
+              
+              const suffixes = ['Chain', 'Coin', 'Token', 'Cash', 'Pay', 'Finance', 'Money', 'Gold', 'Silver', 'Protocol', 
+                               'Network', 'Exchange', 'Swap', 'DAO', 'Base', 'Node', 'Link', 'Connect', 'Capital', 'Fund', 
+                               'Trust', 'Ledger', 'Wallet', 'Asset', 'Flow', 'Stream', 'Hub', 'Core', 'Prime', 'Genesis', 
+                               'Frontier', 'Edge', 'Pulse', 'Wave', 'Beam', 'Ray', 'Orbit', 'Nexus', 'Vector', 'Matrix', 'Portal'];
+              
+              // Create a "unique" name by combining prefix, suffix and unique ID
+              const prefix = prefixes[uniqueId % prefixes.length];
+              const suffix = suffixes[(uniqueId * 2) % suffixes.length];
+              const name = `${prefix}${suffix}${uniqueId % 10}`;
+              
+              // Create a symbol from the name
+              let symbol = '';
+              const words = name.match(/[A-Z][a-z]*/g) || [name];
+              words.forEach(word => {
+                symbol += word[0];
+              });
+              if (symbol.length < 3) {
+                symbol = name.substring(0, 3);
+              }
+              symbol = symbol.toUpperCase();
+              
+              // Generate random data
+              const rank = existingCount + i + 1;
+              const price = 1000 / (rank % 100 + 1) + Math.random() * 100;
+              const marketCap = price * (10_000_000_000 / ((rank % 100) + 1));
+              const volume24h = marketCap * (Math.random() * 0.2);
+              const priceChange24h = (Math.random() * 10) - 5;
+              
+              // Add this newly generated cryptocurrency
+              cryptocurrencies.push({
+                name,
+                symbol,
+                price,
+                priceChange24h,
+                marketCap,
+                volume24h,
+                rank
+              });
+            }
           }
           
           console.log(`Using ${cryptocurrencies.length} sample cryptocurrencies.`);

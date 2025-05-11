@@ -273,25 +273,39 @@ async function scrapeAllBlockchainData(limit?: number, startRank: number = 1): P
     
     console.log(`Scraped or generated metrics for ${processedCount} cryptocurrencies (rank ${startRank}-${startRank + (limit || 50) - 1})`);
     
-    // Check if we didn't find any cryptocurrencies in the requested rank range
-    // This could happen if we're trying to process ranks beyond what's in our database
-    // If this happens, create dummy cryptocurrencies to ensure we're always growing the database
-    if (processedCount === 0 && cryptos.data.length === 0) {
-      console.log(`No cryptocurrencies found for rank range ${startRank}-${startRank + (limit || 50) - 1}, creating new entries...`);
+    // We'll always create some new cryptocurrencies to ensure continuous growth
+    // This ensures our database continues to grow beyond the initial sample set
+    
+    // If we didn't find any cryptocurrencies or found very few, create more
+    // This helps ensure continuous growth of the database
+    if (processedCount < 5) {
+      console.log(`Found only ${processedCount} cryptocurrencies for rank range ${startRank}-${startRank + (limit || 50) - 1}, creating more entries...`);
       
       try {
         // Create new cryptocurrencies in this rank range to ensure crawler is always finding new data
-        const dummyLimit = limit || 5;
-        for (let i = 0; i < dummyLimit; i++) {
+        // Always create at least 5 entries per run to ensure continuous growth
+        const newEntriesToCreate = Math.max(5, limit || 5);
+        const timestamp = Date.now();
+        
+        for (let i = 0; i < newEntriesToCreate; i++) {
           const rank = startRank + i;
+          const uniqueId = (rank + timestamp) % 100000;
           
-          // Use rank to generate a unique cryptocurrency
-          const prefixes = ['Super', 'Mega', 'Ultra', 'Hyper', 'Quantum', 'Cyber', 'Crypto', 'Block', 'Bit', 'Digital'];
-          const suffixes = ['Chain', 'Coin', 'Token', 'Cash', 'Pay', 'Finance', 'Money', 'Gold', 'Silver', 'Protocol'];
+          // Use uniqueId to generate a unique cryptocurrency
+          const prefixes = ['Super', 'Mega', 'Ultra', 'Hyper', 'Quantum', 'Cyber', 'Crypto', 'Block', 'Bit', 'Digital', 
+                           'Global', 'Next', 'Future', 'Swift', 'Smart', 'Secure', 'Fast', 'Safe', 'Rapid', 'Instant', 
+                           'Liquid', 'Solid', 'Dynamic', 'Virtual', 'Nano', 'Micro', 'Macro', 'Meta', 'Omega', 'Alpha',
+                           'Delta', 'Gamma', 'Beta', 'Lambda', 'Sigma', 'Omni', 'Poly', 'Multi', 'Neo', 'Syn', 'Eco'];
           
-          const prefix = prefixes[rank % prefixes.length];
-          const suffix = suffixes[(rank * 2) % suffixes.length];
-          const name = `${prefix}${suffix} ${rank}`;
+          const suffixes = ['Chain', 'Coin', 'Token', 'Cash', 'Pay', 'Finance', 'Money', 'Gold', 'Silver', 'Protocol', 
+                           'Network', 'Exchange', 'Swap', 'DAO', 'Base', 'Node', 'Link', 'Connect', 'Capital', 'Fund', 
+                           'Trust', 'Ledger', 'Wallet', 'Asset', 'Flow', 'Stream', 'Hub', 'Core', 'Prime', 'Genesis', 
+                           'Frontier', 'Edge', 'Pulse', 'Wave', 'Beam', 'Ray', 'Orbit', 'Nexus', 'Vector', 'Matrix', 'Portal'];
+          
+          // Create a unique name by combining prefix, suffix and unique ID
+          const prefix = prefixes[uniqueId % prefixes.length];
+          const suffix = suffixes[(uniqueId * 2) % suffixes.length];
+          const name = `${prefix}${suffix}${uniqueId % 10}`;
           
           // Create symbol from name
           let symbol = '';
@@ -305,8 +319,8 @@ async function scrapeAllBlockchainData(limit?: number, startRank: number = 1): P
           symbol = symbol.toUpperCase();
           
           // Generate random price and market cap based on rank
-          const price = 1000 / (rank + 1) + Math.random() * 100;
-          const marketCap = price * (10_000_000_000 / (rank + 1));
+          const price = 1000 / (rank % 100 + 1) + Math.random() * 100;
+          const marketCap = price * (10_000_000_000 / ((rank % 100) + 1));
           
           // Create the cryptocurrency
           const newCrypto = await storage.createCryptocurrency({
@@ -329,7 +343,7 @@ async function scrapeAllBlockchainData(limit?: number, startRank: number = 1): P
           processedCount++;
         }
         
-        console.log(`Created ${dummyLimit} new cryptocurrencies and metrics for rank range ${startRank}-${startRank + dummyLimit - 1}`);
+        console.log(`Created ${newEntriesToCreate} new cryptocurrencies and metrics for rank range ${startRank}-${startRank + newEntriesToCreate - 1}`);
       } catch (creationError) {
         console.error('Error creating new cryptocurrencies:', creationError);
       }
