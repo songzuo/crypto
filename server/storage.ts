@@ -737,23 +737,15 @@ export class DatabaseStorage implements IStorage {
       const threeMonthsAgo = new Date();
       threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
       
-      // Delete entries matching any of these criteria:
-      const deleteResult = await db.delete(cryptocurrencies)
-        .where(
-          or(
-            // Names with suspicious patterns indicating fake data
-            sql`${cryptocurrencies.name} SIMILAR TO '%(Crypto|Token|Coin)\\s*[0-9]+%'`,
-            
-            // Entries with no market data that are likely fake
-            sql`${cryptocurrencies.marketCap} IS NULL AND ${cryptocurrencies.price} IS NULL`,
-            
-            // Entries that haven't been updated in over 3 months (stale data)
-            sql`${cryptocurrencies.lastUpdated} < ${threeMonthsAgo.toISOString()}`,
-            
-            // Entries with suspicious rank values over 1000 (we only track top 500)
-            sql`${cryptocurrencies.rank} > 500`
-          )
-        );
+      // Use raw SQL for more complex deletion criteria to avoid parameter size limitations
+      await db.execute(sql`
+        DELETE FROM cryptocurrencies 
+        WHERE 
+          name SIMILAR TO '%(Crypto|Token|Coin)\\s*[0-9]+%'
+          OR (marketCap IS NULL AND price IS NULL)
+          OR (lastUpdated < ${threeMonthsAgo.toISOString()})
+          OR (rank > 500)
+      `);
       
       // 3. Keep only the top 500 cryptocurrencies if we have more than 500
       // Get count after initial cleanup
@@ -770,14 +762,33 @@ export class DatabaseStorage implements IStorage {
           .orderBy(asc(cryptocurrencies.rank), desc(cryptocurrencies.lastUpdated))
           .limit(500);
         
-        const idsToKeep = topCryptos.map(c => c.id);
+        // Get total count again
+        const countBeforeFinal = await db.select({ count: sql`count(*)` }).from(cryptocurrencies);
+        const totalBeforeFinal = Number(countBeforeFinal[0].count);
         
-        // Delete all except the top 500
-        if (idsToKeep.length > 0) {
-          await db.delete(cryptocurrencies)
-            .where(
-              sql`${cryptocurrencies.id} NOT IN (${idsToKeep.join(',')})`
-            );
+        // If we have more than 500, we'll need to trim down
+        if (totalBeforeFinal > 500 && topCryptos.length > 0) {
+          console.log(`Need to trim down from ${totalBeforeFinal} to 500 cryptocurrencies`);
+          
+          // Create a temporary table with IDs to keep
+          await db.execute(sql`CREATE TEMPORARY TABLE IF NOT EXISTS crypto_ids_to_keep (id INTEGER PRIMARY KEY)`);
+          await db.execute(sql`TRUNCATE TABLE crypto_ids_to_keep`);
+          
+          // Insert in batches to avoid parameter length issues
+          const batchSize = 50;
+          for (let i = 0; i < topCryptos.length; i += batchSize) {
+            const batch = topCryptos.slice(i, i + batchSize);
+            const values = batch.map(c => `(${c.id})`).join(',');
+            if (values.length > 0) {
+              await db.execute(sql`INSERT INTO crypto_ids_to_keep (id) VALUES ${sql.raw(values)}`);
+            }
+          }
+          
+          // Delete cryptocurrencies not in the keep list
+          await db.execute(sql`DELETE FROM cryptocurrencies WHERE id NOT IN (SELECT id FROM crypto_ids_to_keep)`);
+          
+          // Drop the temporary table
+          await db.execute(sql`DROP TABLE IF EXISTS crypto_ids_to_keep`);
         }
       }
       

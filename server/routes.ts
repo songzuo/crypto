@@ -184,11 +184,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Run cleanup upon starting the server to ensure clean database
-  storage.cleanupFakeData().then(result => {
-    console.log(`Initial database cleanup: ${result.removedCount} fake cryptocurrencies removed`);
-  }).catch(err => {
-    console.error('Failed to clean up database on startup:', err);
-  });
+  try {
+    console.log("Starting initial database cleanup of fake data...");
+    
+    setTimeout(async () => {
+      try {
+        const result = await storage.cleanupFakeData();
+        console.log(`Initial database cleanup: ${result.removedCount} fake cryptocurrencies removed, ${result.remainingCount} cryptocurrencies remain.`);
+      } catch (cleanupError) {
+        console.error('Error during initial database cleanup:', cleanupError);
+      }
+    }, 5000); // Slight delay to allow server to start properly
+  } catch (err) {
+    console.error('Failed to schedule initial cleanup:', err);
+  }
 
   // Setup the crawler scheduler
   setupScheduler();
