@@ -225,9 +225,9 @@ async function scrapeAllBlockchainData(limit?: number, startRank: number = 1): P
             processedCount++;
             console.log(`Successfully scraped data for ${crypto.name}`);
           } else {
-            console.log(`Failed to scrape data for ${crypto.name}, generating metrics...`);
-            // Generate metrics for failed scrapes
-            await scrapeBlockchainData("placeholder", crypto.id);
+            console.log(`Failed to scrape data for ${crypto.name}, will try again later`);
+            // Skip this crypto for now, we'll try again in the next cycle
+            // No placeholder data - we only want real data
             processedCount++;
           }
         } else {
@@ -242,14 +242,14 @@ async function scrapeAllBlockchainData(limit?: number, startRank: number = 1): P
             if (success) {
               processedCount++;
             } else {
-              // Generate metrics as a fallback
-              await scrapeBlockchainData("placeholder", crypto.id);
+              console.log(`Failed to scrape data for ${crypto.name} from newly found explorer, will try again later`);
+              // Skip this crypto for now, we'll try again in the next cycle
               processedCount++;
             }
           } else {
-            console.log(`Could not find explorer for ${crypto.name}, generating metrics...`);
-            // For cryptocurrencies without explorers, generate metrics
-            await scrapeBlockchainData("placeholder", crypto.id);
+            console.log(`Could not find explorer for ${crypto.name}, skipping for now`);
+            // For cryptocurrencies without explorers, we'll skip metrics collection
+            // We only want to use real data from actual blockchain explorers
             processedCount++;
           }
         }
@@ -273,79 +273,35 @@ async function scrapeAllBlockchainData(limit?: number, startRank: number = 1): P
     
     console.log(`Scraped or generated metrics for ${processedCount} cryptocurrencies (rank ${startRank}-${startRank + (limit || 50) - 1})`);
     
-    // We'll always create some new cryptocurrencies to ensure continuous growth
-    // This ensures our database continues to grow beyond the initial sample set
+    // Note: We previously generated fake data when we didn't find enough cryptocurrencies
+    // This has been removed to ensure data integrity - we only use real data now
     
-    // If we didn't find any cryptocurrencies or found very few, create more
-    // This helps ensure continuous growth of the database
     if (processedCount < 5) {
-      console.log(`Found only ${processedCount} cryptocurrencies for rank range ${startRank}-${startRank + (limit || 50) - 1}, creating more entries...`);
+      console.log(`Found only ${processedCount} cryptocurrencies for rank range ${startRank}-${startRank + (limit || 50) - 1}`);
+      console.log("Rather than generating fake entries, we'll try to retrieve more from other sources");
       
       try {
-        // Create new cryptocurrencies in this rank range to ensure crawler is always finding new data
-        // Always create at least 5 entries per run to ensure continuous growth
-        const newEntriesToCreate = Math.max(5, limit || 5);
-        const timestamp = Date.now();
+        // Attempt to fetch more cryptocurrencies from real sources
+        console.log("Initiating additional cryptocurrency data fetch to supplement missing data...");
+        await searchTopCryptocurrencies(50); // Try to fetch more real cryptocurrencies
         
-        for (let i = 0; i < newEntriesToCreate; i++) {
-          const rank = startRank + i;
-          const uniqueId = (rank + timestamp) % 100000;
-          
-          // Use uniqueId to generate a unique cryptocurrency
-          const prefixes = ['Super', 'Mega', 'Ultra', 'Hyper', 'Quantum', 'Cyber', 'Crypto', 'Block', 'Bit', 'Digital', 
-                           'Global', 'Next', 'Future', 'Swift', 'Smart', 'Secure', 'Fast', 'Safe', 'Rapid', 'Instant', 
-                           'Liquid', 'Solid', 'Dynamic', 'Virtual', 'Nano', 'Micro', 'Macro', 'Meta', 'Omega', 'Alpha',
-                           'Delta', 'Gamma', 'Beta', 'Lambda', 'Sigma', 'Omni', 'Poly', 'Multi', 'Neo', 'Syn', 'Eco'];
-          
-          const suffixes = ['Chain', 'Coin', 'Token', 'Cash', 'Pay', 'Finance', 'Money', 'Gold', 'Silver', 'Protocol', 
-                           'Network', 'Exchange', 'Swap', 'DAO', 'Base', 'Node', 'Link', 'Connect', 'Capital', 'Fund', 
-                           'Trust', 'Ledger', 'Wallet', 'Asset', 'Flow', 'Stream', 'Hub', 'Core', 'Prime', 'Genesis', 
-                           'Frontier', 'Edge', 'Pulse', 'Wave', 'Beam', 'Ray', 'Orbit', 'Nexus', 'Vector', 'Matrix', 'Portal'];
-          
-          // Create a unique name by combining prefix, suffix and unique ID
-          const prefix = prefixes[uniqueId % prefixes.length];
-          const suffix = suffixes[(uniqueId * 2) % suffixes.length];
-          const name = `${prefix}${suffix}${uniqueId % 10}`;
-          
-          // Create symbol from name
-          let symbol = '';
-          const words = name.match(/[A-Z][a-z]*/g) || [name];
-          words.forEach(word => {
-            symbol += word[0];
-          });
-          if (symbol.length < 3) {
-            symbol = name.substring(0, 3);
-          }
-          symbol = symbol.toUpperCase();
-          
-          // Generate random price and market cap based on rank
-          const price = 1000 / (rank % 100 + 1) + Math.random() * 100;
-          const marketCap = price * (10_000_000_000 / ((rank % 100) + 1));
-          
-          // Create the cryptocurrency
-          const newCrypto = await storage.createCryptocurrency({
-            name,
-            symbol,
-            slug: name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
-            price,
-            priceChange24h: (Math.random() * 10) - 5,
-            marketCap,
-            volume24h: marketCap * 0.1,
-            rank,
-            officialWebsite: null,
-            logoUrl: null
-          });
-          
-          console.log(`Created new cryptocurrency: ${name} (${symbol}) with rank ${rank}`);
-          
-          // Generate placeholder metrics for this new cryptocurrency
-          await scrapeBlockchainData("placeholder", newCrypto.id);
-          processedCount++;
-        }
+        // Try to expand the rank range to find more data
+        const expandedRankStart = Math.max(1, startRank - 20);
+        const expandedRankEnd = startRank + (limit || 50) + 20;
+        console.log(`Expanding search to rank range ${expandedRankStart}-${expandedRankEnd} to find more data`);
         
-        console.log(`Created ${newEntriesToCreate} new cryptocurrencies and metrics for rank range ${startRank}-${startRank + newEntriesToCreate - 1}`);
-      } catch (creationError) {
-        console.error('Error creating new cryptocurrencies:', creationError);
+        // Get cryptocurrencies from the expanded range
+        const moreCryptos = await storage.getCryptocurrencies(
+          Math.ceil(expandedRankStart / 50), // Page
+          expandedRankEnd - expandedRankStart, // Limit
+          'rank',
+          'asc'
+        );
+        
+        // Log how many more we found
+        console.log(`Found ${moreCryptos.data.length} cryptocurrencies in expanded rank range`);
+      } catch (fetchError) {
+        console.error('Error fetching additional cryptocurrency data:', fetchError);
       }
     }
   } catch (error) {
