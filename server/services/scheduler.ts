@@ -31,7 +31,7 @@ export async function runInitialDataCollection() {
 }
 
 // The entry point for setting up all scheduled tasks
-export function setupScheduler() {
+export async function setupScheduler() {
   // Run initial data collection immediately on startup
   runInitialDataCollection().catch(err => {
     console.error('Error in initial data collection:', err);
@@ -39,9 +39,23 @@ export function setupScheduler() {
   // Setup continuous data collection cycle for top 500 cryptocurrencies
   // Much more frequent than before - running every minute
   
+  // Import web scraper functions dynamically to avoid circular dependencies
+  let webScraper: any = null;
+  
+  // Wrap dynamic import in an immediately invoked async function
+  (async () => {
+    try {
+      webScraper = await import('./webScraper');
+      console.log("Successfully imported webScraper module");
+    } catch (error) {
+      console.error("Error importing webScraper module:", error);
+    }
+  })();
+
   // Phase 1: Schedule searching for cryptocurrencies very frequently (every minute)
+  // Using multiple sources in parallel (APIs + direct scraping)
   cron.schedule('* * * * *', async () => {
-    console.log('Running scheduled task: Search for top cryptocurrencies');
+    console.log('Running scheduled task: Search for top cryptocurrencies (multi-source)');
     
     try {
       // Check current count
@@ -63,26 +77,60 @@ export function setupScheduler() {
         batchSize = 500; // Go for all 500
       }
       
-      // If we're still far from our 500 target, use multiple approaches
-      if (totalCount < 400 && (totalCount % 50 === 0)) {
-        // Every 50 cryptocurrencies, try to widen the search beyond top ranks
-        // This helps find more niche cryptocurrencies
-        console.log(`Only ${totalCount}/500 cryptocurrencies found, adding diversity to search`);
-        
-        // Use our ranked search to find coins in different rank ranges
-        const startRank = Math.max(totalCount, 50);
-        const endRank = startRank + 100;
-        
-        // Now that we import the function directly, we can call it
-        try {
-          await searchRankedCryptocurrencies(startRank, endRank);
-        } catch (error) {
-          console.error("Error in additional ranked search:", error);
-        }
+      // Multi-threaded approach: Launch multiple tasks in parallel
+      console.log(`Starting multi-source parallel cryptocurrency data collection...`);
+      
+      // Array to collect all promises for parallel execution
+      const tasks: Promise<any>[] = [];
+      
+      // Task 1: Standard API-based search
+      tasks.push(
+        (async () => {
+          console.log(`Current crypto count: ${totalCount}, fetching batch of ${batchSize} via APIs`);
+          await searchTopCryptocurrencies(batchSize);
+        })()
+      );
+      
+      // Task 2: If we're far from target, use ranked search approach
+      if (totalCount < 400) {
+        tasks.push(
+          (async () => {
+            // Use our ranked search to find coins in different rank ranges
+            const startRank = Math.max(totalCount, 50);
+            const endRank = startRank + 100;
+            
+            console.log(`Only ${totalCount}/500 cryptocurrencies found, adding diversity with rank range ${startRank}-${endRank}`);
+            try {
+              await searchRankedCryptocurrencies(startRank, endRank);
+            } catch (error) {
+              console.error("Error in additional ranked search:", error);
+            }
+          })()
+        );
       }
       
-      console.log(`Current crypto count: ${totalCount}, fetching batch of ${batchSize}`);
-      await searchTopCryptocurrencies(batchSize);
+      // Task 3: Direct website scraping (if module is available)
+      if (webScraper) {
+        tasks.push(
+          (async () => {
+            try {
+              // Every 5 minutes (to avoid hitting rate limits), scrape directly from websites
+              const minute = new Date().getMinutes();
+              if (minute % 5 === 0) {
+                console.log(`Starting direct website scraping for additional data sources...`);
+                await webScraper.scrapeMultipleSources();
+              }
+            } catch (error) {
+              console.error("Error in direct website scraping:", error);
+            }
+          })()
+        );
+      }
+      
+      // Execute all tasks in parallel
+      await Promise.allSettled(tasks);
+      console.log(`Completed multi-source cryptocurrency data collection`);
+      
     } catch (error) {
       console.error("Error in cryptocurrency search scheduler:", error);
       // Even on error, still try with default size
