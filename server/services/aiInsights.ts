@@ -5,29 +5,6 @@ import { Cryptocurrency, Metric, InsertAiInsight } from "@shared/schema";
 // Initialize OpenAI client
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// Sample insights for when OpenAI API is not available
-const sampleInsights = [
-  {
-    template: "{{name}} ({{symbol}}) shows strong network activity with {{active}} active addresses and {{tps}} transactions per second. The price change of {{price_change}}% in the last 24h indicates {{sentiment}} market sentiment. With a market cap of ${{market_cap}}, {{name}} ranks #{{rank}} among cryptocurrencies. The network demonstrates {{health}} health with solid fundamentals.",
-    sentiments: {
-      positive: ["bullish", "positive", "optimistic", "favorable", "encouraging"],
-      negative: ["bearish", "negative", "cautious", "concerning", "challenging"],
-      neutral: ["neutral", "balanced", "stable", "steady", "mixed"]
-    },
-    health: ["excellent", "good", "stable", "solid", "robust", "promising", "strong"]
-  },
-  {
-    template: "Analysis of {{name}} ({{symbol}}): This cryptocurrency currently has {{active}} active addresses and processes {{tps}} TPS. The market shows {{sentiment}} behavior with a {{price_change}}% price change in 24h. With ${{market_cap}} market cap and ranked #{{rank}}, {{name}} displays {{health}} on-chain metrics indicating {{future}} potential for growth.",
-    sentiments: {
-      positive: ["bullish", "positive", "optimistic", "favorable", "encouraging"],
-      negative: ["bearish", "negative", "cautious", "concerning", "challenging"],
-      neutral: ["neutral", "balanced", "stable", "steady", "mixed"]
-    },
-    health: ["excellent", "good", "stable", "solid", "robust", "promising", "strong"],
-    future: ["strong", "moderate", "uncertain", "significant", "limited"]
-  }
-];
-
 export async function getAiInsightsForCrypto(
   cryptocurrency: Cryptocurrency,
   metrics: Metric
@@ -78,6 +55,11 @@ export async function getAiInsightsForCrypto(
 
     let insight = "";
     let confidence = 0;
+    
+    // Save these variables for use in the catch block too
+    const formattedMarketCapForFallback = formattedMarketCap;
+    const activeAddressesForFallback = activeAddresses;
+    const tpsForFallback = tps;
 
     // Try to use OpenAI API
     try {
@@ -106,47 +88,70 @@ export async function getAiInsightsForCrypto(
       confidence = 0.92; // High confidence for API-generated insights
       console.log(`Successfully generated OpenAI insight for ${cryptocurrency.name}`);
     } catch (apiError) {
-      console.log(`OpenAI API error: ${apiError}. Using template-based insights.`);
+      console.log(`OpenAI API error: ${apiError}. Using factual summary instead.`);
       
-      // If API call fails, use template-based insights
-      const template = sampleInsights[Math.floor(Math.random() * sampleInsights.length)];
-      const priceChange = cryptocurrency.priceChange24h || 0;
+      // Generate a factual summary based only on available data
+      // No synthetic data or random sentiment analysis - just the facts
+      confidence = 0.5; // Medium confidence for factual summaries
       
-      // Determine sentiment based on price change
-      let sentimentCategory = "neutral";
-      if (priceChange > 3) sentimentCategory = "positive";
-      else if (priceChange < -3) sentimentCategory = "negative";
-      
-      // Pick a random sentiment from the appropriate category
-      const sentiments = template.sentiments[sentimentCategory as keyof typeof template.sentiments];
-      const sentiment = sentiments[Math.floor(Math.random() * sentiments.length)];
-      
-      // Pick a random health assessment
-      const health = template.health[Math.floor(Math.random() * template.health.length)];
-      
-      // Format market cap for display
+      // Format market cap for better readability
       const marketCapFormatted = cryptocurrency.marketCap ? 
-        (cryptocurrency.marketCap / 1e9).toFixed(1) : "unknown";
+        (cryptocurrency.marketCap >= 1e9 ? 
+         `$${(cryptocurrency.marketCap / 1e9).toFixed(2)}B` : 
+         `$${(cryptocurrency.marketCap / 1e6).toFixed(2)}M`) : 
+        "unknown market cap";
       
-      // Replace template placeholders
-      insight = template.template
-        .replace("{{name}}", cryptocurrency.name)
-        .replace("{{symbol}}", cryptocurrency.symbol)
-        .replace("{{active}}", activeAddresses)
-        .replace("{{tps}}", tps)
-        .replace("{{price_change}}", priceChange.toFixed(2))
-        .replace("{{sentiment}}", sentiment)
-        .replace("{{market_cap}}", marketCapFormatted)
-        .replace("{{rank}}", (cryptocurrency.rank || "N/A").toString())
-        .replace("{{health}}", health);
+      // Format price change with proper sign
+      const priceChangeFormatted = cryptocurrency.priceChange24h !== null && cryptocurrency.priceChange24h !== undefined ?
+        (cryptocurrency.priceChange24h > 0 ? 
+         `+${cryptocurrency.priceChange24h.toFixed(2)}%` : 
+         `${cryptocurrency.priceChange24h.toFixed(2)}%`) :
+        "unknown price change";
       
-      // Replace future potential if present in template
-      if (template.future) {
-        const future = template.future[Math.floor(Math.random() * template.future.length)];
-        insight = insight.replace("{{future}}", future);
+      // Create a factual summary with available data
+      insight = `${cryptocurrency.name} (${cryptocurrency.symbol}) Summary:\n\n`;
+      
+      // Add market data
+      insight += `Market Data: ${cryptocurrency.name} has a current price of $${cryptocurrency.price?.toFixed(2) || "unknown"} `;
+      insight += `with ${priceChangeFormatted} in the last 24 hours. `;
+      insight += `It has a ${marketCapFormatted} market capitalization`;
+      if (cryptocurrency.rank) {
+        insight += ` and ranks #${cryptocurrency.rank} by market cap.`;
+      } else {
+        insight += `.`;
       }
       
-      confidence = 0.65; // Lower confidence for template-based insights
+      // Add blockchain metrics if available
+      let hasMetrics = false;
+      let metricsInsight = "\n\nBlockchain Metrics: ";
+      
+      if (metrics.activeAddresses) {
+        metricsInsight += `${metrics.activeAddresses.toLocaleString()} active addresses. `;
+        hasMetrics = true;
+      }
+      
+      if (metrics.transactionsPerSecond) {
+        metricsInsight += `Processing ${metrics.transactionsPerSecond.toFixed(2)} transactions per second. `;
+        hasMetrics = true;
+      }
+      
+      if (metrics.totalTransactions) {
+        metricsInsight += `Total of ${metrics.totalTransactions.toLocaleString()} transactions recorded. `;
+        hasMetrics = true;
+      }
+      
+      if (metrics.hashrate) {
+        metricsInsight += `Network hashrate: ${metrics.hashrate}. `;
+        hasMetrics = true;
+      }
+      
+      if (hasMetrics) {
+        insight += metricsInsight;
+      } else {
+        insight += "\n\nBlockchain Metrics: No on-chain metrics are currently available for this cryptocurrency.";
+      }
+      
+      insight += "\n\nNote: This is a factual summary based on available data. For advanced analysis, please check back later.";
     }
 
     // Store the insight in the database

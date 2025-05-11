@@ -311,16 +311,22 @@ export async function scrapeBlockchainData(explorerUrl: string, cryptocurrencyId
       });
     });
     
-    // If metrics are too few, add some placeholder metrics
-    if (Object.keys(metrics).length < 3) {
-      if (!metricsData.activeAddresses) metricsData.activeAddresses = Math.floor(Math.random() * 1000000) + 10000;
-      if (!metricsData.totalTransactions) metricsData.totalTransactions = Math.floor(Math.random() * 10000000) + 1000000;
-      if (!metricsData.transactionsPerSecond) metricsData.transactionsPerSecond = Math.random() * 100;
-      if (!metricsData.hashrate) metricsData.hashrate = `${Math.floor(Math.random() * 100) + 10} TH/s`;
-      
+    // We now only use actual scraped metrics, no synthetic/placeholder data
+    // If metrics are too few, that's okay - we stick with what we found
+    // Leaving the data incomplete is better than making up fake numbers
+    console.log(`Found ${Object.keys(metrics).length} metrics for this cryptocurrency`);
+    
+    // Store any value we found in the metrics object for transparency
+    if (metricsData.activeAddresses) {
       metrics['active_addresses'] = metricsData.activeAddresses.toString();
+    }
+    if (metricsData.totalTransactions) {
       metrics['total_transactions'] = metricsData.totalTransactions.toString();
-      metrics['tps'] = metricsData.transactionsPerSecond?.toString() || '0';
+    }
+    if (metricsData.transactionsPerSecond) {
+      metrics['tps'] = metricsData.transactionsPerSecond.toString();
+    }
+    if (metricsData.hashrate) {
       metrics['hash_rate'] = metricsData.hashrate;
     }
     
