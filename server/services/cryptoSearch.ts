@@ -20,6 +20,33 @@ function makeHttpsRequest(url: string): Promise<string> {
   });
 }
 
+// Helper function to check if a cryptocurrency is a duplicate of existing entries
+async function isDuplicate(crypto: { name: string, symbol: string }): Promise<boolean> {
+  // Check for name match
+  const existingByName = await storage.searchCryptocurrencies(crypto.name);
+  if (existingByName && existingByName.length > 0) {
+    for (const existing of existingByName) {
+      if (existing.name.toLowerCase() === crypto.name.toLowerCase()) {
+        console.log(`Duplicate found by name: ${crypto.name} matches existing cryptocurrency ${existing.name}`);
+        return true;
+      }
+    }
+  }
+  
+  // Check for symbol match
+  const existingBySymbol = await storage.searchCryptocurrencies(crypto.symbol);
+  if (existingBySymbol && existingBySymbol.length > 0) {
+    for (const existing of existingBySymbol) {
+      if (existing.symbol.toLowerCase() === crypto.symbol.toLowerCase()) {
+        console.log(`Duplicate found by symbol: ${crypto.symbol} matches existing cryptocurrency ${existing.symbol}`);
+        return true;
+      }
+    }
+  }
+  
+  return false;
+}
+
 // Function to search for the top cryptocurrencies by market cap
 export async function searchTopCryptocurrencies(count: number = 500): Promise<boolean> {
   try {
