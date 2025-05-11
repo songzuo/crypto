@@ -342,12 +342,14 @@ export async function searchTopCryptocurrencies(count: number = 500): Promise<bo
           const existingCount = allExistingCryptos.total;
           console.log(`Found ${existingCount} existing cryptocurrencies in database`);
           
-          // Determine how many new cryptos to add (always add at least 10 new ones each run)
-          const newCryptosToAdd = Math.max(10, Math.min(count, sampleCryptocurrencies.length - existingCount));
+          // Determine how many new cryptos to add (always add at least 20 new ones each run)
+          // This ensures continuous growth toward 500+ cryptocurrencies
+          const newCryptosToAdd = Math.max(20, Math.min(count, sampleCryptocurrencies.length - existingCount));
           console.log(`Adding ${newCryptosToAdd} new sample cryptocurrencies`);
           
-          // Add specific number of cryptocurrencies, starting after the existing ones
-          const startIndex = existingCount % (sampleCryptocurrencies.length - count);
+          // Add specific number of cryptocurrencies, using a dynamic starting index
+          // This ensures we continuously add different cryptocurrencies with each run
+          const startIndex = (existingCount + Date.now() % 100) % (sampleCryptocurrencies.length - count);
           for (let i = 0; i < newCryptosToAdd; i++) {
             const index = (startIndex + i) % sampleCryptocurrencies.length;
             cryptocurrencies.push(sampleCryptocurrencies[index]);

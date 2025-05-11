@@ -4,15 +4,46 @@ import { findBlockchainExplorer, scrapeBlockchainData } from './scraper';
 import { getAiInsightsForCrypto } from './aiInsights';
 import { storage } from '../storage';
 
+// Function to run initial data collection immediately on startup
+export async function runInitialDataCollection() {
+  console.log('Running initial data population...');
+  
+  // Always start with the crawler active
+  await storage.updateCrawlerStatus({
+    webCrawlerActive: true,
+    lastUpdate: new Date()
+  });
+  
+  // Immediately search for cryptocurrencies
+  await searchTopCryptocurrencies(50);
+  console.log('Initial cryptocurrency data fetch completed');
+  
+  // Immediately search for blockchain explorers
+  await findExplorersForCryptos(20);
+  console.log('Initial blockchain explorer search completed');
+  
+  // Immediately scrape blockchain data
+  await scrapeAllBlockchainData(20, 1);
+  console.log('Initial blockchain data scraping completed');
+  
+  // Return to ensure proper startup sequence
+  return true;
+}
+
 // The entry point for setting up all scheduled tasks
 export function setupScheduler() {
+  // Run initial data collection immediately on startup
+  runInitialDataCollection().catch(err => {
+    console.error('Error in initial data collection:', err);
+  });
   // Setup continuous data collection cycle for top 500 cryptocurrencies
   // Much more frequent than before - running every minute
   
-  // Phase 1: Schedule searching for cryptocurrencies more frequently
-  cron.schedule('*/5 * * * *', async () => {
+  // Phase 1: Schedule searching for cryptocurrencies very frequently (every minute)
+  cron.schedule('* * * * *', async () => {
     console.log('Running scheduled task: Search for top cryptocurrencies');
-    // Process top 50 cryptocurrencies every 5 minutes
+    // Process top 50 cryptocurrencies every minute for continuous growth
+    // This will ensure rapid growth toward 500+ cryptocurrencies
     await searchTopCryptocurrencies(50);
     
     // Keep web crawler active status
@@ -23,11 +54,11 @@ export function setupScheduler() {
   });
 
   // Phase 2: Find blockchain explorers for cryptocurrencies without explorers
-  // Runs every 10 minutes
-  cron.schedule('*/10 * * * *', async () => {
+  // Runs every 3 minutes for faster discovery
+  cron.schedule('*/3 * * * *', async () => {
     console.log('Running scheduled task: Find blockchain explorers');
-    // Process up to 10 cryptocurrencies every 10 minutes
-    await findExplorersForCryptos(10);
+    // Process up to 15 cryptocurrencies every 3 minutes for faster discovery
+    await findExplorersForCryptos(15);
     
     // Keep web crawler active status
     await storage.updateCrawlerStatus({
@@ -56,9 +87,9 @@ export function setupScheduler() {
   });
 
   // Phase 4: Generate AI insights more frequently
-  cron.schedule('*/15 * * * *', async () => {
+  cron.schedule('*/5 * * * *', async () => {
     console.log('Running scheduled task: Generate AI insights');
-    // Process up to 10 cryptocurrencies every 15 minutes for AI analysis
+    // Process up to 10 cryptocurrencies every 5 minutes for more frequent AI analysis
     await generateAiInsights(10);
     
     // Keep web crawler active status
@@ -459,16 +490,20 @@ async function generateAiInsights(limit?: number): Promise<void> {
       }
     }
     
-    // Update crawler status
+    // Update crawler status - always keep webCrawlerActive true for 24/7 operation
     await storage.updateCrawlerStatus({
-      aiProcessorActive: false
+      aiProcessorActive: false,
+      webCrawlerActive: true, // Keep crawler active
+      lastUpdate: new Date()
     });
   } catch (error) {
     console.error('Error generating AI insights:', error);
     
-    // Update crawler status
+    // Update crawler status - always keep webCrawlerActive true even during errors
     await storage.updateCrawlerStatus({
-      aiProcessorActive: false
+      aiProcessorActive: false,
+      webCrawlerActive: true, // Keep crawler active
+      lastUpdate: new Date()
     });
   }
 }
