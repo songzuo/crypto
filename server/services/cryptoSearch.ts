@@ -215,7 +215,7 @@ export async function searchTopCryptocurrencies(count: number = 500): Promise<bo
     });
     
     // Collection of cryptocurrencies from multiple sources
-    const cryptocurrencies = [];
+    const cryptocurrencies: { name: string; symbol: string; marketCap: number; rank?: number; slug?: string; price?: number; }[] = [];
     let sourceUsed = "none";
     
     try {
@@ -558,8 +558,8 @@ export async function searchTopCryptocurrencies(count: number = 500): Promise<bo
             console.log(`No blockchain explorer found for ${name}`);
           }
           
-          // Update with new information (no need to update lastUpdated as it has a defaultNow() in the schema)
-          await storage.updateCryptocurrency(createdCrypto.id, {});
+          // Skip empty update
+          // The explorer is found and tracked via the explorer creation
         } catch (explorerError) {
           console.error(`Error finding blockchain explorer for ${name}:`, explorerError);
         }
