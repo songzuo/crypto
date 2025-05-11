@@ -33,8 +33,8 @@ export async function runInitialDataCollection() {
 // The entry point for setting up all scheduled tasks
 export async function setupScheduler() {
   // Run initial data collection immediately on startup
-  runInitialDataCollection().catch(err => {
-    console.error('Error in initial data collection:', err);
+  runInitialDataCollection().catch((error: any) => {
+    console.error('Error in initial data collection:', error);
   });
   // Setup continuous data collection cycle for top 500 cryptocurrencies
   // Much more frequent than before - running every minute
@@ -286,7 +286,7 @@ export async function setupScheduler() {
         (async () => {
           console.log(`Thread 1: Scraping top-ranked cryptocurrencies...`);
           await scrapeAllBlockchainData(maxBatchSize, 1);
-        })().catch(err => console.error("Error in thread 1 (top ranks):", err))
+        })().catch((error: any) => console.error("Error in thread 1 (top ranks):", error))
       );
       
       // THREAD 2: Process middle segment of the database
@@ -296,7 +296,7 @@ export async function setupScheduler() {
           (async () => {
             console.log(`Thread 2: Scraping middle-ranked cryptocurrencies starting at rank ${middleStartRank}...`);
             await scrapeAllBlockchainData(maxBatchSize, middleStartRank);
-          })().catch(err => console.error("Error in thread 2 (middle ranks):", err))
+          })().catch((error: any) => console.error("Error in thread 2 (middle ranks):", error))
         );
       }
       
@@ -314,7 +314,7 @@ export async function setupScheduler() {
           (async () => {
             console.log(`Thread 3: Dynamically scraping cryptocurrencies starting at rank ${dynamicStartRank}...`);
             await scrapeAllBlockchainData(maxBatchSize, dynamicStartRank);
-          })().catch(err => console.error("Error in thread 3 (dynamic ranks):", err))
+          })().catch((error: any) => console.error("Error in thread 3 (dynamic ranks):", error))
         );
       }
       
@@ -328,7 +328,7 @@ export async function setupScheduler() {
           (async () => {
             console.log(`Thread 4: Randomly scraping cryptocurrencies starting at rank ${randomStartRank}...`);
             await scrapeAllBlockchainData(maxBatchSize, randomStartRank);
-          })().catch(err => console.error("Error in thread 4 (random ranks):", err))
+          })().catch((error: any) => console.error("Error in thread 4 (random ranks):", error))
         );
       }
       

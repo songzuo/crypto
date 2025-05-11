@@ -382,8 +382,8 @@ export async function searchTopCryptocurrencies(count: number = 500): Promise<bo
                   sourceUsed = "webscraping";
                   break;
                 }
-              } catch (websiteError) {
-                console.log(`Failed to scrape from ${website}: ${websiteError.message}`);
+              } catch (error: any) {
+                console.log(`Failed to scrape from ${website}: ${error.message}`);
               }
             }
             
@@ -518,8 +518,8 @@ export async function searchTopCryptocurrencies(count: number = 500): Promise<bo
         // Already set above, but could be enhanced with more sophisticated check
         officialWebsite = `https://${possibleDomains[0]}`; // Simplified for testing
         console.log(`Using website for ${name}: ${officialWebsite}`);
-      } catch (websiteError) {
-        console.log(`Error finding better website for ${name}:`, websiteError);
+      } catch (error: any) {
+        console.log(`Error finding better website for ${name}:`, error);
       }
       
       // Now create the cryptocurrency entry with whatever website we found (might be null)
