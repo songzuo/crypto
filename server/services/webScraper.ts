@@ -70,7 +70,7 @@ export async function scrapeCoinMarketCap(page: number = 1): Promise<number> {
     
     console.log(`Found ${tableRows.length} cryptocurrencies on CoinMarketCap page ${page}`);
     
-    tableRows.each((index: number, element: cheerio.Element) => {
+    tableRows.each((index: number, element: any) => {
       try {
         // Extract name, symbol, market cap, etc.
         const name = $(element).find('.cmc-link').text().trim();
@@ -80,7 +80,7 @@ export async function scrapeCoinMarketCap(page: number = 1): Promise<number> {
         
         // Extract market cap value - look for the specific column
         let marketCapStr = '';
-        $(element).find('td').each((i: number, td: cheerio.Element) => {
+        $(element).find('td').each((i: number, td: any) => {
           // Market cap is typically in the specific column (index may change)
           if ($(td).find('p:contains("$")').length > 0 && !marketCapStr) {
             marketCapStr = $(td).text().trim();
@@ -196,7 +196,7 @@ export async function scrapeCoinGecko(page: number = 1): Promise<number> {
     
     console.log(`Found ${tableRows.length} cryptocurrencies on CoinGecko page ${page}`);
     
-    tableRows.each((index, element) => {
+    tableRows.each((index: number, element: any) => {
       try {
         // Extract name, symbol, market cap from CoinGecko's structure
         const name = $(element).find('.tw-font-bold').text().trim();
@@ -206,7 +206,7 @@ export async function scrapeCoinGecko(page: number = 1): Promise<number> {
         
         // Extract market cap
         let marketCapStr = '';
-        $(element).find('td').each((i, td) => {
+        $(element).find('td').each((i: number, td: any) => {
           // Look for the market cap column
           if ($(td).find('span:contains("$")').length > 0 && !marketCapStr) {
             marketCapStr = $(td).text().trim();
