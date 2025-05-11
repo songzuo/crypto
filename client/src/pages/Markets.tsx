@@ -267,12 +267,14 @@ const Markets: React.FC = () => {
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-right">
                         <div className="font-medium">
-                          {crypto.price ? `$${crypto.price < 1 ? crypto.price.toFixed(6) : crypto.price.toFixed(2)}` : 'N/A'}
+                          {crypto.price !== undefined && crypto.price !== null 
+                            ? `$${crypto.price < 1 ? crypto.price.toFixed(6) : crypto.price.toFixed(2)}`
+                            : 'N/A'}
                         </div>
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-right">
-                        <div className={crypto.priceChange24h >= 0 ? "text-emerald-500" : "text-red-500"}>
-                          {crypto.priceChange24h !== undefined
+                        <div className={crypto.priceChange24h && crypto.priceChange24h >= 0 ? "text-emerald-500" : "text-red-500"}>
+                          {crypto.priceChange24h !== undefined && crypto.priceChange24h !== null
                             ? `${crypto.priceChange24h >= 0 ? "+" : ""}${crypto.priceChange24h.toFixed(2)}%`
                             : "N/A"}
                         </div>

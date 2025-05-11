@@ -569,8 +569,7 @@ export async function searchTopCryptocurrencies(count: number = 500): Promise<bo
           console.log(`${name} has neither website nor explorer - marking as low priority`);
           // We'll keep it but mark it with a higher rank to indicate lower priority
           await storage.updateCryptocurrency(createdCrypto.id, {
-            rank: 5000, // High rank indicates lower priority but we still keep it
-            lastUpdated: new Date()
+            rank: 5000 // High rank indicates lower priority but we still keep it
           });
         }
       } catch (createError) {
