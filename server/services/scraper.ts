@@ -217,28 +217,39 @@ export async function scrapeBlockchainData(explorerUrl: string, cryptocurrencyId
     } catch (fetchError) {
       console.error(`Error fetching content from ${explorerUrl}:`, fetchError);
       
-      // Generate some basic metrics for demonstration
-      const metrics: any = {};
-      const metricsData: InsertMetric = {
-        cryptocurrencyId,
-        activeAddresses: Math.floor(Math.random() * 1000000) + 10000,
-        totalTransactions: Math.floor(Math.random() * 10000000) + 1000000,
-        transactionsPerSecond: Math.random() * 100,
-        hashrate: `${Math.floor(Math.random() * 100) + 10} TH/s`,
-        metrics
-      };
+      // Try alternate URLs or API endpoints based on the explorer
+      let alternateUrl = "";
       
-      // Store the metrics in the database
-      const existingMetrics = await storage.getMetrics(cryptocurrencyId);
-      
-      if (existingMetrics) {
-        await storage.updateMetrics(existingMetrics.id, metricsData);
-      } else {
-        await storage.createMetrics(metricsData);
+      if (explorerUrl.includes("etherscan.io")) {
+        alternateUrl = explorerUrl.replace("etherscan.io", "etherscan.io/stats");
+      } else if (explorerUrl.includes("bscscan.com")) {
+        alternateUrl = explorerUrl.replace("bscscan.com", "bscscan.com/charts");
+      } else if (explorerUrl.includes("blockchain.com")) {
+        alternateUrl = "https://api.blockchain.info/stats";
+      } else if (explorerUrl.includes("blockchair.com")) {
+        // For blockchair, try their API
+        const coin = explorerUrl.split("/").filter(Boolean).pop();
+        if (coin) {
+          alternateUrl = `https://api.blockchair.com/${coin}/stats`;
+        }
       }
       
-      console.log(`Generated placeholder metrics for cryptocurrency ${cryptocurrencyId}`);
-      return true;
+      // Try the alternate URL if available
+      if (alternateUrl) {
+        try {
+          console.log(`Trying alternate URL: ${alternateUrl}`);
+          content = await makeHttpsRequest(alternateUrl);
+          console.log(`Successfully fetched content from alternate URL: ${alternateUrl}`);
+        } catch (altError) {
+          console.error(`Error fetching from alternate URL ${alternateUrl}:`, altError);
+          console.log(`Unable to fetch blockchain data for cryptocurrency ${cryptocurrencyId} from any source`);
+          return false;
+        }
+      } else {
+        console.log(`No alternate URL available for ${explorerUrl}`);
+        console.log(`Unable to fetch blockchain data for cryptocurrency ${cryptocurrencyId}`);
+        return false;
+      }
     }
     
     // Parse the HTML content
