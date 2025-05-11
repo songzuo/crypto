@@ -118,7 +118,7 @@ export async function scrapeCoinMarketCap(page: number = 1): Promise<number> {
           rank: index + 1 + ((page - 1) * 100), // Calculate rank based on page and position
           officialWebsite: `https://${slug}.org`,  // Default website format
           logoUrl: null,
-          lastUpdated: new Date()
+          
         });
       } catch (err) {
         console.error(`Error parsing cryptocurrency at index ${index}:`, err);
@@ -157,7 +157,7 @@ export async function scrapeCoinMarketCap(page: number = 1): Promise<number> {
             console.log(`Updating market cap for ${existing.name} (ID: ${existing.id}) to ${crypto.marketCap}`);
             await storage.updateCryptocurrency(existing.id, { 
               marketCap: crypto.marketCap,
-              lastUpdated: new Date()
+              
             });
           } else {
             console.log(`Skipping duplicate cryptocurrency: ${crypto.name} - Already exists.`);
@@ -243,7 +243,7 @@ export async function scrapeCoinGecko(page: number = 1): Promise<number> {
           rank: index + 1 + ((page - 1) * 100), // Calculate rank based on page and position
           officialWebsite: `https://${slug}.org`,  // Default website format
           logoUrl: null,
-          lastUpdated: new Date()
+          
         });
       } catch (err) {
         console.error(`Error parsing cryptocurrency at index ${index} on CoinGecko:`, err);
@@ -282,7 +282,7 @@ export async function scrapeCoinGecko(page: number = 1): Promise<number> {
             console.log(`Updating market cap for ${existing.name} (ID: ${existing.id}) to ${crypto.marketCap}`);
             await storage.updateCryptocurrency(existing.id, { 
               marketCap: crypto.marketCap,
-              lastUpdated: new Date()
+              
             });
           } else {
             console.log(`Skipping duplicate cryptocurrency: ${crypto.name} - Already exists.`);
