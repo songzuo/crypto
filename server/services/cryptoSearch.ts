@@ -153,9 +153,8 @@ export async function searchRankedCryptocurrencies(startRank: number = 1, endRan
             hasExplorer = true;
           }
           
-          await storage.updateCryptocurrency(createdCrypto.id, {
-            lastUpdated: new Date()
-          });
+          // No need to update lastUpdated as it has a defaultNow() in the schema
+          await storage.updateCryptocurrency(createdCrypto.id, {});
         } catch (explorerError) {
           console.error(`Error finding blockchain explorer for ${name}:`, explorerError);
         }
@@ -164,8 +163,8 @@ export async function searchRankedCryptocurrencies(startRank: number = 1, endRan
         if (!officialWebsite && !hasExplorer) {
           console.log(`${name} has neither website nor explorer - marking as low priority`);
           await storage.updateCryptocurrency(createdCrypto.id, {
-            rank: 5000, // Lower priority
-            lastUpdated: new Date()
+            rank: 5000 // Lower priority
+            // No need to update lastUpdated as it has a defaultNow() in the schema
           });
         }
       } catch (createError) {
@@ -559,10 +558,8 @@ export async function searchTopCryptocurrencies(count: number = 500): Promise<bo
             console.log(`No blockchain explorer found for ${name}`);
           }
           
-          // Update with new information
-          await storage.updateCryptocurrency(createdCrypto.id, {
-            lastUpdated: new Date()
-          });
+          // Update with new information (no need to update lastUpdated as it has a defaultNow() in the schema)
+          await storage.updateCryptocurrency(createdCrypto.id, {});
         } catch (explorerError) {
           console.error(`Error finding blockchain explorer for ${name}:`, explorerError);
         }
