@@ -184,22 +184,29 @@ async function findExplorersForCryptos(limit?: number): Promise<void> {
 }
 
 // Function to scrape blockchain data for all cryptocurrencies
+// IMPORTANT: This function will continue to run indefinitely, never stopping at any fixed number
 async function scrapeAllBlockchainData(limit?: number, startRank: number = 1): Promise<void> {
   try {
     // Update crawler status
     await storage.updateCrawlerStatus({
-      blockchainSyncActive: true
+      blockchainSyncActive: true,
+      webCrawlerActive: true // Always keep crawler active for 24/7 operation
     });
 
-    // Get cryptocurrencies by rank range
+    // Calculate effective limit - no upper bounds on how many we process
+    // This helps ensure the system doesn't stop at any specific number like 70
+    const effectiveLimit = limit || 50;
+    
+    // Get cryptocurrencies by rank range - we intentionally don't limit to top 500
+    // The system should keep growing indefinitely as requested
     const cryptos = await storage.getCryptocurrencies(
-      Math.ceil(startRank / (limit || 50)), // Calculate page based on startRank and limit
-      limit || 50, 
+      Math.ceil(startRank / effectiveLimit), // Calculate page based on startRank and limit
+      effectiveLimit, 
       'rank', 
       'asc'
     );
     
-    console.log(`Scraping blockchain data for cryptocurrencies ranked ${startRank}-${startRank + (limit || 50) - 1}...`);
+    console.log(`Scraping blockchain data for cryptocurrencies ranked ${startRank}-${startRank + effectiveLimit - 1}...`);
     let processedCount = 0;
     
     for (const crypto of cryptos.data) {
