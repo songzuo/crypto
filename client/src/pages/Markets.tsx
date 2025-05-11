@@ -24,7 +24,7 @@ import {
 
 const Markets: React.FC = () => {
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(20);
+  const [limit, setLimit] = useState(50);
   const [sort, setSort] = useState("rank");
   const [order, setOrder] = useState("asc");
   const [searchQuery, setSearchQuery] = useState("");

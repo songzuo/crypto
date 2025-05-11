@@ -8,7 +8,7 @@ const CryptocurrencyTable: React.FC = () => {
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState("rank");
   const [order, setOrder] = useState("asc");
-  const [limit] = useState(5);
+  const [limit] = useState(50);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: [`/api/cryptocurrencies?page=${page}&limit=${limit}&sort=${sort}&order=${order}`],

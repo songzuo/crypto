@@ -601,28 +601,30 @@ export class DatabaseStorage implements IStorage {
         .limit(limit);
     }
     
-    // For exact prefix matches (starts with)
-    const exactMatches = await db
+    const prefixPattern = `${prefix}%`;
+    const containsPattern = `%${prefix}%`;
+    
+    // Get all matches in two separate queries for better compatibility
+    // 1. First get exact prefix matches (starts with) - highest priority
+    const exactPrefixMatches = await db
       .select()
       .from(cryptocurrencies)
       .where(
         or(
-          like(cryptocurrencies.name, `${prefix}%`),
-          like(cryptocurrencies.symbol, `${prefix}%`)
+          like(cryptocurrencies.name, prefixPattern),
+          like(cryptocurrencies.symbol, prefixPattern)
         )
       )
       .orderBy(asc(cryptocurrencies.rank))
       .limit(limit);
     
-    // If we have enough results, return them
-    if (exactMatches.length >= limit) {
-      return exactMatches;
+    // If we have enough prefix matches, return them
+    if (exactPrefixMatches.length >= limit) {
+      return exactPrefixMatches;
     }
     
-    // If we need more results, get partial matches (contains)
-    // but exclude the ones we already have
-    const exactIds = exactMatches.map(crypto => crypto.id);
-    const partialMatchPattern = `%${prefix}%`;
+    // 2. Then get partial matches (contains) but exclude the ones we already have
+    const exactIds = exactPrefixMatches.map(crypto => crypto.id);
     
     const partialMatches = await db
       .select()
@@ -630,20 +632,21 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           or(
-            like(cryptocurrencies.name, partialMatchPattern),
-            like(cryptocurrencies.symbol, partialMatchPattern),
-            like(cryptocurrencies.slug, partialMatchPattern)
+            like(cryptocurrencies.name, containsPattern),
+            like(cryptocurrencies.symbol, containsPattern),
+            like(cryptocurrencies.slug, containsPattern)
           ),
+          // Exclude the exact prefix matches we already have
           exactIds.length > 0 
             ? sql`${cryptocurrencies.id} NOT IN (${exactIds.join(',')})` 
             : sql`1=1` // No-op condition when exactIds is empty
         )
       )
       .orderBy(asc(cryptocurrencies.rank))
-      .limit(limit - exactMatches.length);
+      .limit(limit - exactPrefixMatches.length);
     
-    // Combine results
-    return [...exactMatches, ...partialMatches];
+    // Combine results with prefix matches first, then partial matches
+    return [...exactPrefixMatches, ...partialMatches];
   }
 }
 
