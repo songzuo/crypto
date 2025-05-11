@@ -183,20 +183,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Run cleanup upon starting the server to ensure clean database
+  // API endpoint to purge all cryptocurrency data (reset the database)
+  app.post('/api/purge-all-crypto-data', async (_req, res) => {
+    try {
+      const result = await storage.purgeAllCryptoData();
+      res.json(result);
+    } catch (error) {
+      console.error('Failed to purge all cryptocurrency data:', error);
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+  
+  // PURGE AND RESET DATABASE on server start (as requested)
   try {
-    console.log("Starting initial database cleanup of fake data...");
+    console.log("PURGING ALL CRYPTOCURRENCY DATA ON STARTUP (as requested)...");
     
     setTimeout(async () => {
       try {
-        const result = await storage.cleanupFakeData();
-        console.log(`Initial database cleanup: ${result.removedCount} fake cryptocurrencies removed, ${result.remainingCount} cryptocurrencies remain.`);
-      } catch (cleanupError) {
-        console.error('Error during initial database cleanup:', cleanupError);
+        // First completely purge all data
+        const purgeResult = await storage.purgeAllCryptoData();
+        console.log(purgeResult.message);
+        
+        // Then run initial data population with strict validation (only verified cryptos)
+        console.log("Now starting fresh data population with verified crypto only...");
+      } catch (purgeError) {
+        console.error('Error during initial database purge:', purgeError);
       }
     }, 5000); // Slight delay to allow server to start properly
   } catch (err) {
-    console.error('Failed to schedule initial cleanup:', err);
+    console.error('Failed to schedule initial purge:', err);
   }
 
   // Setup the crawler scheduler
