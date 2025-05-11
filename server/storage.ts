@@ -92,6 +92,41 @@ export class MemStorage implements IStorage {
     };
   }
 
+  // Implementation of purgeAllCryptoData for MemStorage
+  async purgeAllCryptoData(): Promise<{ success: boolean, message: string }> {
+    try {
+      console.log("Purging all cryptocurrency data from memory storage...");
+      
+      // Count before purge
+      const countBefore = this.cryptocurrencies.size;
+      
+      // Clear all cryptocurrency-related data
+      this.cryptocurrencies.clear();
+      this.blockchainExplorers.clear();
+      this.metrics.clear();
+      this.aiInsights.clear();
+      
+      // Reset IDs
+      this.cryptoCurrentId = 1;
+      this.explorerCurrentId = 1;
+      this.metricCurrentId = 1;
+      this.insightCurrentId = 1;
+      
+      console.log(`All cryptocurrency data has been purged. Removed ${countBefore} cryptocurrencies and related data.`);
+      
+      return {
+        success: true,
+        message: `All cryptocurrency data has been purged from the database.`
+      };
+    } catch (error) {
+      console.error("Failed to purge cryptocurrency data:", error);
+      return {
+        success: false,
+        message: `Failed to purge cryptocurrency data: ${(error as Error).message}`
+      };
+    }
+  }
+
   // User methods (inherited from template)
   async getUser(id: number): Promise<User | undefined> {
     return this.users.get(id);
