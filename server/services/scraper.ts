@@ -6,23 +6,33 @@ import { InsertBlockchainExplorer, InsertMetric } from "@shared/schema";
 // Helper function to make HTTPS requests
 function makeHttpsRequest(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const req = https.get(url, (res) => {
-      let data = '';
-      res.on('data', (chunk) => {
-        data += chunk;
+    try {
+      // Sanitize URL by removing spaces - many URLs are failing due to spaces
+      const safeUrl = url.replace(/\s+/g, '');
+      
+      // Validate URL format (throws if invalid)
+      new URL(safeUrl);
+      
+      const req = https.get(safeUrl, (res) => {
+        let data = '';
+        res.on('data', (chunk) => {
+          data += chunk;
+        });
+        res.on('end', () => {
+          resolve(data);
+        });
+      }).on('error', (err) => {
+        reject(err);
       });
-      res.on('end', () => {
-        resolve(data);
+      
+      // Set a timeout to avoid hanging requests
+      req.setTimeout(10000, () => {
+        req.destroy();
+        reject(new Error('Request timed out'));
       });
-    }).on('error', (err) => {
-      reject(err);
-    });
-    
-    // Set a timeout to avoid hanging requests
-    req.setTimeout(10000, () => {
-      req.destroy();
-      reject(new Error('Request timed out'));
-    });
+    } catch (urlError) {
+      reject(urlError);
+    }
   });
 }
 
@@ -114,13 +124,16 @@ export async function findBlockchainExplorer(cryptocurrencyName: string, cryptoc
         ];
       }
       
+      // For URL safety, strip spaces and non-alphanumeric characters
+      const safeNameForUrl = cryptoNameLower.replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+      
       explorerUrls = [
         ...explorerUrls,
-        { url: `https://${cryptoNameLower}scan.io`, name: `${cryptocurrencyName}scan` },
-        { url: `https://${cryptoNameLower}explorer.io`, name: `${cryptocurrencyName} Explorer` },
-        { url: `https://${cryptoNameLower}chain.info`, name: `${cryptocurrencyName}chain` },
-        { url: `https://explorer.${cryptoNameLower}.org`, name: `${cryptocurrencyName} Explorer` },
-        { url: `https://scan.${cryptoNameLower}.org`, name: `${cryptocurrencyName} Scan` }
+        { url: `https://${safeNameForUrl}scan.io`, name: `${cryptocurrencyName}scan` },
+        { url: `https://${safeNameForUrl}explorer.io`, name: `${cryptocurrencyName} Explorer` },
+        { url: `https://${safeNameForUrl}chain.info`, name: `${cryptocurrencyName}chain` },
+        { url: `https://explorer.${safeNameForUrl}.org`, name: `${cryptocurrencyName} Explorer` },
+        { url: `https://scan.${safeNameForUrl}.org`, name: `${cryptocurrencyName} Scan` }
       ] as ExplorerUrl[];
       
       // Try to access each generated URL to see if it exists
@@ -158,6 +171,11 @@ export async function findBlockchainExplorer(cryptocurrencyName: string, cryptoc
       // Get cryptocurrency data for better search queries
       const cryptoData = await storage.getCryptocurrency(cryptocurrencyId);
       const symbolText = cryptoData ? cryptoData.symbol.toLowerCase() : "";
+      
+      // Remove spaces and special characters from names for URL safety
+      const safeSymbol = symbolText.replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+      const safeCryptoName = cryptoNameLower.replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+      
       const searchQueries = [
         `${cryptocurrencyName} blockchain explorer official`,
         `${cryptocurrencyName} scan blockchain explorer`,
@@ -168,16 +186,16 @@ export async function findBlockchainExplorer(cryptocurrencyName: string, cryptoc
       // For now, we'll simulate a search result with the most common pattern
       console.log(`Web search simulated for ${cryptocurrencyName}`);
       
-      if (cryptoNameLower !== 'bitcoin' && cryptoNameLower !== 'ethereum') {
+      if (safeCryptoName !== 'bitcoin' && safeCryptoName !== 'ethereum') {
         let explorerUrl = null;
         let explorerName = null;
         
-        if (cryptoNameLower.endsWith('coin')) {
-          const baseName = cryptoNameLower.replace('coin', '');
+        if (safeCryptoName.endsWith('coin')) {
+          const baseName = safeCryptoName.replace('coin', '');
           explorerUrl = `https://${baseName}scan.com/`;
           explorerName = `${cryptocurrencyName} Scan`;
         } else {
-          explorerUrl = `https://${cryptoNameLower.replace(/\s+/g, '')}scan.com/`;
+          explorerUrl = `https://${safeCryptoName}scan.com/`;
           explorerName = `${cryptocurrencyName} Scan`;
         }
         
