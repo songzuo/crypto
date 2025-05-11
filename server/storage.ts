@@ -46,6 +46,9 @@ export interface IStorage {
   
   // Autocomplete for fast prefix-based search
   autocompleteCryptocurrencies(prefix: string, limit?: number): Promise<Cryptocurrency[]>;
+  
+  // Cleanup fake data
+  cleanupFakeData(): Promise<{ removedCount: number, remainingCount: number }>;
 }
 
 export class MemStorage implements IStorage {
@@ -328,6 +331,75 @@ export class MemStorage implements IStorage {
       .sort((a, b) => (a.rank || Infinity) - (b.rank || Infinity));
     
     return sortedResults.slice(0, limit);
+  }
+  
+  async cleanupFakeData(): Promise<{ removedCount: number, remainingCount: number }> {
+    console.log("Starting fake data cleanup in MemStorage...");
+    
+    // Get count before cleanup
+    const beforeCount = this.cryptocurrencies.size;
+    
+    // Find suspicious entries
+    const idsToRemove: number[] = [];
+    
+    // Use Array.from instead of for...of with iterator
+    Array.from(this.cryptocurrencies.values()).forEach(crypto => {
+      // Check for suspicious fake data patterns
+      const isSuspicious = 
+        // No market data
+        (!crypto.marketCap && !crypto.price) || 
+        // Suspicious naming patterns
+        (crypto.name.match(/Crypto\s*\d+/) !== null) || 
+        (crypto.name.match(/Token\s*\d+/) !== null) || 
+        (crypto.name.match(/Coin\s*\d+/) !== null) ||
+        // Rank beyond our target range
+        (crypto.rank && crypto.rank > 500);
+      
+      if (isSuspicious) {
+        idsToRemove.push(crypto.id);
+      }
+    });
+    
+    // Remove suspicious entries (Array.forEach instead of for...of)
+    idsToRemove.forEach(id => {
+      this.cryptocurrencies.delete(id);
+    });
+    
+    // Keep only top 500 if we still have more than 500
+    if (this.cryptocurrencies.size > 500) {
+      // Sort cryptocurrencies by rank and last updated
+      const sortedCryptos = Array.from(this.cryptocurrencies.values())
+        .sort((a, b) => {
+          // Sort by rank first (if both have ranks)
+          if (a.rank !== null && b.rank !== null) {
+            return (a.rank || Infinity) - (b.rank || Infinity);
+          }
+          // Sort by lastUpdated if ranks are missing
+          return (b.lastUpdated?.getTime() || 0) - (a.lastUpdated?.getTime() || 0);
+        });
+      
+      // Keep only the top 500
+      const cryptosToKeep = sortedCryptos.slice(0, 500);
+      const idsToKeep = new Set(cryptosToKeep.map(c => c.id));
+      
+      // Delete all except the ones to keep - using Array.from to avoid iterator issues
+      Array.from(this.cryptocurrencies.keys()).forEach(id => {
+        if (!idsToKeep.has(id)) {
+          this.cryptocurrencies.delete(id);
+        }
+      });
+    }
+    
+    // Get count after cleanup
+    const afterCount = this.cryptocurrencies.size;
+    const removedCount = beforeCount - afterCount;
+    
+    console.log(`Cleanup complete. Removed ${removedCount} fake/irrelevant cryptocurrencies. ${afterCount} real entries remain.`);
+    
+    return {
+      removedCount,
+      remainingCount: afterCount
+    };
   }
 }
 
@@ -647,6 +719,83 @@ export class DatabaseStorage implements IStorage {
     
     // Combine results with prefix matches first, then partial matches
     return [...exactPrefixMatches, ...partialMatches];
+  }
+  
+  async cleanupFakeData(): Promise<{ removedCount: number, remainingCount: number }> {
+    console.log("Starting fake data cleanup process...");
+    
+    try {
+      // 1. First count all current cryptocurrencies
+      const countResult = await db.select({ count: sql`count(*)` }).from(cryptocurrencies);
+      const beforeCount = Number(countResult[0].count);
+      console.log(`Current database has ${beforeCount} cryptocurrency entries.`);
+      
+      // 2. Find suspicious entries that are likely fake
+      // - Entries without price, marketCap, or volume data
+      // - Entries with suspicious naming patterns (like sequential numbers)
+      // - Entries that haven't been updated recently from an API
+      const threeMonthsAgo = new Date();
+      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+      
+      // Delete entries matching any of these criteria:
+      const deleteResult = await db.delete(cryptocurrencies)
+        .where(
+          or(
+            // Names with suspicious patterns indicating fake data
+            sql`${cryptocurrencies.name} SIMILAR TO '%(Crypto|Token|Coin)\\s*[0-9]+%'`,
+            
+            // Entries with no market data that are likely fake
+            sql`${cryptocurrencies.marketCap} IS NULL AND ${cryptocurrencies.price} IS NULL`,
+            
+            // Entries that haven't been updated in over 3 months (stale data)
+            sql`${cryptocurrencies.lastUpdated} < ${threeMonthsAgo.toISOString()}`,
+            
+            // Entries with suspicious rank values over 1000 (we only track top 500)
+            sql`${cryptocurrencies.rank} > 500`
+          )
+        );
+      
+      // 3. Keep only the top 500 cryptocurrencies if we have more than 500
+      // Get count after initial cleanup
+      const midCountResult = await db.select({ count: sql`count(*)` }).from(cryptocurrencies);
+      const midCount = Number(midCountResult[0].count);
+      
+      if (midCount > 500) {
+        console.log(`Still have ${midCount} cryptocurrencies after initial cleanup. Limiting to top 500...`);
+        
+        // Find IDs of cryptocurrencies to keep (top 500 by rank or recently updated)
+        const topCryptos = await db
+          .select()
+          .from(cryptocurrencies)
+          .orderBy(asc(cryptocurrencies.rank), desc(cryptocurrencies.lastUpdated))
+          .limit(500);
+        
+        const idsToKeep = topCryptos.map(c => c.id);
+        
+        // Delete all except the top 500
+        if (idsToKeep.length > 0) {
+          await db.delete(cryptocurrencies)
+            .where(
+              sql`${cryptocurrencies.id} NOT IN (${idsToKeep.join(',')})`
+            );
+        }
+      }
+      
+      // 4. Get final count to determine how many were removed
+      const afterCountResult = await db.select({ count: sql`count(*)` }).from(cryptocurrencies);
+      const afterCount = Number(afterCountResult[0].count);
+      const removedCount = beforeCount - afterCount;
+      
+      console.log(`Cleanup complete. Removed ${removedCount} fake/irrelevant cryptocurrencies. ${afterCount} real entries remain.`);
+      
+      return {
+        removedCount,
+        remainingCount: afterCount
+      };
+    } catch (error) {
+      console.error("Error cleaning up fake data:", error);
+      throw error;
+    }
   }
 }
 

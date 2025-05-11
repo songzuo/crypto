@@ -6,6 +6,8 @@ import { setupScheduler } from "./services/scheduler";
 import { searchTopCryptocurrencies } from "./services/cryptoSearch";
 import { findBlockchainExplorer, scrapeBlockchainData } from "./services/scraper";
 import { getAiInsightsForCrypto } from "./services/aiInsights";
+import { cryptocurrencies } from "@shared/schema";
+import { eq, sql } from "drizzle-orm";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Get all cryptocurrencies
@@ -155,6 +157,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       res.status(500).json({ error: (error as Error).message });
     }
+  });
+
+  // Cleanup fake data - only keep top 500 real cryptocurrencies with valid data
+  app.post("/api/admin/cleanup-fake-data", async (req, res) => {
+    try {
+      // 1. Get total count before cleanup
+      const beforeCount = (await storage.getCryptocurrencies(1, 1, 'id', 'asc')).total;
+      
+      // 2. Execute the cleanup - implemented in storage.ts
+      const result = await storage.cleanupFakeData();
+      
+      // 3. Get new count after cleanup
+      const afterCount = (await storage.getCryptocurrencies(1, 1, 'id', 'asc')).total;
+      
+      res.json({ 
+        success: true, 
+        message: `Successfully cleaned up fake data.`,
+        before: beforeCount,
+        after: afterCount,
+        removed: beforeCount - afterCount
+      });
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // Run cleanup upon starting the server to ensure clean database
+  storage.cleanupFakeData().then(result => {
+    console.log(`Initial database cleanup: ${result.removedCount} fake cryptocurrencies removed`);
+  }).catch(err => {
+    console.error('Failed to clean up database on startup:', err);
   });
 
   // Setup the crawler scheduler
