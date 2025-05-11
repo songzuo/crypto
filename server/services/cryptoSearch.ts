@@ -50,7 +50,15 @@ async function isDuplicate(crypto: { name: string, symbol: string }): Promise<bo
 // Function to search for the top cryptocurrencies by market cap
 export async function searchTopCryptocurrencies(count: number = 500): Promise<boolean> {
   try {
-    console.log(`Starting to search for top ${count} cryptocurrencies...`);
+    // Get current count to avoid unnecessary API calls
+    const currentCryptos = await storage.getCryptocurrencies(1, 1, "marketCap", "desc");
+    const totalCount = currentCryptos.total || 0;
+    
+    // Calculate how many more we need to fetch (aim for count, but fetch at least 100 more)
+    const fetchBatchSize = Math.max(100, count - totalCount);
+    console.log(`Current crypto count: ${totalCount}, fetching batch of ${fetchBatchSize}`);
+    
+    console.log(`Starting to search for top ${fetchBatchSize} cryptocurrencies...`);
     
     // Update crawler status
     await storage.updateCrawlerStatus({
@@ -66,7 +74,7 @@ export async function searchTopCryptocurrencies(count: number = 500): Promise<bo
     try {
       // First try: CoinGecko API
       console.log("Attempting to use CoinGecko API...");
-      const apiUrl = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=${count}&page=1`;
+      const apiUrl = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=${Math.min(fetchBatchSize, 250)}&page=1`;
       const response = await makeHttpsRequest(apiUrl);
       const apiData = JSON.parse(response);
       
