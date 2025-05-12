@@ -3,6 +3,14 @@ import { InsertCryptocurrency } from "@shared/schema";
 import * as https from 'https';
 import * as cheerio from 'cheerio';
 
+// 自定义错误类型，便于处理类型错误
+class ApiError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 // Helper function to make HTTPS requests
 function makeHttpsRequest(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -108,18 +116,20 @@ export async function updateTrumpCoinData() {
                     // 这里直接添加区块链浏览器而不是调用找浏览器的函数
                     // 因为我们这里是确定知道浏览器URL的
                     await import('./scraper').then(module => 
-                      module.findBlockchainExplorer("OFFICIAL TRUMP", 16, explorer)
+                      module.findBlockchainExplorer("OFFICIAL TRUMP", 16)
                     );
                   }
                 }
               }
             }
-          } catch (detailError) {
+          } catch (error) {
+            const detailError = error as Error;
             console.log(`获取Trump币详情失败: ${detailError.message}`);
           }
         }
       }
-    } catch (apiError) {
+    } catch (error) {
+      const apiError = error as Error;
       console.log(`CoinGecko Trump币搜索失败: ${apiError.message}`);
     }
     
@@ -184,12 +194,14 @@ export async function updateTrumpCoinData() {
                   updated = true;
                 }
               }
-            } catch (priceError) {
+            } catch (error) {
+              const priceError = error as Error;
               console.log(`获取Trump币价格信息失败: ${priceError.message}`);
             }
           }
         }
-      } catch (cryptoCompareError) {
+      } catch (error) {
+        const cryptoCompareError = error as Error;
         console.log(`CryptoCompare Trump币查询失败: ${cryptoCompareError.message}`);
       }
     }
@@ -230,7 +242,8 @@ export async function updateTrumpCoinData() {
           );
         }
       }
-    } catch (explorerError) {
+    } catch (error) {
+      const explorerError = error as Error;
       console.log(`处理Trump币区块链浏览器时出错: ${explorerError.message}`);
     }
     
