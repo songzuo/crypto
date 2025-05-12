@@ -673,13 +673,13 @@ async function updateDatabase(cryptoList: Partial<InsertCryptocurrency>[]): Prom
         } else {
           skipped++;
         }
-      } else if (crypto.name && crypto.symbol) {
-        // 创建新加密货币
+      } else if (crypto.name && crypto.symbol && crypto.marketCap) {
+        // 只创建有市值的新加密货币
         const newCrypto: InsertCryptocurrency = {
           name: crypto.name,
           symbol: crypto.symbol,
           rank: crypto.rank || null,
-          marketCap: crypto.marketCap || null,
+          marketCap: crypto.marketCap, // 确保有市值
           price: crypto.price || null,
           priceChange24h: crypto.priceChange24h || null,
           volume24h: crypto.volume24h || null,
@@ -691,7 +691,7 @@ async function updateDatabase(cryptoList: Partial<InsertCryptocurrency>[]): Prom
         const createdCrypto = await storage.createCryptocurrency(newCrypto);
         added++;
         
-        console.log(`添加了新加密货币: ${createdCrypto.name} (${createdCrypto.symbol})`);
+        console.log(`添加了新加密货币: ${createdCrypto.name} (${createdCrypto.symbol}), 市值: ${crypto.marketCap}`);
         
         // 如果有区块链浏览器URL，创建区块链浏览器记录
         if (crypto.explorerUrl) {
