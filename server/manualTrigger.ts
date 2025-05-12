@@ -1,44 +1,74 @@
-// 手动触发XRP的指标恢复
+/**
+ * 手动触发爬虫脚本
+ * 用于临时启动和测试各种爬虫功能
+ * 不需要外部配置的依赖进入点
+ */
 
-import { advancedMetricsRecovery } from './services/advancedMetricsRecovery';
-import { storage } from './storage';
+import { storage } from "./storage";
+import { scrapeTopCryptocurrencies } from "./services/cryptoSearch";
+import { searchRankedCryptocurrencies } from "./services/cryptoSearch";
+import { setupScheduler, runInitialDataCollection } from "./services/scheduler";
+import { fixMarketCapAndRankData, fixMetricsData, runDataFixer } from "./services/dataFixer";
+import { removeCoinsWithoutMarketCap } from "./services/marketCapFixer";
 
-// 开始执行
 async function main() {
+  console.log(`
+================================
+ 手动加密货币抓取触发器 v1.0
+================================
+
+开始执行手动触发任务...
+`);
+
   try {
-    console.log("手动触发指标恢复，优先处理XRP...");
+    // 1. 检查当前数据库中的加密货币数量
+    const currentCryptos = await storage.getCryptocurrencies(1, 1, 'id', 'asc');
+    const totalCount = currentCryptos.total || 0;
     
-    // 先获取XRP的数据库信息
-    const cryptos = await storage.getCryptocurrencies(1, 10, "rank", "asc");
-    const xrp = cryptos.data.find(c => c.name === 'XRP' || c.symbol === 'XRP');
+    console.log(`当前数据库中有 ${totalCount} 个加密货币`);
     
-    if (xrp) {
-      console.log(`找到XRP，ID: ${xrp.id}, 名称: ${xrp.name}, 符号: ${xrp.symbol}, 排名: ${xrp.rank}`);
-      
-      // 查看当前指标状态
-      const beforeMetrics = await storage.getMetrics(xrp.id);
-      console.log("XRP当前指标状态:", beforeMetrics);
-      
-      // 执行高级指标恢复
-      console.log("开始XRP高级指标恢复...");
-      await advancedMetricsRecovery(20);
-      
-      // 查看新的指标状态
-      const afterMetrics = await storage.getMetrics(xrp.id);
-      console.log("XRP新指标状态:", afterMetrics);
-      
-      console.log("XRP指标恢复完成！");
-    } else {
-      console.log("在前10名中未找到XRP，将处理前20个币种");
-      await advancedMetricsRecovery(20);
-    }
+    // 2. 执行所需的任务
+    await executeTask();
     
-    process.exit(0);
+    // 3. 再次检查数据库中的加密货币数量
+    const afterCryptos = await storage.getCryptocurrencies(1, 1, 'id', 'asc');
+    const afterCount = afterCryptos.total || 0;
+    
+    console.log(`
+任务完成。
+当前数据库中有 ${afterCount} 个加密货币（之前：${totalCount}）。
+净变化：${afterCount - totalCount} 个加密货币。
+`);
+    
   } catch (error) {
-    console.error("执行出错:", error);
-    process.exit(1);
+    console.error("执行过程中出错:", error);
   }
+  
+  // 退出程序
+  process.exit(0);
 }
 
-// 执行主函数
-main();
+// 你可以修改这个函数来执行不同的任务
+async function executeTask() {
+  console.log("正在执行 突破性爬取 任务...");
+  
+  // 选择执行任务的选项：
+  
+  // 选项1：运行特大型爬取，尝试突破467限制
+  // await searchRankedCryptocurrencies(1, 600); 
+  
+  // 选项2：直接从头搜索前500币
+  await scrapeTopCryptocurrencies(500);
+  
+  // 选项3：初始数据收集（与应用启动时相同）
+  // await runInitialDataCollection();
+  
+  // 选项4：运行数据修复
+  // await runDataFixer();
+  
+  // 选项5：删除没有市值的币种
+  // await removeCoinsWithoutMarketCap();
+}
+
+// 立即执行主函数
+main().catch(console.error);

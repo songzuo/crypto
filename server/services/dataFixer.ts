@@ -591,16 +591,29 @@ async function processMetricsBatch(items: any[], threadIndex: number): Promise<n
 }
 
 // 综合数据修复入口函数
-export async function runDataFixer(limit: number = 30): Promise<{ marketCapFixed: number, metricsFixed: number }> {
+export async function runDataFixer(limit: number = 30): Promise<{ 
+  marketCapFixed: number, 
+  metricsFixed: number, 
+  noMarketCapRemoved: number 
+}> {
   console.log('启动综合数据修复程序...');
   
-  // 首先修复市值和排名数据
+  // 导入市值修复模块
+  const marketCapFixer = await import('./marketCapFixer');
+  
+  // 首先删除没有市值的币种
+  const { removedCount } = await marketCapFixer.removeCoinsWithoutMarketCap();
+  
+  // 接着修复异常的市值数据
+  await marketCapFixer.fixUnreasonableMarketCaps();
+  
+  // 然后修复市值和排名数据
   const marketCapFixed = await fixMarketCapAndRankData(limit);
   
-  // 然后修复链上指标数据
+  // 最后修复链上指标数据
   const metricsFixed = await fixMetricsData(limit);
   
-  return { marketCapFixed, metricsFixed };
+  return { marketCapFixed, metricsFixed, noMarketCapRemoved: removedCount };
 }
 
 // 在ESM环境中，不使用require.main === module检查

@@ -120,6 +120,9 @@ export const crawlerStatus = pgTable("crawler_status", {
   blockchainSyncActive: boolean("blockchain_sync_active").default(false),
   lastUpdate: timestamp("last_update").defaultNow(),
   newEntriesCount: integer("new_entries_count").default(0),
+  lastBreakthroughAttempt: timestamp("last_breakthrough_attempt"),
+  breakthroughCount: integer("breakthrough_count").default(0),
+  maxCryptoCount: integer("max_crypto_count").default(0),
 });
 
 export const insertCrawlerStatusSchema = createInsertSchema(crawlerStatus).omit({

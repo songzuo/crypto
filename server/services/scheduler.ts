@@ -262,6 +262,20 @@ export async function setupScheduler() {
     console.log('运行计划任务: 重点币种市场数据更新');
     
     try {
+      // 检查当前加密货币数量
+      const currentCryptos = await storage.getCryptocurrencies(1, 1, 'id', 'asc');
+      const totalCount = currentCryptos.total || 0;
+      
+      // 获取爬虫状态
+      const crawlerStatus = await storage.getCrawlerStatus();
+      
+      // 如果数量停滞在467附近，启动突破性爬取
+      if (totalCount >= 400 && totalCount < 500) {
+        console.log(`检测到币种数量${totalCount}接近467，启动突破性大规模爬取...`);
+        await forceBreakthroughScrape();
+      }
+      
+      // 继续常规重点币种更新
       // 使用API接口获取排名前30的币种
       console.log('更新排名前30的加密货币数据...');
       await searchRankedCryptocurrencies(1, 30);
@@ -277,6 +291,104 @@ export async function setupScheduler() {
       console.error('重点币种数据更新任务出错:', error);
     }
   });
+  
+// 强制突破467币种限制的函数
+async function forceBreakthroughScrape(): Promise<void> {
+  console.log('启动突破性大规模爬取，确保突破467币种限制...');
+  
+  try {
+    // 导入数据修复工具
+    const dataFixer = await import('./dataFixer');
+    const marketCapFixer = await import('./marketCapFixer');
+    
+    // 首先删除没有市值的币种，确保数据质量
+    console.log('第1步：清理没有市值的币种...');
+    await marketCapFixer.removeCoinsWithoutMarketCap();
+    
+    // 统计当前币种数量
+    const beforeCryptos = await storage.getCryptocurrencies(1, 1, 'id', 'asc');
+    const beforeCount = beforeCryptos.total || 0;
+    console.log(`清理后当前币种数量: ${beforeCount}`);
+    
+    // 尝试多种来源获取新币种
+    console.log('第2步：从多个来源获取新币种...');
+    
+    // 使用市场数据爬虫同时爬取多个页面
+    const marketScraper = await import('./marketDataScraper');
+    
+    // 创建多个平行爬取任务，使用多个页面和来源
+    const scrapeTasks: Promise<any>[] = [];
+    
+    // 随机选择20个页面范围进行爬取，确保全面覆盖
+    const pages = new Set<number>();
+    while (pages.size < 20) {
+      const randomPage = Math.floor(Math.random() * 20) + 1;
+      pages.add(randomPage);
+    }
+    
+    // 添加爬取任务
+    for (const page of Array.from(pages)) {
+      scrapeTasks.push(
+        marketScraper.scrapePageData(page).catch(error => {
+          console.error(`爬取第${page}页时出错:`, error);
+          return { added: 0, updated: 0 };
+        })
+      );
+    }
+    
+    // 额外添加API搜索任务
+    for (let i = 0; i < 10; i++) {
+      const start = i * 100 + 1;
+      const end = (i + 1) * 100;
+      scrapeTasks.push(
+        searchRankedCryptocurrencies(start, end).catch(error => {
+          console.error(`搜索范围${start}-${end}时出错:`, error);
+          return 0;
+        })
+      );
+    }
+    
+    // 额外尝试搜索前1000名币种
+    scrapeTasks.push(
+      searchTopCryptocurrencies(1000).catch(error => {
+        console.error('搜索前1000名币种时出错:', error);
+        return false;
+      })
+    );
+    
+    // 并行执行所有任务
+    console.log(`开始执行${scrapeTasks.length}个并行爬取任务...`);
+    await Promise.allSettled(scrapeTasks);
+    
+    // 完成后再次统计币种数量
+    const afterCryptos = await storage.getCryptocurrencies(1, 1, 'id', 'asc');
+    const afterCount = afterCryptos.total || 0;
+    
+    console.log(`突破性爬取完成！之前: ${beforeCount}个币种, 之后: ${afterCount}个币种, 新增: ${afterCount - beforeCount}个币种`);
+    
+    // 如果数量仍然没有增加，记录警告
+    if (afterCount <= beforeCount) {
+      console.warn('警告：突破性爬取后币种数量没有增加，可能需要检查API访问限制或网络问题');
+    }
+    
+    // 获取现有的爬虫状态
+    const currentStatus = await storage.getCrawlerStatus();
+    const currentCount = afterCount > (currentStatus?.maxCryptoCount || 0) ? afterCount : (currentStatus?.maxCryptoCount || 0);
+    const breakthroughCount = (currentStatus?.breakthroughCount || 0) + 1;
+    
+    // 更新爬虫状态
+    await storage.updateCrawlerStatus({
+      webCrawlerActive: true,
+      lastUpdate: new Date(),
+      lastBreakthroughAttempt: new Date(),
+      breakthroughCount: breakthroughCount,
+      maxCryptoCount: currentCount
+    });
+    
+  } catch (error) {
+    console.error('突破性爬取过程中发生错误:', error);
+  }
+}
 
   // Data Fixing Task - Runs every hour
   cron.schedule('45 * * * *', async () => {
@@ -285,12 +397,35 @@ export async function setupScheduler() {
     try {
       // Run the data fixer to clean up and fix any issues
       const fixResults = await runDataFixer();
-      console.log(`Data fixing results: ${fixResults.marketCapFixed} market cap fixes, ${fixResults.metricsFixed} metrics fixes`);
+      console.log(`Data fixing results: ${fixResults.marketCapFixed} market cap fixes, ${fixResults.metricsFixed} metrics fixes, ${fixResults.noMarketCapRemoved} coins without market cap removed`);
       
       // Special case for Trump Coin (as requested)
       await updateTrumpCoinData();
     } catch (error) {
       console.error("Data fixer task error:", error);
+    }
+  });
+  
+  // 突破467限制的专用任务 - 每天执行三次确保能突破限制
+  cron.schedule('0 0,8,16 * * *', async () => {
+    console.log('运行计划任务: 强制突破币种数量限制检查');
+    
+    try {
+      // 获取当前加密货币数量
+      const currentCryptos = await storage.getCryptocurrencies(1, 1, 'id', 'asc');
+      const totalCount = currentCryptos.total || 0;
+      
+      console.log(`当前数据库中有 ${totalCount} 个加密货币`);
+      
+      // 如果没有达到目标数量，执行突破性爬取
+      if (totalCount < 500) {
+        console.log(`当前币种数量${totalCount}未达目标500个，启动突破性大规模爬取...`);
+        await forceBreakthroughScrape();
+      } else {
+        console.log(`当前币种数量${totalCount}已超过目标500个，无需进行突破性爬取`);
+      }
+    } catch (error) {
+      console.error("突破限制任务出错:", error);
     }
   });
   
