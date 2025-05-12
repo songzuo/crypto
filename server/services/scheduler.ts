@@ -406,9 +406,9 @@ async function forceBreakthroughScrape(): Promise<void> {
     }
   });
   
-  // 突破467限制的专用任务 - 更频繁执行，每4小时执行一次，确保能突破限制
-  cron.schedule('0 */4 * * *', async () => {
-    console.log('运行计划任务: 强制突破币种数量限制检查');
+  // 突破467限制的专用任务 - 更频繁执行，每分钟执行一次，确保能突破限制
+  cron.schedule('* * * * *', async () => {
+    console.log('运行计划任务: 强制突破币种数量限制检查 (每分钟)');
     
     try {
       // 获取当前加密货币数量
