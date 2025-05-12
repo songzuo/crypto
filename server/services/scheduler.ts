@@ -355,6 +355,23 @@ export async function setupScheduler() {
     console.log('运行计划任务: 专用链上指标数据恢复...');
     
     try {
+      // 先恢复XRP的链上指标数据 - 使用专用的XRP爬虫
+      try {
+        await import('./fixXRP').then(module => {
+          return module.fixXRPMetrics();
+        }).then(success => {
+          if (success) {
+            console.log('XRP链上指标修复成功');
+          } else {
+            console.log('XRP链上指标修复未完成或失败');
+          }
+        }).catch(error => {
+          console.error('XRP链上指标修复过程中出错:', error);
+        });
+      } catch (xrpError) {
+        console.error('导入XRP修复模块时出错:', xrpError);
+      }
+      
       // 按排名顺序运行专用的链上指标恢复程序
       const metricsRecovered = await recoverMetricsForAllCoins(20);
       console.log(`指标恢复结果: 成功恢复 ${metricsRecovered} 个币种的链上指标数据`);
