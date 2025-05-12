@@ -137,61 +137,112 @@ function getRandomHeaders(source: string): Record<string, string> {
 
 /**
  * 安全地获取网页内容
+ * 增强版本带有更多错误处理和恢复能力
  */
 async function makeHttpsRequest(url: string, headers: Record<string, string>, isJson = false): Promise<string> {
   return new Promise((resolve, reject) => {
     let retryCount = 0;
+    const userAgentDesc = headers['User-Agent']?.substring(0, 15) || 'Unknown';
     
     const makeRequest = () => {
-      const req = https.get(url, { 
-        headers,
-        timeout: REQUEST_TIMEOUT
-      }, (res) => {
-        // 检查响应状态码
-        if (res.statusCode !== 200) {
-          if (retryCount < RETRY_ATTEMPTS) {
-            console.log(`[${headers['User-Agent'].substring(0, 15)}...] 请求失败 (${retryCount + 1}/${RETRY_ATTEMPTS}): ${url} - 状态码: ${res.statusCode}`);
-            retryCount++;
-            setTimeout(RETRY_DELAY).then(makeRequest);
-            return;
-          }
-          reject(new Error(`HTTP Error: ${res.statusCode}`));
+      try {
+        // 预处理URL以增加健壮性
+        if (!url || typeof url !== 'string') {
+          console.error(`无效URL: ${url}, 类型: ${typeof url}`);
+          resolve(''); // 返回空字符串而不是失败
           return;
         }
         
-        // 处理响应数据
-        let data = '';
-        
-        // 处理数据不考虑压缩编码，简化处理避免崩溃
-        res.on('data', (chunk) => {
-          data += chunk;
+        const req = https.get(url, { 
+          headers,
+          timeout: REQUEST_TIMEOUT
+        }, (res) => {
+          // 检查响应状态码
+          if (res.statusCode !== 200) {
+            if (retryCount < RETRY_ATTEMPTS) {
+              console.log(`[${userAgentDesc}...] 请求失败 (${retryCount + 1}/${RETRY_ATTEMPTS}): ${url} - 状态码: ${res.statusCode}`);
+              retryCount++;
+              setTimeout(RETRY_DELAY).then(makeRequest);
+              return;
+            }
+            // 返回空结果而不是报错，增强容错性
+            console.error(`请求失败最终结果: ${url} - 状态码: ${res.statusCode}`);
+            resolve('');
+            return;
+          }
+          
+          // 处理响应数据
+          let data = '';
+          let hasErrorDuringDataReceive = false;
+          
+          // 处理数据不考虑压缩编码，简化处理避免崩溃
+          res.on('data', (chunk) => {
+            try {
+              if (chunk) {
+                data += chunk.toString();
+              }
+            } catch (e) {
+              hasErrorDuringDataReceive = true;
+              console.error(`处理响应数据块时出错: ${e.message}`);
+            }
+          });
+          
+          res.on('end', () => {
+            if (hasErrorDuringDataReceive) {
+              console.warn(`[${userAgentDesc}...] 响应数据接收过程中出现错误，但会尝试处理已收到的数据`);
+            }
+            
+            // 检查返回的数据是否符合预期
+            if (isJson && data.length > 0) {
+              try {
+                // 尝试解析JSON (只是检查，不实际使用结果)
+                JSON.parse(data);
+              } catch (e) {
+                console.warn(`[${userAgentDesc}...] 返回的数据不是有效的JSON: ${e.message}, 但依然返回原始数据`);
+              }
+            }
+            
+            resolve(data);
+          });
+          
+          res.on('error', (err) => {
+            console.error(`[${userAgentDesc}...] 响应处理错误: ${err.message}`);
+            if (data.length > 0) {
+              console.log(`[${userAgentDesc}...] 尽管发生错误，仍使用部分数据`);
+              resolve(data);
+            } else {
+              resolve(''); // 返回空字符串而不是失败
+            }
+          });
         });
         
-        res.on('end', () => {
-          resolve(data);
+        req.on('timeout', () => {
+          req.destroy();
+          if (retryCount < RETRY_ATTEMPTS) {
+            console.log(`[${userAgentDesc}...] 请求超时 (${retryCount + 1}/${RETRY_ATTEMPTS}): ${url}`);
+            retryCount++;
+            setTimeout(RETRY_DELAY).then(makeRequest);
+          } else {
+            console.error(`请求最终超时: ${url}`);
+            resolve(''); // 返回空字符串而不是失败
+          }
         });
-      });
-      
-      req.on('timeout', () => {
-        req.destroy();
-        if (retryCount < RETRY_ATTEMPTS) {
-          console.log(`[${headers['User-Agent'].substring(0, 15)}...] 请求超时 (${retryCount + 1}/${RETRY_ATTEMPTS}): ${url}`);
-          retryCount++;
-          setTimeout(RETRY_DELAY).then(makeRequest);
-        } else {
-          reject(new Error('Request timeout'));
-        }
-      });
-      
-      req.on('error', (err) => {
-        if (retryCount < RETRY_ATTEMPTS) {
-          console.log(`[${headers['User-Agent'].substring(0, 15)}...] 请求错误 (${retryCount + 1}/${RETRY_ATTEMPTS}): ${url} - ${err.message}`);
-          retryCount++;
-          setTimeout(RETRY_DELAY).then(makeRequest);
-        } else {
-          reject(err);
-        }
-      });
+        
+        req.on('error', (err) => {
+          if (retryCount < RETRY_ATTEMPTS) {
+            console.log(`[${userAgentDesc}...] 请求错误 (${retryCount + 1}/${RETRY_ATTEMPTS}): ${url} - ${err.message}`);
+            retryCount++;
+            setTimeout(RETRY_DELAY).then(makeRequest);
+          } else {
+            console.error(`请求最终失败: ${url} - ${err.message}`);
+            resolve(''); // 返回空字符串而不是失败
+          }
+        });
+      } catch (error) {
+        // 捕获所有未预期的错误
+        console.error(`执行请求时发生未预期错误: ${error.message}`);
+        resolve(''); // 返回空字符串而不是失败
+      }
     };
     
     makeRequest();
@@ -263,10 +314,22 @@ async function scrapeDefiLlama(): Promise<Cryptocurrency[]> {
     
     // DeFi Llama提供API，返回JSON格式数据
     const response = await makeHttpsRequest(url, headers, true);
-    const data = JSON.parse(response);
     
-    if (!Array.isArray(data)) {
+    // 添加健壮性：处理JSON解析错误
+    let data;
+    try {
+      data = JSON.parse(response);
+    } catch (error) {
+      console.error(`抓取DeFi Llama数据时出错: ${error}`);
+      // 记录响应内容片段帮助调试
+      console.error(`响应内容片段: ${response ? response.substring(0, 100) : 'empty response'}...`);
+      return []; // 返回空数组而不是中断整个程序
+    }
+    
+    // 添加健壮性：检查数据格式
+    if (!data || !Array.isArray(data)) {
       console.error('DeFi Llama API返回格式异常');
+      console.error(`响应内容片段: ${JSON.stringify(data).substring(0, 100)}...`);
       return [];
     }
     
@@ -315,10 +378,22 @@ async function scrapeCryptoCompare(page: number = 0): Promise<Cryptocurrency[]> 
     
     // CryptoCompare提供API，返回JSON格式数据
     const response = await makeHttpsRequest(url, headers, true);
-    const data = JSON.parse(response);
     
-    if (!data.Data || !Array.isArray(data.Data)) {
+    // 添加健壮性：处理JSON解析错误
+    let data;
+    try {
+      data = JSON.parse(response);
+    } catch (error) {
+      console.error(`抓取CryptoCompare第${page+1}页数据时出错: ${error}`);
+      // 记录响应内容片段帮助调试
+      console.error(`响应内容片段: ${response ? response.substring(0, 100) : 'empty response'}...`);
+      return []; // 返回空数组而不是中断整个程序
+    }
+    
+    // 添加健壮性：检查数据格式
+    if (!data || !data.Data || !Array.isArray(data.Data)) {
       console.error('CryptoCompare API返回格式异常');
+      console.error(`响应内容片段: ${JSON.stringify(data).substring(0, 100)}...`);
       return [];
     }
     
