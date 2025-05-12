@@ -3,7 +3,7 @@ import { searchTopCryptocurrencies, searchRankedCryptocurrencies } from './crypt
 import { findBlockchainExplorer, scrapeBlockchainData } from './scraper';
 import { getAiInsightsForCrypto } from './aiInsights';
 import { storage } from '../storage';
-import { updateTrumpCoinData } from './trumpFix';
+import { runDataFixer } from './dataFixer';
 
 // Function to run initial data collection immediately on startup
 export async function runInitialDataCollection() {
@@ -346,21 +346,17 @@ export async function setupScheduler() {
     });
   });
 
-  // 特殊处理特定的重要币种（例如Trump币等）
+  // 全局数据修复和优化逻辑
   // 每10分钟运行一次
   cron.schedule('*/10 * * * *', async () => {
-    console.log('运行计划任务: 特殊币种处理和修复...');
+    console.log('运行计划任务: 加密货币数据修复与优化...');
     
     try {
-      // 处理Trump币 - 使用专门的处理函数获取更精确的数据
-      console.log('更新Trump币数据...');
-      const trumpResult = await updateTrumpCoinData();
-      console.log(`Trump币数据更新结果: ${trumpResult ? '成功' : '无更新'}`);
-      
-      // 这里可以添加其他特殊币种的处理...
-      
+      // 运行通用数据修复器，修复市值、排名和链上指标数据
+      const result = await runDataFixer(30);
+      console.log(`数据修复结果: 市值和排名修复 ${result.marketCapFixed} 个币种，链上指标修复 ${result.metricsFixed} 个币种`);
     } catch (error) {
-      console.error('特殊币种处理过程中出错:', error);
+      console.error('数据修复过程中出错:', error);
     }
     
   });
