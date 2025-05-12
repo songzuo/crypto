@@ -5,6 +5,7 @@ import { storage } from '../storage';
 import { runDataFixer } from './dataFixer';
 import { updateTrumpCoinData } from './trumpFix';
 import { scrapeAdvancedMarketData } from './advancedMarketDataScraper';
+import { startWatchdog, updateActivityTime } from './watchdog';
 
 // Function to run initial data collection immediately on startup
 export async function runInitialDataCollection() {
@@ -81,6 +82,10 @@ export async function setupScheduler() {
   });
 
   console.log('Setting up scheduled tasks...');
+  
+  // 启动守护进程确保系统持续运行
+  startWatchdog();
+  console.log('系统守护进程已启动，将自动监控和恢复爬虫任务');
   
   // Primary Market Data Collection - Every hour
   // This task ensures we get regular updates for the top cryptocurrencies
@@ -427,6 +432,9 @@ async function forceBreakthroughScrape(): Promise<void> {
       // 执行高级市场数据爬取
       const newCryptos = await scrapeAdvancedMarketData();
       console.log(`高级多源市场数据爬取完成，新增 ${newCryptos} 个加密货币`);
+      
+      // 更新活动时间，告知守护进程爬虫正常运行
+      updateActivityTime();
     } catch (error) {
       console.error("高级市场数据爬取任务出错:", error);
     }

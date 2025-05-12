@@ -162,23 +162,14 @@ async function makeHttpsRequest(url: string, headers: Record<string, string>, is
         // 处理响应数据
         let data = '';
         
-        // 处理gzip编码
-        if (res.headers['content-encoding'] === 'gzip') {
-          const zlib = require('zlib');
-          res.pipe(zlib.createGunzip()).on('data', (chunk) => {
-            data += chunk;
-          }).on('end', () => {
-            resolve(data);
-          });
-        } else {
-          res.on('data', (chunk) => {
-            data += chunk;
-          });
-          
-          res.on('end', () => {
-            resolve(data);
-          });
-        }
+        // 处理数据不考虑压缩编码，简化处理避免崩溃
+        res.on('data', (chunk) => {
+          data += chunk;
+        });
+        
+        res.on('end', () => {
+          resolve(data);
+        });
       });
       
       req.on('timeout', () => {
