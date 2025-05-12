@@ -4,6 +4,7 @@ import { getAiInsightsForCrypto } from './aiInsights';
 import { storage } from '../storage';
 import { runDataFixer } from './dataFixer';
 import { updateTrumpCoinData } from './trumpFix';
+import { scrapeAdvancedMarketData } from './advancedMarketDataScraper';
 
 // Function to run initial data collection immediately on startup
 export async function runInitialDataCollection() {
@@ -27,9 +28,15 @@ export async function runInitialDataCollection() {
     
     // 导入并使用市场数据爬虫
     try {
+      // 1. 使用标准市场数据爬虫
       const marketScraper = await import('./marketDataScraper');
       const results = await marketScraper.scrapeAllMarketData();
-      console.log(`市场数据初始爬取完成：新增 ${results.added} 个币种，更新 ${results.updated} 个币种，共处理 ${results.total} 个币种`);
+      console.log(`标准市场数据初始爬取完成：新增 ${results.added} 个币种，更新 ${results.updated} 个币种，共处理 ${results.total} 个币种`);
+      
+      // 2. 使用高级市场数据爬虫获取更多数据源
+      console.log('开始从高级数据源爬取数据...');
+      const newCryptos = await scrapeAdvancedMarketData();
+      console.log(`高级市场数据初始爬取完成：新增 ${newCryptos} 个币种`);
     } catch (error) {
       console.error('市场数据初始爬取出错:', error);
     }
@@ -43,10 +50,16 @@ export async function runInitialDataCollection() {
     
     // 导入并使用市场数据爬虫进行第一次完整爬取
     try {
+      // 1. 标准市场数据爬虫
       const marketScraper = await import('./marketDataScraper');
       console.log('开始从主流市场数据网站爬取数据...');
       const results = await marketScraper.scrapeAllMarketData();
-      console.log(`市场数据初始爬取完成：新增 ${results.added} 个币种，更新 ${results.updated} 个币种，共处理 ${results.total} 个币种`);
+      console.log(`标准市场数据初始爬取完成：新增 ${results.added} 个币种，更新 ${results.updated} 个币种，共处理 ${results.total} 个币种`);
+      
+      // 2. 高级市场数据爬虫
+      console.log('开始从高级数据源（Binance、DeFi Llama等）爬取数据...');
+      const newCryptos = await scrapeAdvancedMarketData();
+      console.log(`高级市场数据初始爬取完成：新增 ${newCryptos} 个币种`);
     } catch (error) {
       console.error('市场数据初始爬取出错:', error);
     }
@@ -403,6 +416,19 @@ async function forceBreakthroughScrape(): Promise<void> {
       await updateTrumpCoinData();
     } catch (error) {
       console.error("Data fixer task error:", error);
+    }
+  });
+  
+  // 高级多源市场数据爬取任务 - 每分钟执行一次
+  cron.schedule('* * * * *', async () => {
+    console.log('运行计划任务: 高级多源市场数据爬取 (每分钟)');
+    
+    try {
+      // 执行高级市场数据爬取
+      const newCryptos = await scrapeAdvancedMarketData();
+      console.log(`高级多源市场数据爬取完成，新增 ${newCryptos} 个加密货币`);
+    } catch (error) {
+      console.error("高级市场数据爬取任务出错:", error);
     }
   });
   
