@@ -24,6 +24,11 @@ export const navItems = [
     label: "AI Insights",
     path: "/ai-insights",
     icon: "ri-robot-line"
+  },
+  {
+    label: "News",
+    path: "/news",
+    icon: "ri-newspaper-line"
   }
 ];
 

@@ -11,6 +11,7 @@ import Markets from "./pages/Markets";
 import Comparisons from "./pages/Comparisons";
 import Explorer from "./pages/Explorer";
 import AiInsights from "./pages/AiInsights";
+import News from "./pages/News";
 
 function Router() {
   return (
@@ -22,6 +23,7 @@ function Router() {
         <Route path="/explorer/:id" component={Explorer} />
         <Route path="/explorer" component={Explorer} />
         <Route path="/ai-insights" component={AiInsights} />
+        <Route path="/news" component={News} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

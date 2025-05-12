@@ -30,6 +30,44 @@ const CONFIG = {
     "blockchain technology news",
     "defi news"
   ],
+  // 已知的加密货币新闻网站
+  CRYPTO_NEWS_SITES: [
+    { 
+      url: "https://cointelegraph.com/", 
+      articleSelector: "article", 
+      titleSelector: "h2, .header",
+      linkSelector: "a", 
+      summarySelector: ".description, .post-card-inline-description"
+    },
+    { 
+      url: "https://www.coindesk.com/", 
+      articleSelector: "article", 
+      titleSelector: "h2.heading, h4",
+      linkSelector: "a", 
+      summarySelector: ".description"
+    },
+    { 
+      url: "https://decrypt.co/", 
+      articleSelector: ".card, article", 
+      titleSelector: "h2, h3",
+      linkSelector: "a", 
+      summarySelector: ".description, p"
+    },
+    { 
+      url: "https://www.theblockcrypto.com/", 
+      articleSelector: "article, .post", 
+      titleSelector: "h2, h3",
+      linkSelector: "a", 
+      summarySelector: ".summary, .excerpt"
+    },
+    { 
+      url: "https://bitcoinist.com/", 
+      articleSelector: "article, .post", 
+      titleSelector: "h2, h3",
+      linkSelector: "a", 
+      summarySelector: ".excerpt, p"
+    }
+  ],
   RETRY_ATTEMPTS: 3,
   RETRY_DELAY_MS: 2000,
   FETCH_TIMEOUT_MS: 10000,
@@ -274,32 +312,333 @@ async function searchGoogleForNews(query: string, retryCount = 0): Promise<Inser
 }
 
 /**
+ * 从指定的加密货币新闻网站抓取最新新闻
+ */
+async function scrapeNewsSite(site: typeof CONFIG.CRYPTO_NEWS_SITES[0]): Promise<InsertCryptoNews[]> {
+  console.log(`从 ${site.url} 抓取新闻...`);
+  const articles: InsertCryptoNews[] = [];
+  
+  try {
+    const html = await fetchWebPage(site.url);
+    const $ = cheerio.load(html);
+    
+    // 查找所有文章元素
+    $(site.articleSelector).each((_, element) => {
+      try {
+        // 提取标题
+        const titleElement = $(element).find(site.titleSelector).first();
+        const title = titleElement.text().trim();
+        
+        // 提取链接
+        const linkElement = titleElement.parent().is('a') ? titleElement.parent() : $(element).find(site.linkSelector).first();
+        let href = linkElement.attr('href');
+        
+        // 处理相对URL
+        if (href && !href.startsWith('http')) {
+          if (href.startsWith('/')) {
+            const baseUrl = new URL(site.url);
+            href = `${baseUrl.protocol}//${baseUrl.host}${href}`;
+          } else {
+            href = new URL(href, site.url).toString();
+          }
+        }
+        
+        // 提取摘要
+        let summary = $(element).find(site.summarySelector).first().text().trim();
+        if (!summary) {
+          // 尝试获取第一段文本作为摘要
+          summary = $(element).find('p').first().text().trim();
+        }
+        
+        // 限制摘要长度
+        if (summary && summary.length > 300) {
+          summary = summary.substring(0, 297) + '...';
+        }
+        
+        if (title && href && summary && title.length > 10 && summary.length > 15) {
+          const source = new URL(site.url).hostname.replace('www.', '');
+          
+          // 检查该文章是否已经存在（避免重复）
+          if (!articles.some(a => a.title === title || a.url === href)) {
+            articles.push({
+              title,
+              url: href,
+              summary,
+              source,
+              publishedAt: new Date()
+            });
+          }
+        }
+      } catch (e) {
+        console.log(`解析文章时出错: ${e}`);
+      }
+    });
+    
+    console.log(`从 ${site.url} 找到 ${articles.length} 条新闻`);
+    return articles;
+  } catch (error) {
+    console.error(`从 ${site.url} 抓取新闻时出错:`, error);
+    return [];
+  }
+}
+
+/**
+ * 通过Google搜索发现更多加密货币新闻网站
+ */
+async function discoverNewsWebsites(): Promise<string[]> {
+  console.log("搜索加密货币新闻网站...");
+  const newsUrls: string[] = [];
+  
+  try {
+    // 构建搜索查询
+    const query = encodeURIComponent("top cryptocurrency news sites");
+    const searchUrl = `${CONFIG.GOOGLE_SEARCH_URL}${query}`;
+    
+    const html = await fetchWebPage(searchUrl);
+    const $ = cheerio.load(html);
+    
+    // 查找所有包含"news"的链接
+    $('a[href*="http"]').each((_, element) => {
+      const href = $(element).attr('href');
+      
+      if (href) {
+        try {
+          let url = href;
+          if (url.startsWith('/url?q=')) {
+            url = url.substring(7);
+            const endIndex = url.indexOf('&');
+            if (endIndex !== -1) {
+              url = url.substring(0, endIndex);
+            }
+            url = decodeURIComponent(url);
+          }
+          
+          // 只保留看起来像新闻网站的URL
+          if (url.includes('crypto') && 
+              (url.includes('news') || url.includes('blog')) && 
+              !url.includes('google') && 
+              !url.includes('youtube') && 
+              !url.includes('facebook') && 
+              !url.includes('twitter')) {
+            
+            // 提取主域名
+            const urlObj = new URL(url);
+            const domain = `${urlObj.protocol}//${urlObj.hostname}/`;
+            
+            if (!newsUrls.includes(domain) && !CONFIG.CRYPTO_NEWS_SITES.some(s => s.url === domain)) {
+              newsUrls.push(domain);
+            }
+          }
+        } catch (e) {
+          // 忽略解析错误
+        }
+      }
+    });
+    
+    console.log(`发现 ${newsUrls.length} 个新闻网站`);
+    return newsUrls;
+  } catch (error) {
+    console.error("搜索新闻网站时出错:", error);
+    return [];
+  }
+}
+
+/**
+ * 从发现的网站抓取新闻
+ */
+async function scrapeDiscoveredSite(url: string): Promise<InsertCryptoNews[]> {
+  console.log(`尝试从 ${url} 抓取新闻...`);
+  const articles: InsertCryptoNews[] = [];
+  
+  try {
+    const html = await fetchWebPage(url);
+    const $ = cheerio.load(html);
+    
+    // 寻找潜在的文章元素
+    const articleSelectors = ['article', '.article', '.post', '.news-item', '.card'];
+    const titleSelectors = ['h1', 'h2', 'h3', '.title', '.heading'];
+    
+    // 尝试所有可能的文章选择器
+    for (const articleSelector of articleSelectors) {
+      $(articleSelector).each((_, element) => {
+        try {
+          // 寻找标题
+          let title = '';
+          let titleElement = null;
+          
+          for (const titleSelector of titleSelectors) {
+            const el = $(element).find(titleSelector).first();
+            if (el.length && el.text().trim()) {
+              title = el.text().trim();
+              titleElement = el;
+              break;
+            }
+          }
+          
+          if (!title || title.length < 10) {
+            // Skip this article if no good title
+            return;
+          }
+          
+          // 寻找链接
+          let href = '';
+          const linkElement = titleElement && titleElement.parent().is('a') 
+            ? titleElement.parent() 
+            : $(element).find('a').first();
+            
+          href = linkElement.attr('href') || '';
+          
+          // 处理相对URL
+          if (href && !href.startsWith('http')) {
+            if (href.startsWith('/')) {
+              const baseUrl = new URL(url);
+              href = `${baseUrl.protocol}//${baseUrl.host}${href}`;
+            } else {
+              href = new URL(href, url).toString();
+            }
+          }
+          
+          if (!href) {
+            // Skip if no href
+            return;
+          }
+          
+          // 寻找摘要
+          let summary = $(element).find('p').first().text().trim();
+          if (!summary || summary.length < 15) {
+            // 尝试其他可能包含摘要的元素
+            const summarySelectors = ['.summary', '.excerpt', '.description', '.content p', '.text'];
+            for (const summarySelector of summarySelectors) {
+              const summ = $(element).find(summarySelector).first().text().trim();
+              if (summ && summ.length > 15) {
+                summary = summ;
+                break;
+              }
+            }
+          }
+          
+          // 如果还没找到摘要，使用第一段内容
+          if (!summary || summary.length < 15) {
+            summary = $(element).text().trim().substring(0, 300);
+          }
+          
+          // 限制摘要长度
+          if (summary && summary.length > 300) {
+            summary = summary.substring(0, 297) + '...';
+          }
+          
+          if (title && href && summary) {
+            const source = new URL(url).hostname.replace('www.', '');
+            
+            // 检查该文章是否已经存在（避免重复）
+            if (!articles.some(a => a.title === title || a.url === href)) {
+              articles.push({
+                title,
+                url: href,
+                summary,
+                source,
+                publishedAt: new Date()
+              });
+            }
+          }
+        } catch (e) {
+          // 忽略解析错误
+        }
+      });
+      
+      // 如果已经找到了足够的文章，就停止尝试其他选择器
+      if (articles.length >= 5) break;
+    }
+    
+    console.log(`从 ${url} 找到 ${articles.length} 条新闻`);
+    return articles;
+  } catch (error) {
+    console.error(`从 ${url} 抓取新闻时出错:`, error);
+    return [];
+  }
+}
+
+/**
  * 主函数：抓取加密货币新闻并存储
  */
 export async function scrapeCryptoNews(): Promise<number> {
   console.log("开始抓取加密货币新闻...");
   let totalNewsAdded = 0;
+  let allArticles: InsertCryptoNews[] = [];
   
-  // 随机选择几个搜索查询以减少被屏蔽的可能性
-  const selectedQueries = [...CONFIG.SEARCH_QUERIES]
-    .sort(() => 0.5 - Math.random())
-    .slice(0, CONFIG.BATCH_SIZE);
-  
-  for (const query of selectedQueries) {
+  // 1. 首先从已知的加密货币新闻网站抓取
+  for (const site of CONFIG.CRYPTO_NEWS_SITES) {
     try {
-      const newsArticles = await searchGoogleForNews(query);
-      console.log(`从"${query}"找到 ${newsArticles.length} 条新闻`);
-      
-      for (const article of newsArticles) {
-        await storage.createCryptoNews(article);
-        totalNewsAdded++;
-      }
+      const articles = await scrapeNewsSite(site);
+      allArticles = [...allArticles, ...articles];
       
       // 添加随机延迟以防止被检测
       await delay(1000 + Math.random() * 2000);
     } catch (error) {
-      console.error(`抓取"${query}"的新闻时出错:`, error);
+      console.error(`抓取 ${site.url} 时出错:`, error);
     }
+  }
+  
+  // 2. 如果从已知网站没有获取到足够的新闻，尝试发现更多新闻源
+  if (allArticles.length < 10) {
+    console.log("已知网站新闻不足，尝试发现更多新闻源...");
+    
+    // 发现新的新闻网站
+    const discoveredSites = await discoverNewsWebsites();
+    
+    // 从随机选择的3个发现的网站抓取新闻
+    const sitesToScrape = discoveredSites
+      .sort(() => 0.5 - Math.random())
+      .slice(0, 3);
+    
+    for (const site of sitesToScrape) {
+      try {
+        const articles = await scrapeDiscoveredSite(site);
+        allArticles = [...allArticles, ...articles];
+        
+        // 添加随机延迟以防止被检测
+        await delay(1000 + Math.random() * 2000);
+      } catch (error) {
+        console.error(`抓取发现的网站 ${site} 时出错:`, error);
+      }
+    }
+  }
+  
+  // 3. 如果还是没有足够的新闻，回退到Google搜索
+  if (allArticles.length < 5) {
+    console.log("从网站直接抓取新闻不足，回退到Google搜索...");
+    
+    // 随机选择几个搜索查询以减少被屏蔽的可能性
+    const selectedQueries = [...CONFIG.SEARCH_QUERIES]
+      .sort(() => 0.5 - Math.random())
+      .slice(0, CONFIG.BATCH_SIZE);
+    
+    for (const query of selectedQueries) {
+      try {
+        const newsArticles = await searchGoogleForNews(query);
+        console.log(`从Google搜索"${query}"找到 ${newsArticles.length} 条新闻`);
+        
+        allArticles = [...allArticles, ...newsArticles];
+        
+        // 添加随机延迟以防止被检测
+        await delay(1000 + Math.random() * 2000);
+      } catch (error) {
+        console.error(`Google搜索"${query}"时出错:`, error);
+      }
+    }
+  }
+  
+  // 去除重复文章（基于URL和标题）
+  const uniqueArticles = allArticles.filter((article, index, self) => 
+    index === self.findIndex(a => a.url === article.url || a.title === article.title)
+  );
+  
+  console.log(`找到 ${allArticles.length} 条新闻，去重后 ${uniqueArticles.length} 条`);
+  
+  // 存储所有收集到的新闻
+  for (const article of uniqueArticles) {
+    await storage.createCryptoNews(article);
+    totalNewsAdded++;
   }
   
   // 清理旧新闻，保持在最大限制之内
