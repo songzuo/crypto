@@ -292,7 +292,7 @@ export async function setupScheduler() {
             console.log(`Finding explorers for ${recentCryptos.data.length} most recently added cryptocurrencies...`);
             // Extract IDs and find explorers specifically for these
             const recentIds = recentCryptos.data.map(crypto => crypto.id);
-            return await findExplorersForCryptos(recentIds.length, undefined, recentIds);
+            return await findExplorersForCryptos(recentIds.length);
           }
           return 0;
         })().catch(error => {

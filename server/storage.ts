@@ -376,6 +376,69 @@ export class MemStorage implements IStorage {
     return sortedResults.slice(0, limit);
   }
   
+  async getCryptocurrenciesWithExplorers(limit: number): Promise<{ cryptocurrencyId: number, url: string }[]> {
+    const results: { cryptocurrencyId: number, url: string }[] = [];
+    
+    // Check all cryptocurrencies to find those with explorers
+    for (const crypto of this.cryptocurrencies.values()) {
+      // Get explorers for this cryptocurrency
+      const explorers = await this.getBlockchainExplorers(crypto.id);
+      
+      // If there's at least one explorer, add it to the results
+      if (explorers && explorers.length > 0) {
+        results.push({
+          cryptocurrencyId: crypto.id,
+          url: explorers[0].url
+        });
+        
+        // If we've reached the limit, stop
+        if (results.length >= limit) {
+          break;
+        }
+      }
+    }
+    
+    return results;
+  }
+  
+  async getCryptocurrenciesWithMetrics(limit: number): Promise<number> {
+    // Count cryptocurrencies that have metrics
+    let count = 0;
+    
+    // Check all cryptocurrencies
+    for (const crypto of this.cryptocurrencies.values()) {
+      // Check if this cryptocurrency has metrics
+      const metrics = await this.getMetrics(crypto.id);
+      
+      // If it has metrics, increment the count
+      if (metrics) {
+        count++;
+        
+        // If we've reached the limit and limit is greater than 0, stop
+        if (limit > 0 && count >= limit) {
+          break;
+        }
+      }
+    }
+    
+    return count;
+  }
+  
+  async getRecentlyUpdatedCryptocurrencies(limit: number): Promise<Cryptocurrency[]> {
+    // Get cryptocurrencies sorted by lastUpdated
+    const cryptos = Array.from(this.cryptocurrencies.values());
+    
+    // Sort by lastUpdated in descending order (most recent first)
+    const sortedCryptos = cryptos.sort((a, b) => {
+      const aDate = a.lastUpdated ? new Date(a.lastUpdated).getTime() : 0;
+      const bDate = b.lastUpdated ? new Date(b.lastUpdated).getTime() : 0;
+      return bDate - aDate;
+    });
+    
+    // Return the first 'limit' cryptocurrencies
+    return sortedCryptos.slice(0, limit);
+  }
+  
   async cleanupFakeData(): Promise<{ removedCount: number, remainingCount: number }> {
     console.log("Starting fake data cleanup in MemStorage...");
     
