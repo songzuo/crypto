@@ -74,6 +74,7 @@ export class MemStorage implements IStorage {
   private blockchainExplorers: Map<number, BlockchainExplorer>;
   private metrics: Map<number, Metric>;
   private aiInsights: Map<number, AiInsight>;
+  private cryptoNews: Map<number, CryptoNews>;
   private crawlerStatus: CrawlerStatus | undefined;
   
   userCurrentId: number;
@@ -81,6 +82,7 @@ export class MemStorage implements IStorage {
   explorerCurrentId: number;
   metricCurrentId: number;
   insightCurrentId: number;
+  newsCurrentId: number;
   
   constructor() {
     this.users = new Map();
@@ -88,12 +90,14 @@ export class MemStorage implements IStorage {
     this.blockchainExplorers = new Map();
     this.metrics = new Map();
     this.aiInsights = new Map();
+    this.cryptoNews = new Map();
     
     this.userCurrentId = 1;
     this.cryptoCurrentId = 1;
     this.explorerCurrentId = 1;
     this.metricCurrentId = 1;
     this.insightCurrentId = 1;
+    this.newsCurrentId = 1;
     
     // Initialize crawler status
     this.crawlerStatus = {
@@ -539,6 +543,57 @@ export class MemStorage implements IStorage {
       removedCount,
       remainingCount: afterCount
     };
+  }
+  
+  // Crypto News Methods
+  async getCryptoNews(page: number, limit: number): Promise<{ data: CryptoNews[], total: number }> {
+    const offset = (page - 1) * limit;
+    const allNews = Array.from(this.cryptoNews.values())
+      .sort((a, b) => (b.fetchedAt?.getTime() || 0) - (a.fetchedAt?.getTime() || 0));
+    
+    return {
+      data: allNews.slice(offset, offset + limit),
+      total: allNews.length
+    };
+  }
+  
+  async createCryptoNews(news: InsertCryptoNews): Promise<CryptoNews> {
+    const id = this.newsCurrentId++;
+    const createdNews: CryptoNews = {
+      ...news,
+      id,
+      fetchedAt: new Date()
+    };
+    
+    this.cryptoNews.set(id, createdNews);
+    return createdNews;
+  }
+  
+  async deleteCryptoNews(id: number): Promise<boolean> {
+    return this.cryptoNews.delete(id);
+  }
+  
+  async cleanupOldNews(maxNewsCount: number): Promise<number> {
+    if (this.cryptoNews.size <= maxNewsCount) {
+      return 0;
+    }
+    
+    const allNews = Array.from(this.cryptoNews.values())
+      .sort((a, b) => (a.fetchedAt?.getTime() || 0) - (b.fetchedAt?.getTime() || 0));
+    
+    const deleteCount = this.cryptoNews.size - maxNewsCount;
+    const toDelete = allNews.slice(0, deleteCount);
+    
+    for (const news of toDelete) {
+      this.cryptoNews.delete(news.id);
+    }
+    
+    return toDelete.length;
+  }
+  
+  // Missing method required by IStorage
+  async deleteCryptocurrency(id: number): Promise<boolean> {
+    return this.cryptocurrencies.delete(id);
   }
 }
 
@@ -1086,11 +1141,91 @@ export class DatabaseStorage implements IStorage {
       throw error;
     }
   }
+  // Crypto News Methods
+  async getCryptoNews(page: number, limit: number): Promise<{ data: CryptoNews[], total: number }> {
+    const offset = (page - 1) * limit;
+    
+    const newsQuery = await db
+      .select()
+      .from(cryptoNews)
+      .orderBy(desc(cryptoNews.fetchedAt))
+      .limit(limit)
+      .offset(offset);
+    
+    const countQuery = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(cryptoNews);
+    
+    return {
+      data: newsQuery,
+      total: countQuery[0].count
+    };
+  }
+  
+  async createCryptoNews(news: InsertCryptoNews): Promise<CryptoNews> {
+    const [result] = await db
+      .insert(cryptoNews)
+      .values(news)
+      .returning();
+    
+    return result;
+  }
+  
+  async deleteCryptoNews(id: number): Promise<boolean> {
+    try {
+      await db.delete(cryptoNews).where(eq(cryptoNews.id, id));
+      return true;
+    } catch (e) {
+      console.error('Error deleting crypto news:', e);
+      return false;
+    }
+  }
+  
+  async cleanupOldNews(maxNewsCount: number): Promise<number> {
+    try {
+      // 获取当前新闻总数
+      const countResult = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(cryptoNews);
+      
+      const currentCount = countResult[0].count;
+      
+      // 如果当前新闻数量超过最大限制
+      if (currentCount > maxNewsCount) {
+        // 计算需要删除的数量
+        const deleteCount = currentCount - maxNewsCount;
+        
+        // 获取最旧的新闻ID列表
+        const oldestNews = await db
+          .select()
+          .from(cryptoNews)
+          .orderBy(asc(cryptoNews.fetchedAt))
+          .limit(deleteCount);
+        
+        // 如果有需要删除的新闻
+        if (oldestNews.length > 0) {
+          const oldestIds = oldestNews.map(news => news.id);
+          
+          // 删除这些旧新闻
+          await db
+            .delete(cryptoNews)
+            .where(inArray(cryptoNews.id, oldestIds));
+          
+          return oldestIds.length;
+        }
+      }
+      
+      return 0; // 没有需要删除的新闻
+    } catch (e) {
+      console.error('Error cleaning up old news:', e);
+      return 0;
+    }
+  }
 }
 
 // Import necessary functions after defining Database class
 import { sql } from "drizzle-orm";
-import { inArray, or } from "drizzle-orm";
+import { inArray, or, eq, desc, asc } from "drizzle-orm";
 
 // Use DatabaseStorage
 export const storage = new DatabaseStorage();
