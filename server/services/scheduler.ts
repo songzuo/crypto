@@ -6,6 +6,7 @@ import { runDataFixer } from './dataFixer';
 import { updateTrumpCoinData } from './trumpFix';
 import { scrapeAdvancedMarketData } from './advancedMarketDataScraper';
 import { startWatchdog, updateActivityTime } from './watchdog';
+import { scrapeCryptoNews } from './cryptoNewsScraper';
 
 // Function to run initial data collection immediately on startup
 export async function runInitialDataCollection() {
@@ -38,6 +39,11 @@ export async function runInitialDataCollection() {
       console.log('开始从高级数据源爬取数据...');
       const newCryptos = await scrapeAdvancedMarketData();
       console.log(`高级市场数据初始爬取完成：新增 ${newCryptos} 个币种`);
+      
+      // 3. 抓取加密货币新闻
+      console.log('开始抓取加密货币新闻...');
+      const newsCount = await scrapeCryptoNews();
+      console.log(`初始加密货币新闻爬取完成: 添加了 ${newsCount} 条新闻`);
     } catch (error) {
       console.error('市场数据初始爬取出错:', error);
     }
@@ -61,6 +67,11 @@ export async function runInitialDataCollection() {
       console.log('开始从高级数据源（Binance、DeFi Llama等）爬取数据...');
       const newCryptos = await scrapeAdvancedMarketData();
       console.log(`高级市场数据初始爬取完成：新增 ${newCryptos} 个币种`);
+      
+      // 3. 抓取加密货币新闻
+      console.log('开始抓取加密货币新闻...');
+      const newsCount = await scrapeCryptoNews();
+      console.log(`初始加密货币新闻爬取完成: 添加了 ${newsCount} 条新闻`);
     } catch (error) {
       console.error('市场数据初始爬取出错:', error);
     }
@@ -271,6 +282,26 @@ export async function setupScheduler() {
       console.log(`高级市场数据爬取完成: 新增 ${results.added} 个币种，更新 ${results.updated} 个币种，共处理 ${results.total} 个币种`);
     } catch (error) {
       console.error('高级市场数据爬取任务出错:', error);
+    }
+  });
+  
+  // 加密货币新闻爬取任务
+  // 每3小时爬取一次新闻
+  cron.schedule('0 */3 * * *', async () => {
+    console.log('运行计划任务: 加密货币新闻爬取');
+    
+    try {
+      // 爬取加密货币新闻
+      const newsCount = await scrapeCryptoNews();
+      console.log(`加密货币新闻爬取完成: 添加了 ${newsCount} 条新闻`);
+      
+      // 清理旧新闻，保持在100条限制以内
+      const removedCount = await storage.cleanupOldNews(100);
+      if (removedCount > 0) {
+        console.log(`已清理 ${removedCount} 条旧新闻，保持在 100 条限制之内`);
+      }
+    } catch (error) {
+      console.error('加密货币新闻爬取任务出错:', error);
     }
   });
   
