@@ -6,6 +6,7 @@ import { storage } from '../storage';
 import { runDataFixer } from './dataFixer';
 import { updateTrumpCoinData } from './trumpFix';
 import { recoverMetricsForAllCoins } from './metricsRecovery';
+import { advancedMetricsRecovery } from './advancedMetricsRecovery';
 
 // Function to run initial data collection immediately on startup
 export async function runInitialDataCollection() {
@@ -357,6 +358,10 @@ export async function setupScheduler() {
       // 按排名顺序运行专用的链上指标恢复程序
       const metricsRecovered = await recoverMetricsForAllCoins(20);
       console.log(`指标恢复结果: 成功恢复 ${metricsRecovered} 个币种的链上指标数据`);
+      
+      // 使用高级多策略指标恢复系统进行更深入的数据抓取
+      const advancedRecovered = await advancedMetricsRecovery(20);
+      console.log(`高级多策略指标恢复结果: 成功恢复 ${advancedRecovered} 个币种的链上指标数据`);
     } catch (error) {
       console.error('指标恢复过程中出错:', error);
     }
