@@ -316,11 +316,10 @@ export async function setupScheduler() {
     });
   });
 
-  // Phase 3: Scrape blockchain data continuously
-  // Process multiple batches of cryptocurrencies simultaneously every minute 
-  // with dynamic ranking to cover the whole database
+  // Phase 3: Enhanced blockchain data scraping with highly parallel processing
+  // Uses multiple strategies to maximize data collection speed
   cron.schedule('* * * * *', async () => {
-    console.log('Running scheduled task: Multi-threaded blockchain data scraping');
+    console.log('Running scheduled task: Enhanced parallel blockchain data scraping');
     
     try {
       // Check current count to dynamically adjust batch size
@@ -329,69 +328,124 @@ export async function setupScheduler() {
       
       // Calculate batch sizes for different segments of the database
       const minute = new Date().getMinutes();
-      const maxBatchSize = 15; // Base batch size per thread
+      const maxBatchSize = 25; // Increased base batch size per thread
+      
+      // Get list of all cryptocurrencies with explorers
+      const allCryptosWithExplorers = await storage.getCryptocurrenciesWithExplorers(100);
       
       // Prepare array for all scraping tasks
-      const scrapingTasks: Promise<void>[] = [];
+      const scrapingTasks: Promise<any>[] = [];
       
-      // THREAD 1: Always process top-ranked cryptocurrencies (most important)
+      // STRATEGY 1: Direct individual scraping for cryptocurrencies with explorers
+      // This is the most efficient method as it targets exactly what we need
+      if (allCryptosWithExplorers.length > 0) {
+        // Calculate how many cryptocurrencies to process in this batch
+        const individualBatchSize = Math.min(35, allCryptosWithExplorers.length);
+        const individualBatch = allCryptosWithExplorers.slice(0, individualBatchSize);
+        
+        console.log(`Strategy 1: Direct scraping for ${individualBatchSize} cryptocurrencies with explorers`);
+        
+        // Process each cryptocurrency individually and in parallel
+        const individualTasks = individualBatch.map(async (cryptoWithExplorer) => {
+          try {
+            const { cryptocurrencyId, url } = cryptoWithExplorer;
+            const crypto = await storage.getCryptocurrency(cryptocurrencyId);
+            
+            if (!crypto) return;
+            
+            console.log(`Scraping blockchain data for ${crypto.name} (${crypto.symbol}) [Rank ${crypto.rank || 'N/A'}] from ${url}...`);
+            await scrapeBlockchainData(url, cryptocurrencyId);
+          } catch (error) {
+            console.error(`Error in individual scraping for cryptocurrency ${cryptoWithExplorer.cryptocurrencyId}:`, error);
+          }
+        });
+        
+        // Add individual tasks to the main task list
+        scrapingTasks.push(Promise.allSettled(individualTasks));
+      }
+      
+      // STRATEGY 2: Always process top-ranked cryptocurrencies (most important)
       scrapingTasks.push(
         (async () => {
-          console.log(`Thread 1: Scraping top-ranked cryptocurrencies...`);
+          console.log(`Strategy 2: Scraping top-ranked cryptocurrencies...`);
           await scrapeAllBlockchainData(maxBatchSize, 1);
-        })().catch((error: any) => console.error("Error in thread 1 (top ranks):", error))
+        })().catch(error => console.error("Error in strategy 2 (top ranks):", error))
       );
       
-      // THREAD 2: Process middle segment of the database
-      if (totalCount > 50) {
-        const middleStartRank = Math.floor(totalCount / 2) - Math.floor(maxBatchSize / 2); 
+      // STRATEGY 3: Process middle and lower segments in parallel
+      if (totalCount > 75) {
+        // Determine multiple segments to process in parallel
+        const segments = [
+          Math.floor(totalCount / 4),           // 25% mark
+          Math.floor(totalCount / 2),           // 50% mark
+          Math.floor(3 * totalCount / 4)        // 75% mark
+        ];
+        
+        // Process each segment in parallel
+        for (let i = 0; i < segments.length; i++) {
+          const startRank = segments[i];
+          scrapingTasks.push(
+            (async () => {
+              console.log(`Strategy 3: Segment ${i+1} - Scraping cryptocurrencies starting at rank ${startRank}...`);
+              await scrapeAllBlockchainData(20, startRank);
+            })().catch(error => console.error(`Error in strategy 3 (segment ${i+1}):`, error))
+          );
+        }
+      }
+      
+      // STRATEGY 4: Process recently added cryptocurrencies
+      scrapingTasks.push(
+        (async () => {
+          try {
+            // Get the 20 most recently added cryptocurrencies (sorted by id desc)
+            const recentCryptos = await storage.getCryptocurrencies(1, 20, "id", "desc");
+            
+            if (recentCryptos.data && recentCryptos.data.length > 0) {
+              console.log(`Strategy 4: Processing ${recentCryptos.data.length} recently added cryptocurrencies`);
+              
+              // Process each in parallel (limit to 10 to avoid overwhelming the system)
+              const recentBatch = recentCryptos.data.slice(0, 10);
+              
+              const recentTasks = recentBatch.map(async (crypto) => {
+                // Get explorers for this cryptocurrency
+                const explorers = await storage.getBlockchainExplorers(crypto.id);
+                
+                // If it has explorers, scrape data from the first one
+                if (explorers && explorers.length > 0) {
+                  console.log(`Scraping data for ${crypto.name} from ${explorers[0].url}`);
+                  await scrapeBlockchainData(explorers[0].url, crypto.id);
+                }
+              });
+              
+              await Promise.allSettled(recentTasks);
+            }
+          } catch (error) {
+            console.error("Error in strategy 4 (recent cryptos):", error);
+          }
+        })()
+      );
+      
+      // STRATEGY 5: Process a random batch for better coverage
+      if (totalCount > 120) {
+        const randomStart = Math.floor(Math.random() * (totalCount - 40)) + 40;
+        
         scrapingTasks.push(
           (async () => {
-            console.log(`Thread 2: Scraping middle-ranked cryptocurrencies starting at rank ${middleStartRank}...`);
-            await scrapeAllBlockchainData(maxBatchSize, middleStartRank);
-          })().catch((error: any) => console.error("Error in thread 2 (middle ranks):", error))
+            console.log(`Strategy 5: Randomly scraping batch starting at rank ${randomStart}...`);
+            await scrapeAllBlockchainData(25, randomStart);
+          })().catch(error => console.error("Error in strategy 5 (random batch):", error))
         );
       }
       
-      // THREAD 3: Dynamically cycle through the entire database
-      // This ensures full coverage over time
-      if (totalCount > 100) {
-        let segments = Math.ceil(totalCount / maxBatchSize);
-        let currentSegment = minute % segments;
-        let dynamicStartRank = (currentSegment * maxBatchSize) + 1;
-        
-        // Avoid overlap with thread 1
-        if (dynamicStartRank < 16) dynamicStartRank = 16;
-        
-        scrapingTasks.push(
-          (async () => {
-            console.log(`Thread 3: Dynamically scraping cryptocurrencies starting at rank ${dynamicStartRank}...`);
-            await scrapeAllBlockchainData(maxBatchSize, dynamicStartRank);
-          })().catch((error: any) => console.error("Error in thread 3 (dynamic ranks):", error))
-        );
-      }
-      
-      // THREAD 4: Random segment to discover new data in unexpected places
-      if (totalCount > 200) {
-        // Generate a random starting point that's different from other threads
-        const random = Math.floor(Math.random() * (totalCount - maxBatchSize));
-        const randomStartRank = random < 50 ? 50 + random : random;
-        
-        scrapingTasks.push(
-          (async () => {
-            console.log(`Thread 4: Randomly scraping cryptocurrencies starting at rank ${randomStartRank}...`);
-            await scrapeAllBlockchainData(maxBatchSize, randomStartRank);
-          })().catch((error: any) => console.error("Error in thread 4 (random ranks):", error))
-        );
-      }
-      
-      // Execute all scraping tasks in parallel
+      // Execute all scraping strategies in parallel
       await Promise.allSettled(scrapingTasks);
-      console.log(`Completed multi-threaded blockchain data scraping`);
+      
+      const cryptosWithMetrics = await storage.getCryptocurrenciesWithMetrics(1);
+      console.log(`Completed enhanced blockchain data scraping. Total cryptocurrencies with metrics: ${cryptosWithMetrics}`);
     } catch (error) {
       console.error("Error in blockchain scraper scheduler:", error);
       // Fallback to smaller size and beginning
-      await scrapeAllBlockchainData(10, 1);
+      await scrapeAllBlockchainData(20, 1);
     }
     
     // Keep web crawler active status continuously

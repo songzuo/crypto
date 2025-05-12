@@ -47,6 +47,11 @@ export interface IStorage {
   // Autocomplete for fast prefix-based search
   autocompleteCryptocurrencies(prefix: string, limit?: number): Promise<Cryptocurrency[]>;
   
+  // Enhanced crawler methods for improved parallelism
+  getCryptocurrenciesWithExplorers(limit: number): Promise<{ cryptocurrencyId: number, url: string }[]>;
+  getCryptocurrenciesWithMetrics(limit: number): Promise<number>;
+  getRecentlyUpdatedCryptocurrencies(limit: number): Promise<Cryptocurrency[]>;
+  
   // Cleanup fake data
   cleanupFakeData(): Promise<{ removedCount: number, remainingCount: number }>;
   
@@ -446,6 +451,52 @@ import { eq, and, like, desc, asc } from "drizzle-orm";
 
 // Database Storage implementation
 export class DatabaseStorage implements IStorage {
+  
+  async getCryptocurrenciesWithExplorers(limit: number): Promise<{ cryptocurrencyId: number, url: string }[]> {
+    try {
+      // Get cryptocurrencies with existing blockchain explorers
+      const results = await db.select({
+        cryptocurrencyId: blockchainExplorers.cryptocurrencyId,
+        url: blockchainExplorers.url
+      })
+      .from(blockchainExplorers)
+      .limit(limit);
+      
+      return results;
+    } catch (error) {
+      console.error("Error getting cryptocurrencies with explorers:", error);
+      return [];
+    }
+  }
+  
+  async getCryptocurrenciesWithMetrics(limit: number): Promise<number> {
+    try {
+      // Count cryptocurrencies with metrics
+      const result = await db.select({ count: sql`count(DISTINCT cryptocurrency_id)` })
+        .from(metrics);
+      
+      // Return the count
+      return Number(result[0].count);
+    } catch (error) {
+      console.error("Error counting cryptocurrencies with metrics:", error);
+      return 0;
+    }
+  }
+  
+  async getRecentlyUpdatedCryptocurrencies(limit: number): Promise<Cryptocurrency[]> {
+    try {
+      // Get most recently updated cryptocurrencies (using lastUpdated field)
+      const results = await db.select()
+        .from(cryptocurrencies)
+        .orderBy(desc(cryptocurrencies.lastUpdated))
+        .limit(limit);
+      
+      return results;
+    } catch (error) {
+      console.error("Error getting recently updated cryptocurrencies:", error);
+      return [];
+    }
+  }
   // Users
   async getUser(id: number): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
