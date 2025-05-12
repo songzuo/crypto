@@ -430,11 +430,16 @@ const Explorer: React.FC = () => {
   
   // Check for ID in URL params
   useEffect(() => {
-    if (params && params.id) {
-      const numericId = parseInt(params.id, 10);
+    if (params && params.params && params.params.id) {
+      const numericId = parseInt(params.params.id, 10);
       if (!isNaN(numericId)) {
         setSelectedCrypto(numericId);
+        console.log("设置当前加密货币ID为:", numericId);
+      } else {
+        console.log("无效的加密货币ID:", params.params.id);
       }
+    } else {
+      console.log("没有在URL中找到加密货币ID", params);
     }
   }, [params]);
 

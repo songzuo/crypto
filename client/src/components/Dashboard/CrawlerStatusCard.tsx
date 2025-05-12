@@ -85,7 +85,7 @@ const CrawlerStatusCard: React.FC = () => {
             </div>
             <span className="text-sm text-slate-500 dark:text-slate-400">
               {data?.blockchainSyncActive ? 'Active' : 
-               (data?.webCrawlerActive || data?.aiProcessorActive) ? 'Queued' : 'Idle'}
+               (data?.webCrawlerActive || data?.aiProcessorActive) ? 'Syncing' : 'Idle'}
             </span>
           </div>
           
