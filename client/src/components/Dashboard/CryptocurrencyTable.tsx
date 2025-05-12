@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -145,9 +146,9 @@ const CryptocurrencyTable: React.FC = () => {
                       </div>
                       <div>
                         <div className="font-medium">
-                          <a href={`/explorer/${crypto.id}`} className="hover:text-blue-600 transition-colors">
+                          <Link href={`/explorer/${crypto.id}`} className="hover:text-blue-600 transition-colors">
                             {crypto.name}
-                          </a>
+                          </Link>
                         </div>
                         <div className="text-xs text-slate-500 dark:text-slate-400">
                           {crypto.symbol}
