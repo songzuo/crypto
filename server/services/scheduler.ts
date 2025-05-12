@@ -287,16 +287,45 @@ export async function setupScheduler() {
       explorerTasks.push(
         (async () => {
           // Get the most recently added cryptocurrencies (sorted by id desc)
-          const recentCryptos = await storage.getCryptocurrencies(1, Math.floor(batchSize / 2), "id", "desc");
+          const recentCryptos = await storage.getCryptocurrencies(1, Math.floor(batchSize / 3), "id", "desc");
           if (recentCryptos.data.length > 0) {
             console.log(`Finding explorers for ${recentCryptos.data.length} most recently added cryptocurrencies...`);
             // Extract IDs and find explorers specifically for these
             const recentIds = recentCryptos.data.map(crypto => crypto.id);
-            return await findExplorersForCryptos(recentIds.length);
+            return await findExplorersForCryptos(undefined, recentIds);
           }
           return 0;
         })().catch(error => {
           console.error("Error finding explorers for recent cryptocurrencies:", error);
+          return 0;
+        })
+      );
+      
+      // TASK 3: Prioritize cryptocurrencies without metrics
+      explorerTasks.push(
+        (async () => {
+          // Get cryptocurrencies that have explorer URLs but don't have metrics yet
+          const cryptosWithExplorers = await storage.getCryptocurrenciesWithExplorers(Math.floor(batchSize / 3));
+          
+          if (cryptosWithExplorers.length > 0) {
+            console.log(`Prioritizing scraping data for ${cryptosWithExplorers.length} cryptocurrencies with explorers but no metrics...`);
+            
+            // Process each cryptocurrency with explorer to scrape blockchain data
+            for (const item of cryptosWithExplorers) {
+              try {
+                await scrapeBlockchainData(item.url, item.cryptocurrencyId);
+                // Small delay to avoid overloading
+                await new Promise(resolve => setTimeout(resolve, 2000));
+              } catch (error) {
+                console.error(`Error scraping data for cryptocurrency ID ${item.cryptocurrencyId}:`, error);
+              }
+            }
+            
+            return cryptosWithExplorers.length;
+          }
+          return 0;
+        })().catch(error => {
+          console.error("Error prioritizing cryptocurrencies without metrics:", error);
           return 0;
         })
       );
@@ -627,15 +656,34 @@ export async function setupScheduler() {
 }
 
 // Function to find explorers for cryptocurrencies without explorers
-async function findExplorersForCryptos(limit?: number): Promise<void> {
+async function findExplorersForCryptos(limit?: number, specificIds?: number[]): Promise<number> {
   try {
     // Update crawler status
     await storage.updateCrawlerStatus({
       blockchainSyncActive: true
     });
 
-    // Get all cryptocurrencies
-    const cryptos = await storage.getCryptocurrencies(1, limit || 500, 'rank', 'asc');
+    let cryptos;
+    let foundCount = 0;
+    
+    if (specificIds && specificIds.length > 0) {
+      // Use specific IDs when provided
+      console.log(`Finding explorers for ${specificIds.length} specific cryptocurrencies...`);
+      
+      // Get the cryptocurrencies with the specific IDs
+      const result = await Promise.all(
+        specificIds.map(id => storage.getCryptocurrency(id))
+      );
+      
+      // Filter out undefined results
+      cryptos = { 
+        data: result.filter(crypto => crypto !== undefined),
+        total: result.length
+      };
+    } else {
+      // Get cryptocurrencies by rank when no specific IDs are provided
+      cryptos = await storage.getCryptocurrencies(1, limit || 100, 'rank', 'asc');
+    }
     
     for (const crypto of cryptos.data) {
       // Check if this cryptocurrency already has an explorer
@@ -645,7 +693,12 @@ async function findExplorersForCryptos(limit?: number): Promise<void> {
         console.log(`Finding blockchain explorer for ${crypto.name} (${crypto.symbol})...`);
         
         // Find and store the explorer
-        await findBlockchainExplorer(crypto.name, crypto.id);
+        const explorerUrl = await findBlockchainExplorer(crypto.name, crypto.id);
+        
+        // If an explorer was found, increment the counter
+        if (explorerUrl) {
+          foundCount++;
+        }
         
         // Sleep to avoid rate limiting
         await new Promise(resolve => setTimeout(resolve, 5000));
@@ -658,6 +711,8 @@ async function findExplorersForCryptos(limit?: number): Promise<void> {
       webCrawlerActive: true, // Keep crawler active
       lastUpdate: new Date()
     });
+    
+    return foundCount;
   } catch (error) {
     console.error('Error finding explorers for cryptocurrencies:', error);
     
@@ -667,6 +722,8 @@ async function findExplorersForCryptos(limit?: number): Promise<void> {
       webCrawlerActive: true, // Keep crawler active even during errors
       lastUpdate: new Date()
     });
+    
+    return 0;
   }
 }
 
