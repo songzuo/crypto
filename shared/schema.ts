@@ -131,3 +131,22 @@ export const insertCrawlerStatusSchema = createInsertSchema(crawlerStatus).omit(
 
 export type InsertCrawlerStatus = z.infer<typeof insertCrawlerStatusSchema>;
 export type CrawlerStatus = typeof crawlerStatus.$inferSelect;
+
+// 加密货币新闻表
+export const cryptoNews = pgTable("crypto_news", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  url: text("url").notNull(),
+  summary: text("summary"),
+  source: text("source"),
+  publishedAt: timestamp("published_at").defaultNow(),
+  fetchedAt: timestamp("fetched_at").defaultNow(),
+});
+
+export const insertCryptoNewsSchema = createInsertSchema(cryptoNews).omit({
+  id: true,
+  fetchedAt: true,
+});
+
+export type InsertCryptoNews = z.infer<typeof insertCryptoNewsSchema>;
+export type CryptoNews = typeof cryptoNews.$inferSelect;

@@ -4,7 +4,8 @@ import {
   blockchainExplorers, type BlockchainExplorer, type InsertBlockchainExplorer,
   metrics, type Metric, type InsertMetric,
   aiInsights, type AiInsight, type InsertAiInsight,
-  crawlerStatus, type CrawlerStatus, type InsertCrawlerStatus
+  crawlerStatus, type CrawlerStatus, type InsertCrawlerStatus,
+  cryptoNews, type CryptoNews, type InsertCryptoNews
 } from "@shared/schema";
 
 export interface IStorage {
@@ -59,6 +60,12 @@ export interface IStorage {
   
   // Completely purge all cryptocurrency data
   purgeAllCryptoData(): Promise<{ success: boolean, message: string }>;
+  
+  // Crypto News
+  getCryptoNews(page: number, limit: number): Promise<{ data: CryptoNews[], total: number }>;
+  createCryptoNews(news: InsertCryptoNews): Promise<CryptoNews>;
+  deleteCryptoNews(id: number): Promise<boolean>;
+  cleanupOldNews(maxNewsCount: number): Promise<number>;
 }
 
 export class MemStorage implements IStorage {
