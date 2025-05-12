@@ -354,19 +354,67 @@ export async function scrapeBlockchainData(explorerUrl: string, cryptocurrencyId
       
       // Try alternate URLs or API endpoints based on the explorer
       let alternateUrl = "";
+      let apiUrl = "";
       
+      // Enhanced alternates for common blockchain explorers
       if (explorerUrl.includes("etherscan.io")) {
         alternateUrl = explorerUrl.replace("etherscan.io", "etherscan.io/stats");
+        // Also try their charts page
+        if (!alternateUrl.includes("token")) {
+          const secondAlt = explorerUrl.replace("etherscan.io", "etherscan.io/charts");
+          // Store for multiple attempts
+          metrics._explorer_alt_urls = [alternateUrl, secondAlt].join(",");
+        }
+        // Try API if token-specific URL
+        if (explorerUrl.includes("token")) {
+          const tokenAddress = explorerUrl.split("token/")[1];
+          if (tokenAddress) {
+            apiUrl = `https://api.etherscan.io/api?module=stats&action=tokensupply&contractaddress=${tokenAddress}`;
+          }
+        }
       } else if (explorerUrl.includes("bscscan.com")) {
         alternateUrl = explorerUrl.replace("bscscan.com", "bscscan.com/charts");
+        const secondAlt = explorerUrl.replace("bscscan.com", "bscscan.com/tokenholders");
+        metrics._explorer_alt_urls = [alternateUrl, secondAlt].join(",");
       } else if (explorerUrl.includes("blockchain.com")) {
         alternateUrl = "https://api.blockchain.info/stats";
+        apiUrl = "https://blockchain.info/q/24hrtransactioncount";
       } else if (explorerUrl.includes("blockchair.com")) {
         // For blockchair, try their API
         const coin = explorerUrl.split("/").filter(Boolean).pop();
         if (coin) {
           alternateUrl = `https://api.blockchair.com/${coin}/stats`;
+          apiUrl = `https://api.blockchair.com/${coin}/dashboards/transactions`;
         }
+      } else if (explorerUrl.includes("solscan.io")) {
+        alternateUrl = explorerUrl.replace("solscan.io", "solscan.io/analytics");
+        const secondAlt = explorerUrl.replace("solscan.io", "solscan.io/account");
+        metrics._explorer_alt_urls = [alternateUrl, secondAlt].join(",");
+      } else if (explorerUrl.includes("tronscan.org")) {
+        alternateUrl = "https://apilist.tronscan.org/api/statistic/overview";
+        apiUrl = "https://apilist.tronscan.org/api/system/status";
+      } else if (explorerUrl.includes("explorer.near.org")) {
+        alternateUrl = "https://explorer.near.org/stats";
+        apiUrl = "https://explorer.near.org/api/stats";
+      } else if (explorerUrl.includes("cardanoscan.io")) {
+        alternateUrl = "https://cardanoscan.io/charts/";
+        apiUrl = "https://js.adapools.org/pools.json";
+      } else if (explorerUrl.includes("ftmscan.com")) {
+        alternateUrl = explorerUrl.replace("ftmscan.com", "ftmscan.com/charts");
+      } else if (explorerUrl.includes("arbiscan.io")) {
+        alternateUrl = explorerUrl.replace("arbiscan.io", "arbiscan.io/charts");
+      } else if (explorerUrl.includes("optimistic.etherscan.io")) {
+        alternateUrl = explorerUrl.replace("optimistic.etherscan.io", "optimistic.etherscan.io/charts");
+      } else if (explorerUrl.includes("polkadot.subscan.io")) {
+        alternateUrl = "https://polkadot.subscan.io/tools/charts";
+        apiUrl = "https://polkadot.api.subscan.io/api/scan/metadata";
+      } else if (explorerUrl.includes("explorer.bitquery.io")) {
+        // Bitquery has a GraphQL API
+        alternateUrl = "https://explorer.bitquery.io/graphql";
+      } else if (explorerUrl.includes("xmrchain.info")) {
+        // Monero explorer
+        alternateUrl = "https://xmrchain.info/api/transactions";
+        apiUrl = "https://xmrchain.info/api/networkinfo";
       }
       
       // Try the alternate URL if available
@@ -377,11 +425,177 @@ export async function scrapeBlockchainData(explorerUrl: string, cryptocurrencyId
           console.log(`Successfully fetched content from alternate URL: ${alternateUrl}`);
         } catch (altError) {
           console.error(`Error fetching from alternate URL ${alternateUrl}:`, altError);
-          console.log(`Unable to fetch blockchain data for cryptocurrency ${cryptocurrencyId} from any source`);
+          
+          // If we have an API URL, try that as well
+          if (apiUrl) {
+            try {
+              console.log(`Trying API endpoint: ${apiUrl}`);
+              const apiContent = await makeHttpsRequest(apiUrl);
+              console.log(`Successfully fetched content from API: ${apiUrl}`);
+              
+              // Handle API responses (usually JSON)
+              try {
+                const apiData = JSON.parse(apiContent);
+                
+                // Extract metrics from JSON API responses
+                if (apiData) {
+                  // Process blockchain.info API
+                  if (apiUrl.includes("blockchain.info")) {
+                    if (apiData.n_transactions_total) {
+                      metricsData.totalTransactions = parseInt(apiData.n_transactions_total, 10) as any;
+                    }
+                    if (apiData.transaction_rate) {
+                      metricsData.transactionsPerSecond = parseFloat(apiData.transaction_rate) as any;
+                    }
+                    if (apiData.hash_rate) {
+                      metricsData.hashrate = apiData.hash_rate as any;
+                    }
+                    
+                    // Store the complete API response in metrics
+                    metrics.api_response = JSON.stringify(apiData);
+                    
+                    // We've extracted some data, return success
+                    console.log(`Extracted metrics from blockchain.info API`);
+                    
+                    // Store the metrics in the database
+                    const existingMetrics = await storage.getMetrics(cryptocurrencyId);
+                    
+                    if (existingMetrics) {
+                      await storage.updateMetrics(existingMetrics.id, metricsData);
+                    } else {
+                      await storage.createMetrics(metricsData);
+                    }
+                    
+                    console.log(`Successfully scraped and stored metrics for cryptocurrency ${cryptocurrencyId}`);
+                    return true;
+                  }
+                  
+                  // Process etherscan API
+                  if (apiUrl.includes("etherscan.io")) {
+                    if (apiData.result) {
+                      metrics.token_supply = apiData.result;
+                      console.log(`Extracted token supply from etherscan API`);
+                      
+                      // Store the metrics in the database
+                      const existingMetrics = await storage.getMetrics(cryptocurrencyId);
+                      
+                      if (existingMetrics) {
+                        await storage.updateMetrics(existingMetrics.id, metricsData);
+                      } else {
+                        await storage.createMetrics(metricsData);
+                      }
+                      
+                      console.log(`Successfully scraped and stored metrics for cryptocurrency ${cryptocurrencyId}`);
+                      return true;
+                    }
+                  }
+                  
+                  // Process tronscan API
+                  if (apiUrl.includes("tronscan.org")) {
+                    if (apiData.data) {
+                      if (apiData.data.totalTransaction) {
+                        metricsData.totalTransactions = parseInt(apiData.data.totalTransaction, 10) as any;
+                      }
+                      if (apiData.data.avgBlockTime) {
+                        // Calculate TPS from block time and block size
+                        const blockTime = parseFloat(apiData.data.avgBlockTime);
+                        const avgBlockSize = parseFloat(apiData.data.avgBlockSize || "1");
+                        if (blockTime > 0) {
+                          metricsData.transactionsPerSecond = (avgBlockSize / blockTime) as any;
+                        }
+                      }
+                      
+                      // Store the complete API response
+                      metrics.api_response = JSON.stringify(apiData.data);
+                      
+                      // Store the metrics in the database
+                      const existingMetrics = await storage.getMetrics(cryptocurrencyId);
+                      
+                      if (existingMetrics) {
+                        await storage.updateMetrics(existingMetrics.id, metricsData);
+                      } else {
+                        await storage.createMetrics(metricsData);
+                      }
+                      
+                      console.log(`Successfully scraped and stored metrics for cryptocurrency ${cryptocurrencyId}`);
+                      return true;
+                    }
+                  }
+                  
+                  // If we have a generic API response with data but no specific extraction
+                  metrics.api_response = JSON.stringify(apiData);
+                  
+                  // Store the metrics in the database
+                  const existingMetrics = await storage.getMetrics(cryptocurrencyId);
+                  
+                  if (existingMetrics) {
+                    await storage.updateMetrics(existingMetrics.id, metricsData);
+                  } else {
+                    await storage.createMetrics(metricsData);
+                  }
+                  
+                  console.log(`Stored raw API data for cryptocurrency ${cryptocurrencyId}`);
+                  return true;
+                }
+              } catch (jsonError) {
+                console.log(`Non-JSON API response, treating as HTML`);
+                // If not JSON, use the content as HTML
+                content = apiContent;
+              }
+            } catch (apiError) {
+              console.error(`Error fetching from API ${apiUrl}:`, apiError);
+              
+              // Try special fallback for known explorers
+              if (metrics._explorer_alt_urls) {
+                const altUrls = metrics._explorer_alt_urls.split(",");
+                for (const url of altUrls) {
+                  try {
+                    console.log(`Trying additional fallback URL: ${url}`);
+                    content = await makeHttpsRequest(url);
+                    console.log(`Successfully fetched content from fallback URL: ${url}`);
+                    break; // Stop if successful
+                  } catch (fallbackError) {
+                    console.error(`Error fetching from fallback URL ${url}:`, fallbackError);
+                    // Continue to the next URL
+                  }
+                }
+              }
+              
+              if (!content) {
+                console.log(`Unable to fetch blockchain data for cryptocurrency ${cryptocurrencyId} from any source`);
+                return false;
+              }
+            }
+          } else {
+            console.log(`No API endpoint available, and alternate URL failed`);
+            console.log(`Unable to fetch blockchain data for cryptocurrency ${cryptocurrencyId}`);
+            return false;
+          }
+        }
+      } else if (apiUrl) {
+        // No alternate URL but we have an API URL
+        try {
+          console.log(`Trying direct API endpoint: ${apiUrl}`);
+          const apiContent = await makeHttpsRequest(apiUrl);
+          console.log(`Successfully fetched content from API: ${apiUrl}`);
+          
+          // Try to parse as JSON
+          try {
+            const apiData = JSON.parse(apiContent);
+            metrics.api_response = JSON.stringify(apiData);
+            content = `<pre>${JSON.stringify(apiData, null, 2)}</pre>`;
+          } catch (jsonError) {
+            // Not JSON, use as is
+            content = apiContent;
+          }
+        } catch (apiError) {
+          console.error(`Error fetching from API ${apiUrl}:`, apiError);
+          console.log(`No alternate URL available for ${explorerUrl}`);
+          console.log(`Unable to fetch blockchain data for cryptocurrency ${cryptocurrencyId}`);
           return false;
         }
       } else {
-        console.log(`No alternate URL available for ${explorerUrl}`);
+        console.log(`No alternate URL or API available for ${explorerUrl}`);
         console.log(`Unable to fetch blockchain data for cryptocurrency ${cryptocurrencyId}`);
         return false;
       }
@@ -399,13 +613,34 @@ export async function scrapeBlockchainData(explorerUrl: string, cryptocurrencyId
       metrics
     };
     
-    // Common metric patterns to look for
+    // Common metric patterns to look for - expanded with more variations
     const metricPatterns = [
-      { pattern: /active address(?:es)?[:\s]+([0-9,]+)/i, field: 'activeAddresses' },
-      { pattern: /total transactions[:\s]+([0-9,]+)/i, field: 'totalTransactions' },
-      { pattern: /transactions per second[:\s]+([\d,.]+)/i, field: 'transactionsPerSecond' },
-      { pattern: /hash ?rate[:\s]+([\d,.]+ ?[KMGTPE]?H\/s)/i, field: 'hashrate' },
-      { pattern: /average transaction value[:\s]+([\d,.]+)/i, field: 'averageTransactionValue' }
+      // Active Addresses
+      { pattern: /active address(?:es)?[:\s]+([0-9,\.]+)(?:k|m|b)?/i, field: 'activeAddresses' },
+      { pattern: /unique address(?:es)?[:\s]+([0-9,\.]+)(?:k|m|b)?/i, field: 'activeAddresses' },
+      { pattern: /address(?:es)? count[:\s]+([0-9,\.]+)(?:k|m|b)?/i, field: 'activeAddresses' },
+      { pattern: /wallets?[:\s]+([0-9,\.]+)(?:k|m|b)?/i, field: 'activeAddresses' },
+      
+      // Transactions
+      { pattern: /total transactions?[:\s]+([0-9,\.]+)(?:k|m|b)?/i, field: 'totalTransactions' },
+      { pattern: /transactions? count[:\s]+([0-9,\.]+)(?:k|m|b)?/i, field: 'totalTransactions' },
+      { pattern: /(?:all|confirmed) tx[:\s]+([0-9,\.]+)(?:k|m|b)?/i, field: 'totalTransactions' },
+      { pattern: /number of tx[:\s]+([0-9,\.]+)(?:k|m|b)?/i, field: 'totalTransactions' },
+      
+      // TPS
+      { pattern: /transactions? per second[:\s]+([\d,\.]+)/i, field: 'transactionsPerSecond' },
+      { pattern: /tps[:\s]+([\d,\.]+)/i, field: 'transactionsPerSecond' },
+      { pattern: /tx\/s[:\s]+([\d,\.]+)/i, field: 'transactionsPerSecond' },
+      
+      // Hashrate
+      { pattern: /hash ?rate[:\s]+([\d,\.]+ ?[KMGTPE]?H\/s)/i, field: 'hashrate' },
+      { pattern: /network hash ?rate[:\s]+([\d,\.]+ ?[KMGTPE]?H\/s)/i, field: 'hashrate' },
+      { pattern: /mining power[:\s]+([\d,\.]+ ?[KMGTPE]?H\/s)/i, field: 'hashrate' },
+      
+      // Average Transaction Value
+      { pattern: /average (?:tx|transaction) value[:\s]+([\d,\.]+)/i, field: 'averageTransactionValue' },
+      { pattern: /avg\.? (?:tx|transaction)[:\s]+([\d,\.]+)/i, field: 'averageTransactionValue' },
+      { pattern: /mean (?:tx|transaction)[:\s]+([\d,\.]+)/i, field: 'averageTransactionValue' }
     ];
     
     // Full page text
@@ -416,22 +651,38 @@ export async function scrapeBlockchainData(explorerUrl: string, cryptocurrencyId
       const match = bodyText.match(pattern);
       
       if (match && match[1]) {
+        let valueStr = match[1].trim();
+        // Handle K, M, B multipliers (thousands, millions, billions)
+        let multiplier = 1;
+        if (valueStr.endsWith('k') || valueStr.endsWith('K')) {
+          multiplier = 1000;
+          valueStr = valueStr.slice(0, -1);
+        } else if (valueStr.endsWith('m') || valueStr.endsWith('M')) {
+          multiplier = 1000000;
+          valueStr = valueStr.slice(0, -1);
+        } else if (valueStr.endsWith('b') || valueStr.endsWith('B')) {
+          multiplier = 1000000000;
+          valueStr = valueStr.slice(0, -1);
+        }
+        
         // Convert to appropriate type
         if (field === 'activeAddresses' || field === 'totalTransactions') {
-          metricsData[field as keyof InsertMetric] = parseInt(match[1].replace(/,/g, ''), 10) as any;
+          const cleanValue = valueStr.replace(/[,\s]/g, '');
+          metricsData[field as keyof InsertMetric] = Math.round(parseFloat(cleanValue) * multiplier) as any;
         } else if (field === 'transactionsPerSecond' || field === 'averageTransactionValue') {
-          metricsData[field as keyof InsertMetric] = parseFloat(match[1].replace(/,/g, '')) as any;
+          const cleanValue = valueStr.replace(/[,\s]/g, '');
+          metricsData[field as keyof InsertMetric] = parseFloat(cleanValue) * multiplier as any;
         } else {
-          metricsData[field as keyof InsertMetric] = match[1] as any;
+          metricsData[field as keyof InsertMetric] = valueStr as any;
         }
         
         // Also store in the metrics JSON object
-        metrics[field] = match[1];
+        metrics[field] = metricsData[field as keyof InsertMetric];
       }
     });
     
-    // Look for tables with metrics
-    $('table').each(function() {
+    // Enhanced table parsing - look deeper for metrics
+    $('table, .stats-table, .metrics-table, .data-table, .explorer-data').each(function() {
       $(this).find('tr').each(function() {
         const cells = $(this).find('td, th');
         if (cells.length >= 2) {
@@ -439,11 +690,63 @@ export async function scrapeBlockchainData(explorerUrl: string, cryptocurrencyId
           const value = $(cells[1]).text().trim();
           
           // Store any additional metrics found in tables
-          if (label && value && !["", "n/a"].includes(value.toLowerCase())) {
-            metrics[label.replace(/\s+/g, '_')] = value;
+          if (label && value && !["", "n/a", "-"].includes(value.toLowerCase())) {
+            const cleanLabel = label.replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+            metrics[cleanLabel] = value;
+            
+            // Try to map common terms to our schema fields
+            if (/active|unique|address|wallet/i.test(label) && /\d/.test(value)) {
+              const numericValue = parseInt(value.replace(/[^0-9]/g, ''), 10);
+              if (!isNaN(numericValue) && numericValue > 0) {
+                metricsData.activeAddresses = numericValue as any;
+              }
+            } else if (/transaction|tx count|total tx/i.test(label) && /\d/.test(value)) {
+              const numericValue = parseInt(value.replace(/[^0-9]/g, ''), 10);
+              if (!isNaN(numericValue) && numericValue > 0) {
+                metricsData.totalTransactions = numericValue as any;
+              }
+            } else if (/tps|tx per second|transactions per/i.test(label) && /\d/.test(value)) {
+              const numericValue = parseFloat(value.replace(/[^0-9.]/g, ''));
+              if (!isNaN(numericValue) && numericValue > 0) {
+                metricsData.transactionsPerSecond = numericValue as any;
+              }
+            } else if (/hash.*rate|network power/i.test(label)) {
+              metricsData.hashrate = value as any;
+            }
           }
         }
       });
+    });
+    
+    // Look for data in common div structures
+    $('.stat-card, .metric-card, .blockchain-stat, .chain-data, .network-stats, [data-metrics], [class*="stat"], [class*="metric"]').each(function() {
+      const statTitle = $(this).find('.stat-title, .metric-name, .stat-name, .title, h3, h4, .label').text().trim().toLowerCase();
+      const statValue = $(this).find('.stat-value, .metric-value, .value, h2, .number, .count').text().trim();
+      
+      if (statTitle && statValue && statValue.match(/\d/)) {
+        const cleanTitle = statTitle.replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+        metrics[cleanTitle] = statValue;
+        
+        // Map to our schema fields
+        if (/active|unique|address|wallet/i.test(statTitle)) {
+          const numericValue = parseInt(statValue.replace(/[^0-9]/g, ''), 10);
+          if (!isNaN(numericValue) && numericValue > 0) {
+            metricsData.activeAddresses = numericValue as any;
+          }
+        } else if (/transaction|tx count|total tx/i.test(statTitle)) {
+          const numericValue = parseInt(statValue.replace(/[^0-9]/g, ''), 10);
+          if (!isNaN(numericValue) && numericValue > 0) {
+            metricsData.totalTransactions = numericValue as any;
+          }
+        } else if (/tps|tx per second|transactions per/i.test(statTitle)) {
+          const numericValue = parseFloat(statValue.replace(/[^0-9.]/g, ''));
+          if (!isNaN(numericValue) && numericValue > 0) {
+            metricsData.transactionsPerSecond = numericValue as any;
+          }
+        } else if (/hash.*rate|network power/i.test(statTitle)) {
+          metricsData.hashrate = statValue as any;
+        }
+      }
     });
     
     // We now only use actual scraped metrics, no synthetic/placeholder data
