@@ -94,6 +94,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: (error as Error).message });
     }
   });
+  
+  // API endpoint to get statistics and crawler status
+  app.get('/api/stats', async (_req, res) => {
+    try {
+      // 1. Get total cryptocurrency count
+      const cryptoResult = await storage.getCryptocurrencies(1, 1, 'id', 'asc');
+      const totalCryptos = cryptoResult.total;
+      
+      // 2. Get crawler status
+      const crawlerStatus = await storage.getCrawlerStatus();
+      
+      // 3. Get total news count
+      const newsResult = await storage.getCryptoNews(1, 1);
+      const totalNews = newsResult.total;
+      
+      res.json({
+        totalCryptocurrencies: totalCryptos,
+        totalNewsArticles: totalNews,
+        crawlerStatus
+      });
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+  
+  // Get cryptocurrency news
+  app.get("/api/news", async (req, res) => {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 20;
+      
+      const result = await storage.getCryptoNews(page, limit);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
 
   // Get recently added blockchain explorers
   app.get("/api/recent-explorers", async (req, res) => {
