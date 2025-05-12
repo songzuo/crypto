@@ -349,50 +349,19 @@ export async function setupScheduler() {
     });
   });
 
-  // 专门的链上指标恢复任务 - 优先处理主流高排名币种
-  // 每5分钟运行一次，专注于恢复metrics数据
+  // 全面市场数据爬取任务 (CoinMarketCap, CoinGecko, Crypto.com)
+  // 每5分钟运行一次，专注于获取币种的基本信息和市场数据
   cron.schedule('*/5 * * * *', async () => {
-    console.log('运行计划任务: 专用链上指标数据恢复...');
+    console.log('运行计划任务: 全面市场数据爬取...');
     
     try {
-      // 使用增强型爬虫处理链上指标数据 - 这是最新和最全面的爬虫
-      try {
-        const enhancedScraper = await import('./enhancedWebScraper');
-        const enhancedRecovered = await enhancedScraper.batchProcessOnChainMetrics(30);
-        console.log(`增强型爬虫结果: 成功处理 ${enhancedRecovered} 个币种的链上指标数据`);
-      } catch (enhancedError) {
-        console.error('使用增强型爬虫时出错:', enhancedError);
-        
-        // 如果增强型爬虫失败，回退到其他方法
-        console.log('回退到传统爬虫方法...');
-        
-        // 先恢复XRP的链上指标数据 - 使用专用的XRP爬虫
-        try {
-          await import('./fixXRP').then(module => {
-            return module.fixXRPMetrics();
-          }).then(success => {
-            if (success) {
-              console.log('XRP链上指标修复成功');
-            } else {
-              console.log('XRP链上指标修复未完成或失败');
-            }
-          }).catch(error => {
-            console.error('XRP链上指标修复过程中出错:', error);
-          });
-        } catch (xrpError) {
-          console.error('导入XRP修复模块时出错:', xrpError);
-        }
-        
-        // 按排名顺序运行专用的链上指标恢复程序
-        const metricsRecovered = await recoverMetricsForAllCoins(20);
-        console.log(`指标恢复结果: 成功恢复 ${metricsRecovered} 个币种的链上指标数据`);
-        
-        // 使用高级多策略指标恢复系统进行更深入的数据抓取
-        const advancedRecovered = await advancedMetricsRecovery(20);
-        console.log(`高级多策略指标恢复结果: 成功恢复 ${advancedRecovered} 个币种的链上指标数据`);
-      }
+      // 导入市场数据爬虫模块
+      const marketScraper = await import('./marketDataScraper');
+      const results = await marketScraper.scrapeAllMarketData();
+      
+      console.log(`市场数据爬取完成：新增 ${results.added} 个币种，更新 ${results.updated} 个币种，共处理 ${results.total} 个币种`);
     } catch (error) {
-      console.error('指标恢复过程中出错:', error);
+      console.error('市场数据爬取出错:', error);
     }
   });
 
