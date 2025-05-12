@@ -310,9 +310,9 @@ export async function setupScheduler() {
     }
   });
   
-// 强制突破467币种限制的函数
+// 大规模收集币种函数 - 不限制数量，持续扩充数据库
 async function forceBreakthroughScrape(): Promise<void> {
-  console.log('启动突破性大规模爬取，确保突破467币种限制...');
+  console.log('启动大规模收集币种任务，持续扩充数据库，不设上限...');
   
   try {
     // 导入数据修复工具
@@ -337,10 +337,11 @@ async function forceBreakthroughScrape(): Promise<void> {
     // 创建多个平行爬取任务，使用多个页面和来源
     const scrapeTasks: Promise<any>[] = [];
     
-    // 随机选择20个页面范围进行爬取，确保全面覆盖
+    // 随机选择50个页面范围进行爬取，大幅增加覆盖范围，包括排名更靠后的币种
     const pages = new Set<number>();
-    while (pages.size < 20) {
-      const randomPage = Math.floor(Math.random() * 20) + 1;
+    while (pages.size < 50) {
+      // 增加随机范围到100页，覆盖更多币种
+      const randomPage = Math.floor(Math.random() * 100) + 1;
       pages.add(randomPage);
     }
     
@@ -451,32 +452,28 @@ async function forceBreakthroughScrape(): Promise<void> {
       
       console.log(`当前数据库中有 ${totalCount} 个加密货币`);
       
-      // 如果没有达到目标数量，执行突破性爬取
-      if (totalCount < 500) {
-        console.log(`当前币种数量${totalCount}未达目标500个，启动突破性大规模爬取...`);
-        
-        // 使用多种方法尝试突破限制
-        console.log("尝试使用多种方法突破限制");
-        
-        // 方法1: 使用forceBreakthroughScrape
-        console.log("方法1: 使用突破性爬取");
-        await forceBreakthroughScrape();
-        
-        // 检查是否已达到目标
-        const afterMethod1 = await storage.getCryptocurrencies(1, 1, 'id', 'asc');
-        const countAfterMethod1 = afterMethod1.total || 0;
-        
-        // 如果方法1没有达到目标，尝试方法2
-        if (countAfterMethod1 < 500) {
-          console.log(`方法1后币种数量为${countAfterMethod1}，尝试方法2: 直接搜索前500币种`);
-          
-          // 方法2: 直接搜索前500名的币种
-          const cryptoSearch = await import('./cryptoSearch');
-          await cryptoSearch.searchTopCryptocurrencies(500);
-        }
-      } else {
-        console.log(`当前币种数量${totalCount}已超过目标500个，无需进行突破性爬取`);
-      }
+      // 永远执行突破性爬取，不管当前币种数量
+      // 设定更激进的目标，确保爬虫持续收集新币种
+      const targetCount = totalCount + 100; // 总是尝试再增加100个币种
+      
+      console.log(`当前数据库中有 ${totalCount} 个加密货币，目标是收集至少 ${targetCount} 个`);
+      console.log(`启动突破性大规模爬取，不设置上限...`);
+      
+      // 使用多种方法尝试突破限制
+      console.log("尝试使用多种方法获取更多币种");
+      
+      // 方法1: 使用forceBreakthroughScrape
+      console.log("方法1: 使用突破性爬取");
+      await forceBreakthroughScrape();
+      
+      // 无论结果如何，总是尝试方法2 - 直接搜索更多币种
+      console.log(`继续尝试方法2: 直接搜索更多币种`);
+      
+      // 方法2: 搜索前1000名的币种，不设置上限
+      const cryptoSearch = await import('./cryptoSearch');
+      // 每次尝试搜索不同的币种范围，增加发现新币种的机会
+      const randomStart = Math.floor(Math.random() * 900) + 1; // 1-900之间随机起点
+      await cryptoSearch.searchRankedCryptocurrencies(randomStart, randomStart + 100);
     } catch (error) {
       console.error("突破限制任务出错:", error);
     }

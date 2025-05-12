@@ -180,30 +180,31 @@ export async function searchRankedCryptocurrencies(startRank: number = 1, endRan
 }
 
 // Function to search for the top cryptocurrencies by market cap
-export async function searchTopCryptocurrencies(count: number = 500): Promise<boolean> {
+export async function searchTopCryptocurrencies(count: number = 2000): Promise<boolean> {
   try {
-    // Get current count to avoid unnecessary API calls
+    // Get current count to get a baseline
     const currentCryptos = await storage.getCryptocurrencies(1, 1, "marketCap", "desc");
     const totalCount = currentCryptos.total || 0;
     
-    // If we're below our target, expand the search to include more lower-ranked coins
-    if (totalCount > 0 && totalCount < 500) {
-      const lowerBound = Math.max(1, Math.floor(totalCount / 2));
-      const upperBound = lowerBound + 250; // Increase range to ensure we get more data
-      console.log(`Expanding search to rank range ${lowerBound}-${upperBound} to find more data`);
-      
-      // This will find coins that might not be in the top rankings but still have data
-      try {
-        const extraCount = await searchRankedCryptocurrencies(lowerBound, upperBound);
-        console.log(`Found ${extraCount} cryptocurrencies in expanded rank range`);
-      } catch (error) {
-        console.error("Error in expanded search:", error);
-      }
+    // 始终扩展搜索以获取更多数据，不管当前数量如何
+    // 随机选择一个范围，避免始终搜索相同的币种
+    const randomStart = Math.floor(Math.random() * 1500) + 1;
+    const searchRange = 250; // 每次获取250个币种的数据
+    const upperBound = randomStart + searchRange; 
+    console.log(`扩展搜索到排名范围 ${randomStart}-${upperBound}，以发现更多数据`);
+    
+    // 这将找到可能不在顶级排名中但仍有数据的币种
+    try {
+      const extraCount = await searchRankedCryptocurrencies(randomStart, upperBound);
+      console.log(`在扩展的排名范围内找到 ${extraCount} 个加密货币`);
+    } catch (error) {
+      console.error("扩展搜索出错:", error);
     }
     
-    // Calculate how many more we need to fetch (aim for count, but fetch at least 100 more)
-    const fetchBatchSize = Math.max(100, count - totalCount);
-    console.log(`Current crypto count: ${totalCount}, fetching batch of ${fetchBatchSize}`);
+    // 设置一个大的批量大小，确保我们获取尽可能多的币种
+    // 不管当前数量如何，都尝试获取至少500个新币种
+    const fetchBatchSize = 500;
+    console.log(`当前加密货币数量: ${totalCount}，获取批次大小 ${fetchBatchSize}`);
     
     console.log(`Starting to search for top ${fetchBatchSize} cryptocurrencies...`);
     
