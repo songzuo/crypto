@@ -49,6 +49,7 @@ export interface IStorage {
   
   // Enhanced crawler methods for improved parallelism
   getCryptocurrenciesWithExplorers(limit: number): Promise<{ cryptocurrencyId: number, url: string }[]>;
+  getCryptocurrenciesWithExplorersNoMetrics(limit: number): Promise<{ cryptocurrencyId: number, url: string }[]>;
   getCryptocurrenciesWithMetrics(limit: number): Promise<number>;
   getRecentlyUpdatedCryptocurrencies(limit: number): Promise<Cryptocurrency[]>;
   
@@ -401,6 +402,30 @@ export class MemStorage implements IStorage {
     return results;
   }
   
+  async getCryptocurrenciesWithExplorersNoMetrics(limit: number): Promise<{ cryptocurrencyId: number, url: string }[]> {
+    const results: { cryptocurrencyId: number, url: string }[] = [];
+    
+    // 1. 获取所有带有区块链浏览器的加密货币
+    const allWithExplorers = await this.getCryptocurrenciesWithExplorers(500); // 获取足够多
+    
+    // 2. 对于每个加密货币，检查是否已有指标数据
+    for (const item of allWithExplorers) {
+      const hasMetrics = await this.getMetrics(item.cryptocurrencyId);
+      
+      // 3. 如果没有指标数据，添加到结果中
+      if (!hasMetrics) {
+        results.push(item);
+        
+        // 如果我们已经达到限制，停止
+        if (results.length >= limit) {
+          break;
+        }
+      }
+    }
+    
+    return results;
+  }
+  
   async getCryptocurrenciesWithMetrics(limit: number): Promise<number> {
     // Count cryptocurrencies that have metrics
     let count = 0;
@@ -528,6 +553,31 @@ export class DatabaseStorage implements IStorage {
       return results;
     } catch (error) {
       console.error("Error getting cryptocurrencies with explorers:", error);
+      return [];
+    }
+  }
+  
+  async getCryptocurrenciesWithExplorersNoMetrics(limit: number): Promise<{ cryptocurrencyId: number, url: string }[]> {
+    try {
+      // 使用 SQL 查询获取具有区块链浏览器但没有指标数据的加密货币
+      // 这使用 NOT EXISTS 子查询来检查 metrics 表中不存在匹配的记录
+      const results = await db.execute<{ cryptocurrencyId: number, url: string }>(sql`
+        SELECT 
+          be.cryptocurrency_id as "cryptocurrencyId", 
+          be.url as "url"
+        FROM 
+          blockchain_explorers be
+        WHERE 
+          NOT EXISTS (
+            SELECT 1 FROM metrics m 
+            WHERE m.cryptocurrency_id = be.cryptocurrency_id
+          )
+        LIMIT ${limit}
+      `);
+      
+      return results.rows;
+    } catch (error) {
+      console.error("Error getting cryptocurrencies with explorers but no metrics:", error);
       return [];
     }
   }

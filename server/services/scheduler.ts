@@ -348,136 +348,245 @@ export async function setupScheduler() {
   // Phase 3: Enhanced blockchain data scraping with highly parallel processing
   // Uses multiple strategies to maximize data collection speed
   cron.schedule('* * * * *', async () => {
-    console.log('Running scheduled task: Enhanced parallel blockchain data scraping');
+    console.log('运行计划任务: 增强的并行区块链数据爬取');
     
     try {
       // Check current count to dynamically adjust batch size
       const currentCryptos = await storage.getCryptocurrencies(1, 1, "marketCap", "desc");
       const totalCount = currentCryptos.total || 0;
       
-      // Calculate batch sizes for different segments of the database
-      const minute = new Date().getMinutes();
-      const maxBatchSize = 25; // Increased base batch size per thread
+      // 获取带有区块链浏览器但没有指标数据的加密货币 - 这些是优先级最高的
+      const cryptosWithExplorersNoMetrics = await storage.getCryptocurrenciesWithExplorersNoMetrics(100);
       
-      // Get list of all cryptocurrencies with explorers
-      const allCryptosWithExplorers = await storage.getCryptocurrenciesWithExplorers(100);
+      // 获取所有带有区块链浏览器的加密货币用于常规更新
+      const allCryptosWithExplorers = await storage.getCryptocurrenciesWithExplorers(150);
       
-      // Prepare array for all scraping tasks
+      // 准备所有爬取任务的数组
       const scrapingTasks: Promise<any>[] = [];
       
-      // STRATEGY 1: Direct individual scraping for cryptocurrencies with explorers
-      // This is the most efficient method as it targets exactly what we need
-      if (allCryptosWithExplorers.length > 0) {
-        // Calculate how many cryptocurrencies to process in this batch
-        const individualBatchSize = Math.min(35, allCryptosWithExplorers.length);
-        const individualBatch = allCryptosWithExplorers.slice(0, individualBatchSize);
-        
-        console.log(`Strategy 1: Direct scraping for ${individualBatchSize} cryptocurrencies with explorers`);
-        
-        // Process each cryptocurrency individually and in parallel
-        const individualTasks = individualBatch.map(async (cryptoWithExplorer) => {
-          try {
-            const { cryptocurrencyId, url } = cryptoWithExplorer;
-            const crypto = await storage.getCryptocurrency(cryptocurrencyId);
-            
-            if (!crypto) return;
-            
-            console.log(`Scraping blockchain data for ${crypto.name} (${crypto.symbol}) [Rank ${crypto.rank || 'N/A'}] from ${url}...`);
-            await scrapeBlockchainData(url, cryptocurrencyId);
-          } catch (error) {
-            console.error(`Error in individual scraping for cryptocurrency ${cryptoWithExplorer.cryptocurrencyId}:`, error);
-          }
-        });
-        
-        // Add individual tasks to the main task list
-        scrapingTasks.push(Promise.allSettled(individualTasks));
+      // 优先级队列 - 将加密货币分为高、中、低优先级
+      let highPriorityQueue: {cryptocurrencyId: number, url: string}[] = [];
+      let mediumPriorityQueue: {cryptocurrencyId: number, url: string}[] = [];
+      let lowPriorityQueue: {cryptocurrencyId: number, url: string}[] = [];
+      
+      // 填充优先级队列
+      if (cryptosWithExplorersNoMetrics.length > 0) {
+        highPriorityQueue = cryptosWithExplorersNoMetrics; // 没有指标的加密货币优先级最高
       }
       
-      // STRATEGY 2: Always process top-ranked cryptocurrencies (most important)
-      scrapingTasks.push(
-        (async () => {
-          console.log(`Strategy 2: Scraping top-ranked cryptocurrencies...`);
-          await scrapeAllBlockchainData(maxBatchSize, 1);
-        })().catch(error => console.error("Error in strategy 2 (top ranks):", error))
-      );
-      
-      // STRATEGY 3: Process middle and lower segments in parallel
-      if (totalCount > 75) {
-        // Determine multiple segments to process in parallel
-        const segments = [
-          Math.floor(totalCount / 4),           // 25% mark
-          Math.floor(totalCount / 2),           // 50% mark
-          Math.floor(3 * totalCount / 4)        // 75% mark
-        ];
+      // 如果高优先级队列为空，确保我们处理一些重要的加密货币
+      if (highPriorityQueue.length === 0) {
+        // 获取排名前10的加密货币
+        const topCryptos = await storage.getCryptocurrencies(1, 10, "rank", "asc");
         
-        // Process each segment in parallel
-        for (let i = 0; i < segments.length; i++) {
-          const startRank = segments[i];
-          scrapingTasks.push(
-            (async () => {
-              console.log(`Strategy 3: Segment ${i+1} - Scraping cryptocurrencies starting at rank ${startRank}...`);
-              await scrapeAllBlockchainData(20, startRank);
-            })().catch(error => console.error(`Error in strategy 3 (segment ${i+1}):`, error))
-          );
+        for (const crypto of topCryptos.data) {
+          // 获取此加密货币的浏览器
+          const explorers = await storage.getBlockchainExplorers(crypto.id);
+          
+          // 如果它有浏览器，添加到高优先级队列
+          if (explorers && explorers.length > 0) {
+            highPriorityQueue.push({
+              cryptocurrencyId: crypto.id,
+              url: explorers[0].url
+            });
+          }
         }
       }
       
-      // STRATEGY 4: Process recently added cryptocurrencies
+      // 对具有浏览器的所有加密货币进行分类
+      if (allCryptosWithExplorers.length > 0) {
+        for (const crypto of allCryptosWithExplorers) {
+          // 跳过已在高优先级队列中的加密货币
+          if (highPriorityQueue.some(item => item.cryptocurrencyId === crypto.cryptocurrencyId)) {
+            continue;
+          }
+          
+          // 获取加密货币详情以检查其排名
+          const cryptoDetails = await storage.getCryptocurrency(crypto.cryptocurrencyId);
+          
+          if (cryptoDetails) {
+            // 基于排名确定优先级 - 排名越高，优先级越高
+            if (cryptoDetails.rank && cryptoDetails.rank <= 50) {
+              mediumPriorityQueue.push(crypto);  // 排名前50的是中优先级
+            } else {
+              lowPriorityQueue.push(crypto);     // 其他是低优先级
+            }
+          }
+        }
+      }
+      
+      // 策略 1: 处理没有指标数据的加密货币（高优先级）
+      if (highPriorityQueue.length > 0) {
+        const highPriorityBatchSize = Math.min(50, highPriorityQueue.length);
+        const highPriorityBatch = highPriorityQueue.slice(0, highPriorityBatchSize);
+        
+        console.log(`优先策略: 正在爬取 ${highPriorityBatchSize} 个缺少指标数据的加密货币`);
+        
+        // 并行处理每个加密货币，使用较小的批次以避免阻塞
+        const chunkSize = 5;
+        for (let i = 0; i < highPriorityBatch.length; i += chunkSize) {
+          const chunk = highPriorityBatch.slice(i, i + chunkSize);
+          
+          const chunkTasks = chunk.map(async (cryptoWithExplorer) => {
+            try {
+              const { cryptocurrencyId, url } = cryptoWithExplorer;
+              const crypto = await storage.getCryptocurrency(cryptocurrencyId);
+              
+              if (!crypto) return;
+              
+              console.log(`正在爬取 ${crypto.name} (${crypto.symbol}) [排名 ${crypto.rank || 'N/A'}] 从 ${url} 的区块链数据...`);
+              await scrapeBlockchainData(url, cryptocurrencyId);
+            } catch (error) {
+              console.error(`加密货币 ${cryptoWithExplorer.cryptocurrencyId} 的个别爬取出错:`, error);
+            }
+          });
+          
+          // 等待当前块完成后再处理下一块
+          await Promise.allSettled(chunkTasks);
+          
+          // 引入短暂延迟以避免服务器过载
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+      
+      // 策略 2: 处理中优先级队列（排名靠前的加密货币）
+      if (mediumPriorityQueue.length > 0) {
+        // 选择一部分中优先级加密货币进行处理
+        const mediumBatchSize = Math.min(20, mediumPriorityQueue.length);
+        const mediumBatch = mediumPriorityQueue.slice(0, mediumBatchSize);
+        
+        console.log(`策略 2: 正在爬取 ${mediumBatchSize} 个排名靠前的加密货币`);
+        
+        // 分批并行处理
+        const mediumChunkSize = 5;
+        const mediumChunks = [];
+        
+        for (let i = 0; i < mediumBatch.length; i += mediumChunkSize) {
+          mediumChunks.push(mediumBatch.slice(i, i + mediumChunkSize));
+        }
+        
+        for (const chunk of mediumChunks) {
+          const chunkTasks = chunk.map(async (cryptoWithExplorer) => {
+            try {
+              const { cryptocurrencyId, url } = cryptoWithExplorer;
+              const crypto = await storage.getCryptocurrency(cryptocurrencyId);
+              
+              if (!crypto) return;
+              
+              await scrapeBlockchainData(url, cryptocurrencyId);
+            } catch (error) {
+              console.error(`处理中优先级加密货币 ${cryptoWithExplorer.cryptocurrencyId} 时出错:`, error);
+            }
+          });
+          
+          await Promise.allSettled(chunkTasks);
+          await new Promise(resolve => setTimeout(resolve, 600));
+        }
+      }
+      
+      // 策略 3: 处理一部分低优先级队列
+      if (lowPriorityQueue.length > 0) {
+        // 从低优先级队列中随机选择一部分
+        const lowBatchSize = Math.min(15, lowPriorityQueue.length); 
+        
+        // 随机选择低优先级加密货币
+        const shuffledLowQueue = [...lowPriorityQueue].sort(() => 0.5 - Math.random());
+        const lowBatch = shuffledLowQueue.slice(0, lowBatchSize);
+        
+        console.log(`策略 3: 正在爬取 ${lowBatchSize} 个低优先级加密货币`);
+        
+        const lowChunkSize = 5;
+        for (let i = 0; i < lowBatch.length; i += lowChunkSize) {
+          const chunk = lowBatch.slice(i, i + lowChunkSize);
+          
+          const chunkTasks = chunk.map(async (cryptoWithExplorer) => {
+            try {
+              const { cryptocurrencyId, url } = cryptoWithExplorer;
+              const crypto = await storage.getCryptocurrency(cryptocurrencyId);
+              
+              if (!crypto) return;
+              
+              await scrapeBlockchainData(url, cryptocurrencyId);
+            } catch (error) {
+              console.error(`处理低优先级加密货币 ${cryptoWithExplorer.cryptocurrencyId} 时出错:`, error);
+            }
+          });
+          
+          await Promise.allSettled(chunkTasks);
+          await new Promise(resolve => setTimeout(resolve, 700));
+        }
+      }
+      
+      // 策略 4: 处理最近添加的加密货币
       scrapingTasks.push(
         (async () => {
           try {
-            // Get the 20 most recently added cryptocurrencies (sorted by id desc)
+            // 获取最近添加的20个加密货币（按id降序排列）
             const recentCryptos = await storage.getCryptocurrencies(1, 20, "id", "desc");
             
             if (recentCryptos.data && recentCryptos.data.length > 0) {
-              console.log(`Strategy 4: Processing ${recentCryptos.data.length} recently added cryptocurrencies`);
+              console.log(`策略 4: 正在处理 ${recentCryptos.data.length} 个最近添加的加密货币`);
               
-              // Process each in parallel (limit to 10 to avoid overwhelming the system)
+              // 并行处理（限制为10个以避免系统过载）
               const recentBatch = recentCryptos.data.slice(0, 10);
               
-              const recentTasks = recentBatch.map(async (crypto) => {
-                // Get explorers for this cryptocurrency
-                const explorers = await storage.getBlockchainExplorers(crypto.id);
+              const recentChunkSize = 3; 
+              for (let i = 0; i < recentBatch.length; i += recentChunkSize) {
+                const chunk = recentBatch.slice(i, i + recentChunkSize);
                 
-                // If it has explorers, scrape data from the first one
-                if (explorers && explorers.length > 0) {
-                  console.log(`Scraping data for ${crypto.name} from ${explorers[0].url}`);
-                  await scrapeBlockchainData(explorers[0].url, crypto.id);
-                }
-              });
-              
-              await Promise.allSettled(recentTasks);
+                const chunkTasks = chunk.map(async (crypto) => {
+                  // 获取此加密货币的浏览器
+                  const explorers = await storage.getBlockchainExplorers(crypto.id);
+                  
+                  // 如果有浏览器，从第一个浏览器获取数据
+                  if (explorers && explorers.length > 0) {
+                    console.log(`正在从 ${explorers[0].url} 爬取 ${crypto.name} 的数据`);
+                    await scrapeBlockchainData(explorers[0].url, crypto.id);
+                  }
+                });
+                
+                await Promise.allSettled(chunkTasks);
+                await new Promise(resolve => setTimeout(resolve, 600));
+              }
             }
           } catch (error) {
-            console.error("Error in strategy 4 (recent cryptos):", error);
+            console.error("Strategy 4 (recent cryptos) error:", error);
           }
         })()
       );
       
-      // STRATEGY 5: Process a random batch for better coverage
-      if (totalCount > 120) {
-        const randomStart = Math.floor(Math.random() * (totalCount - 40)) + 40;
-        
-        scrapingTasks.push(
-          (async () => {
-            console.log(`Strategy 5: Randomly scraping batch starting at rank ${randomStart}...`);
-            await scrapeAllBlockchainData(25, randomStart);
-          })().catch(error => console.error("Error in strategy 5 (random batch):", error))
-        );
+      // 定义一个按排名范围爬取数据的函数
+      const scrapeByRankRange = async (startRank: number, batchSize: number, description: string) => {
+        try {
+          console.log(`${description}: 正在爬取排名 ${startRank}-${startRank + batchSize - 1} 的加密货币...`);
+          await scrapeAllBlockchainData(batchSize, startRank);
+        } catch (error) {
+          console.error(`Error in ${description}:`, error);
+        }
+      };
+      
+      // 每10分钟完整刷新排名前30的加密货币
+      if (new Date().getMinutes() % 10 === 0) {
+        scrapingTasks.push(scrapeByRankRange(1, 30, "规划刷新 - 排名前30"));
       }
       
-      // Execute all scraping strategies in parallel
+      // 每小时处理排名30-100的加密货币
+      if (new Date().getMinutes() === 30) {
+        scrapingTasks.push(scrapeByRankRange(31, 70, "规划刷新 - 排名31-100"));
+      }
+      
+      // 执行所有剩余的爬取策略
       await Promise.allSettled(scrapingTasks);
       
       const cryptosWithMetrics = await storage.getCryptocurrenciesWithMetrics(1);
-      console.log(`Completed enhanced blockchain data scraping. Total cryptocurrencies with metrics: ${cryptosWithMetrics}`);
+      console.log(`完成增强的区块链数据爬取。具有指标的加密货币总数: ${cryptosWithMetrics}`);
     } catch (error) {
-      console.error("Error in blockchain scraper scheduler:", error);
-      // Fallback to smaller size and beginning
-      await scrapeAllBlockchainData(20, 1);
+      console.error("区块链爬虫调度器出错:", error);
+      // 回退到较小的批处理
+      await scrapeAllBlockchainData(15, 1);
     }
     
-    // Keep web crawler active status continuously
+    // 保持Web爬虫活动状态
     await storage.updateCrawlerStatus({
       webCrawlerActive: true,
       lastUpdate: new Date()
