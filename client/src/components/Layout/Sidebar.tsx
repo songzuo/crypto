@@ -48,17 +48,16 @@ const Sidebar: React.FC<SidebarProps> = ({ open, toggle }) => {
           <ul className="space-y-2">
             {navItems.map((item) => (
               <li key={item.path}>
-                <Link href={item.path}>
-                  <a
-                    className={`flex items-center p-2 rounded-lg ${
-                      location === item.path
-                        ? "bg-primary text-white"
-                        : "hover:bg-slate-100 dark:hover:bg-slate-800"
-                    }`}
-                  >
-                    <i className={`${item.icon} mr-3`}></i>
-                    <span>{item.label}</span>
-                  </a>
+                <Link
+                  to={item.path}
+                  className={`flex items-center p-2 rounded-lg ${
+                    location === item.path
+                      ? "bg-primary text-white"
+                      : "hover:bg-slate-100 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  <i className={`${item.icon} mr-3`}></i>
+                  <span>{item.label}</span>
                 </Link>
               </li>
             ))}

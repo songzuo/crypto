@@ -434,12 +434,12 @@ const Explorer: React.FC = () => {
       const numericId = parseInt(params.id, 10);
       if (!isNaN(numericId)) {
         setSelectedCrypto(numericId);
-        console.log("设置当前加密货币ID为:", numericId);
+        console.log("Setting cryptocurrency ID to:", numericId);
       } else {
-        console.log("无效的加密货币ID:", params.id);
+        console.log("Invalid cryptocurrency ID:", params.id);
       }
     } else {
-      console.log("没有在URL中找到加密货币ID", params);
+      console.log("No cryptocurrency ID found in URL", params);
     }
   }, [params]);
 

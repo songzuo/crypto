@@ -146,7 +146,7 @@ const CryptocurrencyTable: React.FC = () => {
                       </div>
                       <div>
                         <div className="font-medium">
-                          <Link href={`/explorer/${crypto.id}`} className="hover:text-blue-600 transition-colors">
+                          <Link to={`/explorer/${crypto.id}`} className="hover:text-blue-600 transition-colors">
                             {crypto.name}
                           </Link>
                         </div>
