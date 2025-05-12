@@ -102,12 +102,15 @@ function extractNewsArticles(html: string): InsertCryptoNews[] {
   const $ = cheerio.load(html);
   const articles: InsertCryptoNews[] = [];
   
-  // 谷歌搜索结果通常在 <div class="g"> 元素中
-  $('div.g').each((_, element) => {
-    const titleElement = $(element).find('h3');
+  // 尝试多种选择器以适应Google搜索结果的各种变化
+  // 现代Google搜索结果选择器
+  $('div.g, div.rso > div, div[data-hveid], div.MjjYud, div.yuRUbf').each((_, element) => {
+    // 尝试多种标题选择器
+    const titleElement = $(element).find('h3, .LC20lb');
     const title = titleElement.text().trim();
     
-    const linkElement = $(element).find('a');
+    // 尝试多种链接选择器
+    const linkElement = $(element).find('a[href]').first();
     const href = linkElement.attr('href');
     
     let url = '';
@@ -122,21 +125,92 @@ function extractNewsArticles(html: string): InsertCryptoNews[] {
       url = href;
     }
     
-    const snippetElement = $(element).find('.VwiC3b, .st');
-    const summary = snippetElement.text().trim();
+    // 尝试多种摘要选择器
+    const snippetElement = $(element).find('.VwiC3b, .st, .IsZvec, div[data-content-feature="1"]');
+    let summary = snippetElement.text().trim();
+    
+    // 确保摘要不为空
+    if (!summary) {
+      // 备用：尝试获取父元素中的文本
+      summary = $(element).find('div:contains("."):not(h3)').text().trim();
+    }
     
     if (title && url && summary) {
-      const source = new URL(url).hostname.replace('www.', '');
-      
-      articles.push({
-        title,
-        url,
-        summary,
-        source,
-        publishedAt: new Date()
-      });
+      try {
+        const source = new URL(url).hostname.replace('www.', '');
+        const fetchedAt = new Date();
+        
+        // 只添加独特的文章（基于URL）
+        if (!articles.some(a => a.url === url)) {
+          articles.push({
+            title,
+            url,
+            summary,
+            source,
+            publishedAt: new Date()
+          });
+        }
+      } catch (e) {
+        console.log(`无法解析URL: ${url}`, e);
+      }
     }
   });
+  
+  // 如果上面的选择器没有匹配到任何内容，尝试更通用的方法
+  if (articles.length === 0) {
+    $('a').each((_, element) => {
+      const $a = $(element);
+      const href = $a.attr('href');
+      
+      // 只处理看起来像新闻文章的链接
+      if (href && href.includes('http') && 
+          (href.includes('news') || href.includes('article') || href.includes('blog'))) {
+        
+        let url = href;
+        if (href.startsWith('/url?q=')) {
+          url = href.substring(7);
+          const endIndex = url.indexOf('&');
+          if (endIndex !== -1) {
+            url = url.substring(0, endIndex);
+          }
+          url = decodeURIComponent(url);
+        }
+        
+        // 获取周围的文本作为标题和摘要
+        const parent = $a.parent().parent();
+        const title = $a.text().trim() || parent.find('h3, h2, strong').text().trim();
+        let summary = '';
+        
+        // 尝试获取周围的文本作为摘要
+        parent.contents().each((_, node) => {
+          if (node.type === 'text' && $(node).text().trim().length > 20) {
+            summary = $(node).text().trim();
+          }
+        });
+        
+        if (!summary) {
+          summary = parent.text().replace(title, '').trim();
+        }
+        
+        if (title && url && summary && 
+            title.length > 10 && summary.length > 20 && 
+            !articles.some(a => a.url === url)) {
+          try {
+            const source = new URL(url).hostname.replace('www.', '');
+            articles.push({
+              title,
+              url,
+              summary: summary.substring(0, 300), // 限制摘要长度
+              source,
+              publishedAt: new Date()
+            });
+          } catch (e) {
+            console.log(`无法解析URL: ${url}`, e);
+          }
+        }
+      }
+    });
+  }
   
   return articles;
 }
@@ -146,16 +220,51 @@ function extractNewsArticles(html: string): InsertCryptoNews[] {
  */
 async function searchGoogleForNews(query: string, retryCount = 0): Promise<InsertCryptoNews[]> {
   try {
-    const encodedQuery = encodeURIComponent(query);
-    const searchUrl = `${CONFIG.GOOGLE_SEARCH_URL}${encodedQuery}`;
+    // 增强查询 - 添加"news"和日期限制以获取最新结果
+    let enhancedQuery = `${query} news`;
     
-    console.log(`搜索加密货币新闻: "${query}"`);
+    // 添加近期限制，偶尔随机添加当前年份
+    if (Math.random() > 0.5) {
+      const currentYear = new Date().getFullYear();
+      enhancedQuery += ` ${currentYear}`;
+    }
+    
+    // 随机添加源站限制来尝试获取权威来源的内容
+    const newsSources = [
+      'coindesk.com', 
+      'cointelegraph.com', 
+      'crypto.com/news', 
+      'decrypt.co',
+      'coinmarketcap.com/alexandria'
+    ];
+    
+    // 30%的概率添加特定来源限制
+    if (Math.random() > 0.7) {
+      const randomSourceIndex = Math.floor(Math.random() * newsSources.length);
+      enhancedQuery += ` site:${newsSources[randomSourceIndex]}`;
+    }
+    
+    const encodedQuery = encodeURIComponent(enhancedQuery);
+    const searchUrl = `${CONFIG.GOOGLE_SEARCH_URL}${encodedQuery}&tbm=nws`;
+    
+    console.log(`搜索加密货币新闻: "${enhancedQuery}"`);
     const html = await fetchWebPage(searchUrl);
-    return extractNewsArticles(html);
+    let articles = extractNewsArticles(html);
+    
+    // 如果没有找到文章，尝试备用查询
+    if (articles.length === 0 && retryCount < 1) {
+      // 尝试不带新闻标签的普通搜索
+      const fallbackUrl = `${CONFIG.GOOGLE_SEARCH_URL}${encodeURIComponent(query)}`;
+      console.log(`尝试备用搜索: "${query}"`);
+      const fallbackHtml = await fetchWebPage(fallbackUrl);
+      articles = extractNewsArticles(fallbackHtml);
+    }
+    
+    return articles;
   } catch (error) {
     if (retryCount < CONFIG.RETRY_ATTEMPTS) {
       console.log(`搜索"${query}"失败，${retryCount + 1}/${CONFIG.RETRY_ATTEMPTS}次重试...`);
-      await delay(CONFIG.RETRY_DELAY_MS);
+      await delay(CONFIG.RETRY_DELAY_MS + Math.random() * 2000); // 增加随机延迟
       return searchGoogleForNews(query, retryCount + 1);
     } else {
       console.error(`无法获取"${query}"的搜索结果:`, error);
