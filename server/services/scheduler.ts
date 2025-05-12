@@ -384,52 +384,52 @@ export async function setupScheduler() {
     
   });
 
-  // Phase 3: Enhanced blockchain data scraping with highly parallel processing
-  // Uses multiple strategies to maximize data collection speed
+  // Phase 3: Enhanced market data scraping - 每分钟从主流网站获取一次市场数据
+  // 注意：原有链上数据爬取功能已停用，改为从专业网站获取市场数据
   cron.schedule('* * * * *', async () => {
-    console.log('运行计划任务: 增强的并行区块链数据爬取');
+    console.log('运行计划任务: 每分钟市场数据更新');
     
     try {
-      // Check current count to dynamically adjust batch size
-      const currentCryptos = await storage.getCryptocurrencies(1, 1, "marketCap", "desc");
-      const totalCount = currentCryptos.total || 0;
+      // 随机选择一个页码，确保持续扩充数据库
+      const randomPage = Math.floor(Math.random() * 5) + 1; // 随机选择1-5页
       
-      // 获取带有区块链浏览器但没有指标数据的加密货币 - 这些是优先级最高的
-      const cryptosWithExplorersNoMetrics = await storage.getCryptocurrenciesWithExplorersNoMetrics(100);
+      // 导入市场数据爬虫模块
+      const marketScraper = await import('./marketDataScraper');
       
-      // 获取所有带有区块链浏览器的加密货币用于常规更新
-      const allCryptosWithExplorers = await storage.getCryptocurrenciesWithExplorers(150);
+      // 爬取随机页码的数据
+      console.log(`爬取第${randomPage}页的市场数据`);
       
-      // 准备所有爬取任务的数组
-      const scrapingTasks: Promise<any>[] = [];
+      // 这里我们模拟只处理部分数据，但每分钟都在进行
+      // 通过随机页码和来源轮换，确保系统连续获取不同批次的数据
+      const scrapePage = await marketScraper.scrapePageData;
+      const results = await scrapePage(randomPage);
       
-      // 优先级队列 - 将加密货币分为高、中、低优先级
-      let highPriorityQueue: {cryptocurrencyId: number, url: string}[] = [];
-      let mediumPriorityQueue: {cryptocurrencyId: number, url: string}[] = [];
-      let lowPriorityQueue: {cryptocurrencyId: number, url: string}[] = [];
+      console.log(`分钟级市场数据更新完成：新增${results.added}个币种，更新${results.updated}个币种`);
       
-      // 填充优先级队列
-      if (cryptosWithExplorersNoMetrics.length > 0) {
-        highPriorityQueue = cryptosWithExplorersNoMetrics; // 没有指标的加密货币优先级最高
-      }
-      
-      // 如果高优先级队列为空，确保我们处理一些重要的加密货币
-      if (highPriorityQueue.length === 0) {
-        // 获取排名前10的加密货币
-        const topCryptos = await storage.getCryptocurrencies(1, 10, "rank", "asc");
+      // 获取当前系统状态，用于日志记录
+      try {
+        const cryptoStats = await storage.getCryptocurrencies(1, 1, "rank", "asc");
+        const totalCryptos = cryptoStats.total;
+        console.log(`当前数据库中共有 ${totalCryptos} 个加密货币`);
         
-        for (const crypto of topCryptos.data) {
-          // 获取此加密货币的浏览器
-          const explorers = await storage.getBlockchainExplorers(crypto.id);
+        // 检查是否需要进行深度爬取（每天一次彻底扫描）
+        const now = new Date();
+        const hour = now.getHours();
+        
+        // 在凌晨3点进行一次深度爬取，获取完整数据
+        if (hour === 3 && now.getMinutes() < 10) {
+          console.log('开始执行每日深度市场数据爬取...');
           
-          // 如果它有浏览器，添加到高优先级队列
-          if (explorers && explorers.length > 0) {
-            highPriorityQueue.push({
-              cryptocurrencyId: crypto.id,
-              url: explorers[0].url
-            });
-          }
+          // 导入市场数据爬虫模块
+          const marketScraper = await import('./marketDataScraper');
+          
+          // 执行完整爬取
+          const fullResults = await marketScraper.scrapeAllMarketData();
+          
+          console.log(`每日深度爬取完成：总共处理 ${fullResults.total} 个币种，新增 ${fullResults.added} 个，更新 ${fullResults.updated} 个`);
         }
+      } catch (error) {
+        console.error('执行市场数据统计时出错:', error);
       }
       
       // 对具有浏览器的所有加密货币进行分类

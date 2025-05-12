@@ -717,6 +717,92 @@ async function updateDatabase(cryptoList: Partial<InsertCryptocurrency>[]): Prom
 }
 
 /**
+ * 爬取特定页面的市场数据
+ * 用于增量爬取和持续更新
+ */
+export async function scrapePageData(page: number = 1): Promise<{
+  added: number;
+  updated: number;
+  total: number;
+}> {
+  console.log(`开始爬取第${page}页的市场数据...`);
+  
+  try {
+    const results: Partial<InsertCryptocurrency>[] = [];
+    
+    // 随机选择数据源，确保每次调用都有不同的来源
+    const sources = ['CoinMarketCap', 'CoinGecko', 'Crypto.com'];
+    const randomSource = sources[Math.floor(Math.random() * sources.length)];
+    
+    console.log(`使用数据源: ${randomSource}`);
+    
+    // 根据选择的来源爬取数据
+    switch (randomSource) {
+      case 'CoinMarketCap':
+        const cmcResults = await scrapeCoinMarketCap(page);
+        results.push(...cmcResults);
+        break;
+      case 'CoinGecko':
+        const cgResults = await scrapeCoinGecko(page);
+        results.push(...cgResults);
+        break;
+      case 'Crypto.com':
+        const ccResults = await scrapeCryptoCom(page);
+        results.push(...ccResults);
+        break;
+    }
+    
+    // 如果主数据源失败，尝试备用数据源
+    if (results.length === 0) {
+      console.log(`主数据源 ${randomSource} 未返回数据，尝试备用数据源`);
+      const backupSource = sources.find(s => s !== randomSource);
+      
+      if (backupSource === 'CoinMarketCap') {
+        const backupResults = await scrapeCoinMarketCap(page);
+        results.push(...backupResults);
+      } else if (backupSource === 'CoinGecko') {
+        const backupResults = await scrapeCoinGecko(page);
+        results.push(...backupResults);
+      } else if (backupSource === 'Crypto.com') {
+        const backupResults = await scrapeCryptoCom(page);
+        results.push(...backupResults);
+      }
+    }
+    
+    console.log(`从${randomSource}第${page}页找到 ${results.length} 个加密货币`);
+    
+    // 去重和合并
+    const deduplicated = deduplicateAndMerge(results);
+    
+    // 更新数据库
+    const { added, updated, skipped } = await updateDatabase(deduplicated);
+    
+    console.log(`
+    ===== 页面${page}数据爬取完成 =====
+    - 找到加密货币: ${results.length}
+    - 去重后: ${deduplicated.length}
+    - 新增: ${added}
+    - 更新: ${updated}
+    - 跳过: ${skipped}
+    ============================
+    `);
+    
+    return {
+      added,
+      updated,
+      total: deduplicated.length
+    };
+  } catch (error) {
+    console.error(`爬取页面${page}市场数据时出错:`, error);
+    return {
+      added: 0,
+      updated: 0,
+      total: 0
+    };
+  }
+}
+
+/**
  * 主函数: 爬取所有市场数据
  */
 export async function scrapeAllMarketData(): Promise<{
