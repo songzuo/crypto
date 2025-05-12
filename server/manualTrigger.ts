@@ -58,7 +58,7 @@ async function executeTask() {
   // await searchRankedCryptocurrencies(1, 600); 
   
   // 选项2：直接从头搜索前500币
-  await scrapeTopCryptocurrencies(500);
+  await searchTopCryptocurrencies(500);
   
   // 选项3：初始数据收集（与应用启动时相同）
   // await runInitialDataCollection();

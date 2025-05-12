@@ -406,8 +406,8 @@ async function forceBreakthroughScrape(): Promise<void> {
     }
   });
   
-  // 突破467限制的专用任务 - 每天执行三次确保能突破限制
-  cron.schedule('0 0,8,16 * * *', async () => {
+  // 突破467限制的专用任务 - 更频繁执行，每4小时执行一次，确保能突破限制
+  cron.schedule('0 */4 * * *', async () => {
     console.log('运行计划任务: 强制突破币种数量限制检查');
     
     try {
@@ -420,7 +420,26 @@ async function forceBreakthroughScrape(): Promise<void> {
       // 如果没有达到目标数量，执行突破性爬取
       if (totalCount < 500) {
         console.log(`当前币种数量${totalCount}未达目标500个，启动突破性大规模爬取...`);
+        
+        // 使用多种方法尝试突破限制
+        console.log("尝试使用多种方法突破限制");
+        
+        // 方法1: 使用forceBreakthroughScrape
+        console.log("方法1: 使用突破性爬取");
         await forceBreakthroughScrape();
+        
+        // 检查是否已达到目标
+        const afterMethod1 = await storage.getCryptocurrencies(1, 1, 'id', 'asc');
+        const countAfterMethod1 = afterMethod1.total || 0;
+        
+        // 如果方法1没有达到目标，尝试方法2
+        if (countAfterMethod1 < 500) {
+          console.log(`方法1后币种数量为${countAfterMethod1}，尝试方法2: 直接搜索前500币种`);
+          
+          // 方法2: 直接搜索前500名的币种
+          const cryptoSearch = await import('./cryptoSearch');
+          await cryptoSearch.searchTopCryptocurrencies(500);
+        }
       } else {
         console.log(`当前币种数量${totalCount}已超过目标500个，无需进行突破性爬取`);
       }
