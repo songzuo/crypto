@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useRoute } from "wouter";
 
 interface ExplorerDetailProps {
   cryptocurrencyId: number;
@@ -418,11 +419,24 @@ const ExplorerDetail: React.FC<ExplorerDetailProps> = ({ cryptocurrencyId }) => 
 const Explorer: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCrypto, setSelectedCrypto] = useState<number | null>(null);
-
+  
+  // Get route params
+  const params = useRoute("/explorer/:id");
+  
   // Get all cryptocurrencies for search
   const { data, isLoading } = useQuery({
     queryKey: ["/api/cryptocurrencies?limit=500"],
   });
+  
+  // Check for ID in URL params
+  useEffect(() => {
+    if (params && params.id) {
+      const numericId = parseInt(params.id, 10);
+      if (!isNaN(numericId)) {
+        setSelectedCrypto(numericId);
+      }
+    }
+  }, [params]);
 
   // Handle search form submit
   const handleSearch = (e: React.FormEvent) => {
@@ -436,6 +450,8 @@ const Explorer: React.FC = () => {
     
     if (found) {
       setSelectedCrypto(found.id);
+      // Update URL without refreshing page
+      window.history.pushState({}, "", `/explorer/${found.id}`);
     }
   };
 

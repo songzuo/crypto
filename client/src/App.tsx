@@ -19,6 +19,7 @@ function Router() {
         <Route path="/" component={Dashboard} />
         <Route path="/markets" component={Markets} />
         <Route path="/comparisons" component={Comparisons} />
+        <Route path="/explorer/:id" component={Explorer} />
         <Route path="/explorer" component={Explorer} />
         <Route path="/ai-insights" component={AiInsights} />
         <Route component={NotFound} />
