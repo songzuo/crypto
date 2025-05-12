@@ -4,6 +4,7 @@ import { findBlockchainExplorer, scrapeBlockchainData } from './scraper';
 import { getAiInsightsForCrypto } from './aiInsights';
 import { storage } from '../storage';
 import { runDataFixer } from './dataFixer';
+import { updateTrumpCoinData } from './trumpFix';
 
 // Function to run initial data collection immediately on startup
 export async function runInitialDataCollection() {
@@ -355,6 +356,9 @@ export async function setupScheduler() {
       // 运行通用数据修复器，修复市值、排名和链上指标数据
       const result = await runDataFixer(30);
       console.log(`数据修复结果: 市值和排名修复 ${result.marketCapFixed} 个币种，链上指标修复 ${result.metricsFixed} 个币种`);
+      
+      // 为确保引入顶部的导入语句
+      await updateTrumpCoinData();
     } catch (error) {
       console.error('数据修复过程中出错:', error);
     }

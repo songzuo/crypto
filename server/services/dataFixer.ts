@@ -321,150 +321,94 @@ export async function fixMarketCapAndRankData(limit: number = 30): Promise<numbe
   }
 }
 
-// 修复链上指标数据
+// 修复链上指标数据 - 优化版，多线程处理并按排名优先处理
 export async function fixMetricsData(limit: number = 30): Promise<number> {
-  console.log(`开始修复链上指标数据...`);
+  console.log(`开始修复链上指标数据（多线程，排名优先）...`);
   let fixedCount = 0;
   
   try {
     // 获取有浏览器但指标数据不完整的加密货币
-    const cryptos = await storage.getCryptocurrenciesWithExplorersNoMetrics(limit);
+    const cryptosWithExplorers = await storage.getCryptocurrenciesWithExplorersNoMetrics(limit * 2); // 获取更多，便于排序
     
-    for (const item of cryptos) {
-      console.log(`尝试修复 ID:${item.cryptocurrencyId} 的链上指标数据，从 ${item.url} 获取...`);
-      
-      try {
-        // 获取币种信息
-        const crypto = await storage.getCryptocurrency(item.cryptocurrencyId);
-        if (!crypto) {
-          console.log(`未找到ID为 ${item.cryptocurrencyId} 的币种信息，跳过`);
-          continue;
-        }
-        
-        console.log(`正在为 ${crypto.name} 抓取链上指标数据...`);
-        
-        // 获取当前指标（如果有的话）
-        const currentMetrics = await storage.getMetrics(crypto.id);
-        
-        // 使用常规抓取器尝试获取链上数据
-        await import('./scraper').then(module => 
-          module.scrapeBlockchainData(item.url, crypto.id)
-        );
-        
-        // 检查是否成功更新了数据
-        const updatedMetrics = await storage.getMetrics(crypto.id);
-        
-        // 通过比较前后的数据，判断是否成功更新
-        const hasNewData = updatedMetrics && (!currentMetrics || 
-          JSON.stringify(updatedMetrics.metrics) !== JSON.stringify(currentMetrics.metrics) ||
-          updatedMetrics.activeAddresses !== currentMetrics.activeAddresses ||
-          updatedMetrics.totalTransactions !== currentMetrics.totalTransactions ||
-          updatedMetrics.hashrate !== currentMetrics.hashrate
-        );
-        
-        if (hasNewData) {
-          console.log(`✓ 成功更新 ${crypto.name} 的链上指标数据`);
-          fixedCount++;
-        } else {
-          console.log(`- 没有为 ${crypto.name} 获取到新的链上指标数据，尝试直接解析网页...`);
-          
-          // 如果常规方法失败，尝试直接从网页提取关键信息
-          try {
-            const html = await makeHttpsRequest(item.url);
-            const $ = cheerio.load(html);
-            
-            // 通用指标搜索模式
-            const metricsToExtract: Record<string, string[]> = {
-              activeAddresses: ['active addresses', 'active accounts', 'unique addresses'],
-              totalTransactions: ['total transactions', 'transaction count', 'tx count', 'number of transactions'],
-              hashrate: ['hashrate', 'hash rate', 'network hash rate', 'mining power'],
-              transactionsPerSecond: ['tps', 'transactions per second', 'tx/s'],
-              extraMetrics: [] // 空数组用于存储其他可能的指标
-            };
-            
-            // 指标更新对象
-            const metricsUpdate: Partial<InsertMetric> = {
-              metrics: {} // 存储其他发现的指标
-            };
-            
-            // 搜索页面中的数据
-            $('body').find('*').each((_, element) => {
-              const text = $(element).text().toLowerCase();
-              
-              // 检查所有可能的指标
-              for (const [metricKey, searchTerms] of Object.entries(metricsToExtract)) {
-                for (const term of searchTerms) {
-                  if (text.includes(term)) {
-                    // 尝试从包含关键词的元素中提取数字
-                    const parentText = $(element).parent().text().trim();
-                    const numberMatch = parentText.match(/[\d,]+\.?\d*/);
-                    
-                    if (numberMatch) {
-                      const numValue = parseFloat(numberMatch[0].replace(/,/g, ''));
-                      if (!isNaN(numValue)) {
-                        // 根据指标类型更新相应字段
-                        if (metricKey === 'activeAddresses') {
-                          metricsUpdate.activeAddresses = numValue;
-                          console.log(`  提取到活跃地址数: ${numValue}`);
-                        } else if (metricKey === 'totalTransactions') {
-                          metricsUpdate.totalTransactions = numValue;
-                          console.log(`  提取到总交易数: ${numValue}`);
-                        } else if (metricKey === 'hashrate') {
-                          metricsUpdate.hashrate = numValue;
-                          console.log(`  提取到算力: ${numValue}`);
-                        } else if (metricKey === 'transactionsPerSecond') {
-                          metricsUpdate.transactionsPerSecond = numValue;
-                          console.log(`  提取到每秒交易数: ${numValue}`);
-                        } else if (metricKey === 'extraMetrics') {
-                          // 忽略extraMetrics
-                          continue;
-                        } else {
-                          // 存储其他发现的指标
-                          if (!metricsUpdate.metrics) metricsUpdate.metrics = {};
-                          (metricsUpdate.metrics as Record<string, string>)[metricKey] = String(numValue);
-                          console.log(`  提取到其他指标 ${metricKey}: ${numValue}`);
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            });
-            
-            // 如果找到了任何指标数据，更新数据库
-            if (Object.keys(metricsUpdate).length > 1 || Object.keys(metricsUpdate.metrics || {}).length > 0) {
-              if (currentMetrics) {
-                // 更新现有指标
-                await storage.updateMetrics(currentMetrics.id, metricsUpdate);
-              } else {
-                // 创建新指标记录
-                const fullMetrics: InsertMetric = {
-                  cryptocurrencyId: crypto.id,
-                  activeAddresses: metricsUpdate.activeAddresses || null,
-                  totalTransactions: metricsUpdate.totalTransactions || null,
-                  averageTransactionValue: null,
-                  hashrate: metricsUpdate.hashrate || null,
-                  transactionsPerSecond: metricsUpdate.transactionsPerSecond || null,
-                  metrics: metricsUpdate.metrics || {},
-                };
-                await storage.createMetrics(fullMetrics);
-              }
-              
-              console.log(`✓ 通过直接解析网页成功更新 ${crypto.name} 的链上指标数据`);
-              fixedCount++;
-            } else {
-              console.log(`× 未能从网页中提取到 ${crypto.name} 的有效链上指标数据`);
-            }
-            
-          } catch (error) {
-            console.log(`  直接解析网页失败: ${(error as Error).message}`);
-          }
-        }
-        
-      } catch (error) {
-        console.error(`处理币种ID ${item.cryptocurrencyId} 时出错:`, error);
+    if (cryptosWithExplorers.length === 0) {
+      console.log("没有找到需要修复指标的加密货币");
+      return 0;
+    }
+    
+    // 获取所有这些币种的完整信息，用于排序
+    const cryptoDetails: Array<{
+      cryptocurrencyId: number;
+      url: string;
+      name: string;
+      symbol: string;
+      rank: number;
+      marketCap: number;
+    }> = [];
+    
+    for (const item of cryptosWithExplorers) {
+      const crypto = await storage.getCryptocurrency(item.cryptocurrencyId);
+      if (crypto) {
+        cryptoDetails.push({
+          cryptocurrencyId: item.cryptocurrencyId,
+          url: item.url,
+          name: crypto.name,
+          symbol: crypto.symbol,
+          rank: crypto.rank || 9999,
+          marketCap: crypto.marketCap || 0
+        });
       }
     }
+    
+    // 按优先级排序：
+    // 1. 先处理排名较小的币种（排名越小越重要）
+    // 2. 如果排名相同或不存在，按市值排序
+    cryptoDetails.sort((a, b) => {
+      // 特殊处理Solana币 - 最高优先级
+      if (a.name === "Solana") return -1;
+      if (b.name === "Solana") return 1;
+      
+      // 如果两个都有排名，按排名排序
+      if (a.rank !== 9999 && b.rank !== 9999) {
+        return a.rank - b.rank;
+      }
+      
+      // 如果只有一个有排名，有排名的优先级更高
+      if (a.rank !== 9999 && b.rank === 9999) return -1;
+      if (a.rank === 9999 && b.rank !== 9999) return 1;
+      
+      // 都没有排名，按市值排序
+      return b.marketCap - a.marketCap;
+    });
+    
+    // 限制处理数量
+    const cryptosToProcess = cryptoDetails.slice(0, limit);
+    
+    console.log("排序后的待处理币种（按优先级）:");
+    cryptosToProcess.forEach((item, index) => {
+      console.log(`${index + 1}. ${item.name} (${item.symbol}) - 排名: ${item.rank === 9999 ? '未知' : item.rank}`);
+    });
+    
+    // 计算并行线程数 - 根据可用处理能力动态调整
+    const threadCount = Math.min(5, cryptosToProcess.length); // 最多5个并行线程
+    console.log(`将使用 ${threadCount} 个并行线程进行处理`);
+    
+    // 将币种分配到不同的线程中
+    const threadsItems = Array.from({ length: threadCount }, () => []);
+    cryptosToProcess.forEach((item, index) => {
+      const threadIndex = index % threadCount;
+      threadsItems[threadIndex].push(item);
+    });
+    
+    // 创建并发执行的Promise数组
+    const processingPromises = threadsItems.map((items, threadIndex) => 
+      processMetricsBatch(items, threadIndex)
+    );
+    
+    // 等待所有线程完成
+    const results = await Promise.all(processingPromises);
+    
+    // 统计修复数量
+    fixedCount = results.reduce((total, count) => total + count, 0);
     
     console.log(`链上指标数据修复完成。成功修复 ${fixedCount} 个币种的数据。`);
     return fixedCount;
@@ -473,6 +417,177 @@ export async function fixMetricsData(limit: number = 30): Promise<number> {
     console.error(`链上指标数据修复过程中出错:`, error);
     return fixedCount;
   }
+}
+
+// 处理一批币种的指标数据修复 - 在单个线程中执行
+async function processMetricsBatch(items: any[], threadIndex: number): Promise<number> {
+  let fixedCount = 0;
+  
+  for (const item of items) {
+    console.log(`[线程 ${threadIndex + 1}] 尝试修复 ${item.name} (${item.symbol}) [排名 ${item.rank === 9999 ? 'N/A' : item.rank}] 的链上指标数据...`);
+    
+    try {
+      // 获取当前指标（如果有的话）
+      const currentMetrics = await storage.getMetrics(item.cryptocurrencyId);
+      
+      // 使用常规抓取器尝试获取链上数据
+      await import('./scraper').then(module => 
+        module.scrapeBlockchainData(item.url, item.cryptocurrencyId)
+      );
+      
+      // 等待一小段时间，确保数据写入完成
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // 检查是否成功更新了数据
+      const updatedMetrics = await storage.getMetrics(item.cryptocurrencyId);
+      
+      // 通过比较前后的数据，判断是否成功更新
+      const hasNewData = updatedMetrics && (!currentMetrics || 
+        JSON.stringify(updatedMetrics.metrics) !== JSON.stringify(currentMetrics.metrics) ||
+        updatedMetrics.activeAddresses !== currentMetrics.activeAddresses ||
+        updatedMetrics.totalTransactions !== currentMetrics.totalTransactions ||
+        updatedMetrics.hashrate !== currentMetrics.hashrate
+      );
+      
+      if (hasNewData) {
+        console.log(`[线程 ${threadIndex + 1}] ✓ 成功更新 ${item.name} 的链上指标数据`);
+        fixedCount++;
+      } else {
+        console.log(`[线程 ${threadIndex + 1}] - 尝试直接解析网页获取 ${item.name} 的链上指标数据...`);
+        
+        // 如果常规方法失败，尝试直接从网页提取关键信息
+        try {
+          const html = await makeHttpsRequest(item.url);
+          const $ = cheerio.load(html);
+          
+          // 按币种类型优化指标抓取策略
+          let metricsToExtract: Record<string, string[]>;
+          
+          // 为特定币种定制抓取策略
+          if (item.name === "Solana") {
+            metricsToExtract = {
+              activeAddresses: ['active addresses', 'active accounts', 'unique addresses', 'accounts', 'wallets', 'holders'],
+              totalTransactions: ['total transactions', 'transaction count', 'tx count', 'transactions', 'txns'],
+              hashrate: ['hashrate', 'hash rate', 'network hash rate', 'total stake', 'staked sol'],
+              transactionsPerSecond: ['tps', 'transactions per second', 'tx/s', 'current tps'],
+              extraMetrics: [] 
+            };
+          } else if (item.name === "Bitcoin" || item.name === "Ethereum") {
+            // 大型币种的关键指标
+            metricsToExtract = {
+              activeAddresses: ['active addresses', 'active accounts', 'daily active addresses', 'unique addresses', 'unique users'],
+              totalTransactions: ['total transactions', 'transaction count', 'tx count', 'all transactions'],
+              hashrate: ['hashrate', 'hash rate', 'network hash rate', 'mining power', 'network power'],
+              transactionsPerSecond: ['tps', 'transactions per second', 'tx/s', 'network speed'],
+              extraMetrics: [] 
+            };
+          } else {
+            // 通用指标搜索模式
+            metricsToExtract = {
+              activeAddresses: ['active addresses', 'active accounts', 'unique addresses', 'wallet count'],
+              totalTransactions: ['total transactions', 'transaction count', 'tx count', 'number of transactions'],
+              hashrate: ['hashrate', 'hash rate', 'network hash rate', 'mining power', 'network power'],
+              transactionsPerSecond: ['tps', 'transactions per second', 'tx/s', 'network throughput'],
+              extraMetrics: [] 
+            };
+          }
+          
+          // 添加通用的区块浏览器术语
+          metricsToExtract.totalBlocks = ['total blocks', 'block count', 'block height', 'blocks'];
+          metricsToExtract.totalValidators = ['validators', 'validator count', 'total validators', 'nodes'];
+          
+          // 指标更新对象
+          const metricsUpdate: Partial<InsertMetric> = {
+            metrics: {} // 存储其他发现的指标
+          };
+          
+          // 搜索页面中的数据
+          $('body').find('*').each((_, element) => {
+            const text = $(element).text().toLowerCase();
+            
+            // 检查所有可能的指标
+            for (const [metricKey, searchTerms] of Object.entries(metricsToExtract)) {
+              for (const term of searchTerms) {
+                if (text.includes(term)) {
+                  // 尝试从包含关键词的元素中提取数字
+                  const parentText = $(element).parent().text().trim();
+                  const numberMatch = parentText.match(/[\d,\.]+[KkMmBbTt]?/);
+                  
+                  if (numberMatch) {
+                    // 解析数字，处理K/M/B/T单位
+                    const numStr = numberMatch[0];
+                    let numValue = parseNumberWithUnits(numStr) || 0;
+                    
+                    if (numValue > 0) {
+                      // 根据指标类型更新相应字段
+                      if (metricKey === 'activeAddresses') {
+                        metricsUpdate.activeAddresses = numValue;
+                        console.log(`[线程 ${threadIndex + 1}]   提取到活跃地址数: ${numValue}`);
+                      } else if (metricKey === 'totalTransactions') {
+                        metricsUpdate.totalTransactions = numValue;
+                        console.log(`[线程 ${threadIndex + 1}]   提取到总交易数: ${numValue}`);
+                      } else if (metricKey === 'hashrate') {
+                        metricsUpdate.hashrate = numValue;
+                        console.log(`[线程 ${threadIndex + 1}]   提取到算力/质押量: ${numValue}`);
+                      } else if (metricKey === 'transactionsPerSecond') {
+                        metricsUpdate.transactionsPerSecond = numValue;
+                        console.log(`[线程 ${threadIndex + 1}]   提取到每秒交易数: ${numValue}`);
+                      } else if (metricKey === 'extraMetrics') {
+                        // 忽略extraMetrics
+                        continue;
+                      } else {
+                        // 存储其他发现的指标
+                        if (!metricsUpdate.metrics) metricsUpdate.metrics = {};
+                        (metricsUpdate.metrics as Record<string, string>)[metricKey] = String(numValue);
+                        console.log(`[线程 ${threadIndex + 1}]   提取到其他指标 ${metricKey}: ${numValue}`);
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          });
+          
+          // 如果找到了任何指标数据，更新数据库
+          if (Object.keys(metricsUpdate).length > 1 || Object.keys(metricsUpdate.metrics || {}).length > 0) {
+            if (currentMetrics) {
+              // 更新现有指标
+              await storage.updateMetrics(currentMetrics.id, metricsUpdate);
+            } else {
+              // 创建新指标记录
+              const fullMetrics: InsertMetric = {
+                cryptocurrencyId: item.cryptocurrencyId,
+                activeAddresses: metricsUpdate.activeAddresses || null,
+                totalTransactions: metricsUpdate.totalTransactions || null,
+                averageTransactionValue: null,
+                hashrate: metricsUpdate.hashrate || null,
+                transactionsPerSecond: metricsUpdate.transactionsPerSecond || null,
+                metrics: metricsUpdate.metrics || {},
+              };
+              await storage.createMetrics(fullMetrics);
+            }
+            
+            console.log(`[线程 ${threadIndex + 1}] ✓ 通过直接解析网页成功更新 ${item.name} 的链上指标数据`);
+            fixedCount++;
+          } else {
+            console.log(`[线程 ${threadIndex + 1}] × 未能从网页中提取到 ${item.name} 的有效链上指标数据`);
+          }
+          
+        } catch (error) {
+          console.log(`[线程 ${threadIndex + 1}]   直接解析网页失败: ${(error as Error).message}`);
+        }
+      }
+      
+    } catch (error) {
+      console.error(`[线程 ${threadIndex + 1}] 处理币种 ${item.name} (ID: ${item.cryptocurrencyId}) 时出错:`, error);
+    }
+    
+    // 线程间隔，避免请求过于密集
+    await new Promise(resolve => setTimeout(resolve, 1000 + (Math.random() * 1000)));
+  }
+  
+  console.log(`[线程 ${threadIndex + 1}] 完成处理，成功修复 ${fixedCount} 个币种的数据`);
+  return fixedCount;
 }
 
 // 综合数据修复入口函数
