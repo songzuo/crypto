@@ -30,7 +30,7 @@ const CONFIG = {
     "blockchain technology news",
     "defi news"
   ],
-  // 已知的加密货币新闻网站
+  // 已知的加密货币新闻网站 (扩展到20个主要来源)
   CRYPTO_NEWS_SITES: [
     { 
       url: "https://cointelegraph.com/", 
@@ -66,6 +66,111 @@ const CONFIG = {
       titleSelector: "h2, h3",
       linkSelector: "a", 
       summarySelector: ".excerpt, p"
+    },
+    { 
+      url: "https://www.bitcoin.com/news/", 
+      articleSelector: "article, .article-card", 
+      titleSelector: "h3, .article-card-title",
+      linkSelector: "a", 
+      summarySelector: ".article-card-excerpt, p"
+    },
+    { 
+      url: "https://news.bitcoin.com/", 
+      articleSelector: ".story, article", 
+      titleSelector: "h3, h2, .entry-title",
+      linkSelector: "a", 
+      summarySelector: ".entry-excerpt, p"
+    },
+    { 
+      url: "https://www.cryptonews.com/", 
+      articleSelector: ".article, .cn-tile", 
+      titleSelector: ".cn-tile-header, h4, h2",
+      linkSelector: "a", 
+      summarySelector: ".cn-tile-excerpt, p"
+    },
+    { 
+      url: "https://cryptoslate.com/news/", 
+      articleSelector: "article, .post-card", 
+      titleSelector: "h2, .title",
+      linkSelector: "a", 
+      summarySelector: ".excerpt, p"
+    },
+    { 
+      url: "https://dailyhodl.com/", 
+      articleSelector: "article, .post", 
+      titleSelector: "h3, .entry-title",
+      linkSelector: "a", 
+      summarySelector: ".entry-content p, .excerpt"
+    },
+    { 
+      url: "https://www.newsbtc.com/", 
+      articleSelector: "article, .jeg_post", 
+      titleSelector: "h2, .jeg_post_title",
+      linkSelector: "a", 
+      summarySelector: ".jeg_post_excerpt, p"
+    },
+    { 
+      url: "https://cryptopotato.com/", 
+      articleSelector: "article, .post", 
+      titleSelector: "h2, .title, h3",
+      linkSelector: "a", 
+      summarySelector: ".excerpt, p"
+    },
+    { 
+      url: "https://ambcrypto.com/", 
+      articleSelector: "article, .post", 
+      titleSelector: "h2, .entry-title",
+      linkSelector: "a", 
+      summarySelector: ".entry-content p"
+    },
+    { 
+      url: "https://u.today/", 
+      articleSelector: "article, .article-card", 
+      titleSelector: "h2, .article-card__title",
+      linkSelector: "a", 
+      summarySelector: ".article-card__lead, p"
+    },
+    { 
+      url: "https://cryptobriefing.com/", 
+      articleSelector: "article, .article-card", 
+      titleSelector: "h2, h3, .title",
+      linkSelector: "a", 
+      summarySelector: ".excerpt, p"
+    },
+    { 
+      url: "https://beincrypto.com/", 
+      articleSelector: "article, .bic-article", 
+      titleSelector: "h2, .title",
+      linkSelector: "a", 
+      summarySelector: ".subtitle, p"
+    },
+    { 
+      url: "https://zycrypto.com/", 
+      articleSelector: "article, .post", 
+      titleSelector: "h3, .entry-title",
+      linkSelector: "a", 
+      summarySelector: ".entry-excerpt, p"
+    },
+    { 
+      url: "https://www.crypto-news-flash.com/", 
+      articleSelector: "article, .article", 
+      titleSelector: "h3, .article-title",
+      linkSelector: "a", 
+      summarySelector: ".article-excerpt, p"
+    },
+    { 
+      url: "https://coinpedia.org/", 
+      articleSelector: "article, .post", 
+      titleSelector: "h2, .entry-title",
+      linkSelector: "a", 
+      summarySelector: ".entry-content p"
+    },
+    { 
+      url: "https://bitcoinmagazine.com/", 
+      articleSelector: "article, .article", 
+      titleSelector: "h2, .title",
+      linkSelector: "a", 
+      summarySelector: ".description, p"
     }
   ],
   RETRY_ATTEMPTS: 3,
