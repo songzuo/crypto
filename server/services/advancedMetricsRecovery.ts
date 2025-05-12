@@ -364,6 +364,15 @@ async function scrapeScanWebsites(crypto: Cryptocurrency, metricsUpdate: Partial
     
     let successCount = 0;
     
+    // 处理特殊情况 - XRP
+    if (crypto.name === 'XRP' || crypto.symbol === 'XRP') {
+      console.log(`[线程 ${threadIndex+1}] 检测到XRP，使用特定的XRP爬虫逻辑`);
+      const xrpSuccess = await scrapeXRPMetrics(crypto, metricsUpdate, threadIndex);
+      if (xrpSuccess) {
+        return true;
+      }
+    }
+    
     // 尝试每个浏览器URL
     for (const explorer of dbExplorers) {
       try {
@@ -397,6 +406,172 @@ async function scrapeScanWebsites(crypto: Cryptocurrency, metricsUpdate: Partial
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error(`[线程 ${threadIndex+1}] 爬取区块链浏览器数据过程中出错: ${errorMsg}`);
+    return false;
+  }
+}
+
+/**
+ * XRP专用爬虫 - 处理XRPScan网站
+ */
+async function scrapeXRPMetrics(crypto: Cryptocurrency, metricsUpdate: Partial<InsertMetric>, threadIndex: number): Promise<boolean> {
+  try {
+    console.log(`[线程 ${threadIndex+1}] 开始专用XRP链上指标抓取...`);
+    
+    // XRP主要网址
+    const mainUrl = 'https://xrpscan.com/';
+    const metricsUrl = 'https://xrpscan.com/metrics';
+    const ledgerUrl = 'https://xrpscan.com/ledgers';
+    
+    let successCount = 0;
+    
+    // 从主网页提取数据
+    try {
+      console.log(`[线程 ${threadIndex+1}] 爬取XRPScan主页...`);
+      const mainPageHtml = await makeHttpsRequest(mainUrl);
+      const $main = cheerio.load(mainPageHtml);
+      
+      // 从主页提取活跃地址数
+      const activeAddrText = $main('.card-body').text();
+      if (activeAddrText.includes('activated accounts')) {
+        const activeAddrMatch = activeAddrText.match(/([0-9,]+)\s+activated accounts/i);
+        if (activeAddrMatch && activeAddrMatch[1]) {
+          const value = parseNumberWithUnits(activeAddrMatch[1]);
+          if (value !== null && value > 0) {
+            metricsUpdate.activeAddresses = value;
+            console.log(`[线程 ${threadIndex+1}] 从XRPScan主页提取到XRP活跃地址数: ${value}`);
+            successCount++;
+          }
+        }
+      }
+      
+      // 提取总交易数
+      const totalTxText = $main('.card-body').text();
+      if (totalTxText.includes('transactions')) {
+        const totalTxMatch = totalTxText.match(/([0-9,.]+[KMB]?)\s+transactions/i);
+        if (totalTxMatch && totalTxMatch[1]) {
+          const value = parseNumberWithUnits(totalTxMatch[1]);
+          if (value !== null && value > 0) {
+            metricsUpdate.totalTransactions = value;
+            console.log(`[线程 ${threadIndex+1}] 从XRPScan主页提取到XRP总交易数: ${value}`);
+            successCount++;
+          }
+        }
+      }
+    } catch (error) {
+      console.log(`[线程 ${threadIndex+1}] 爬取XRPScan主页时出错: ${error}`);
+    }
+    
+    // 访问metrics页面获取更多指标
+    try {
+      console.log(`[线程 ${threadIndex+1}] 爬取XRPScan指标页...`);
+      const metricsPageHtml = await makeHttpsRequest(metricsUrl);
+      const $metrics = cheerio.load(metricsPageHtml);
+      
+      // 提取TPS
+      $metrics('.card').each((_, card) => {
+        const cardText = $metrics(card).text();
+        if (cardText.includes('TX/s') || cardText.includes('Transactions Per Second')) {
+          const tpsMatch = cardText.match(/([0-9,.]+)\s*TX\/s/i) || 
+                          cardText.match(/([0-9,.]+)\s*Transactions Per Second/i);
+          if (tpsMatch && tpsMatch[1]) {
+            const value = parseFloat(tpsMatch[1].replace(/,/g, ''));
+            if (!isNaN(value) && value > 0) {
+              metricsUpdate.transactionsPerSecond = value;
+              console.log(`[线程 ${threadIndex+1}] 从XRPScan指标页提取到XRP每秒交易数: ${value}`);
+              successCount++;
+            }
+          }
+        }
+        
+        // 提取验证节点数
+        if (cardText.includes('Validators') || cardText.includes('validator')) {
+          const validatorMatch = cardText.match(/([0-9,.]+)\s*Validators/i) || 
+                               cardText.match(/([0-9,.]+)\s*validator/i);
+          if (validatorMatch && validatorMatch[1]) {
+            const value = parseFloat(validatorMatch[1].replace(/,/g, ''));
+            if (!isNaN(value) && value > 0) {
+              if (!metricsUpdate.metrics) metricsUpdate.metrics = {};
+              (metricsUpdate.metrics as Record<string, string>)['validators'] = String(value);
+              console.log(`[线程 ${threadIndex+1}] 从XRPScan指标页提取到XRP验证节点数: ${value}`);
+              successCount++;
+            }
+          }
+        }
+      });
+    } catch (error) {
+      console.log(`[线程 ${threadIndex+1}] 爬取XRPScan指标页时出错: ${error}`);
+    }
+    
+    // 访问ledger页面获取额外指标
+    try {
+      console.log(`[线程 ${threadIndex+1}] 爬取XRPScan账本页...`);
+      const ledgerPageHtml = await makeHttpsRequest(ledgerUrl);
+      const $ledger = cheerio.load(ledgerPageHtml);
+      
+      // 提取账本总数
+      const ledgerIndexText = $ledger('.card-body').text();
+      const ledgerMatch = ledgerIndexText.match(/Ledger\s*#([0-9,]+)/i);
+      if (ledgerMatch && ledgerMatch[1]) {
+        const value = parseNumberWithUnits(ledgerMatch[1]);
+        if (value !== null && value > 0) {
+          if (!metricsUpdate.metrics) metricsUpdate.metrics = {};
+          (metricsUpdate.metrics as Record<string, string>)['totalLedgers'] = String(value);
+          console.log(`[线程 ${threadIndex+1}] 从XRPScan账本页提取到XRP总账本数: ${value}`);
+          successCount++;
+        }
+      }
+    } catch (error) {
+      console.log(`[线程 ${threadIndex+1}] 爬取XRPScan账本页时出错: ${error}`);
+    }
+    
+    // 尝试备用策略 - 从网站API或备用页面获取数据
+    if (successCount < 2) {
+      try {
+        // 网站可能有专用API或统计页面
+        const statsUrl = 'https://xrpscan.com/stats';
+        console.log(`[线程 ${threadIndex+1}] 尝试爬取XRPScan统计页...`);
+        const statsPageHtml = await makeHttpsRequest(statsUrl);
+        const $stats = cheerio.load(statsPageHtml);
+        
+        // 在统计页查找更多指标
+        $stats('.card, .table').each((_, element) => {
+          const elementText = $stats(element).text();
+          
+          // 扫描文本中可能包含的各种指标
+          const metrics = [
+            { name: 'ledgerCloseTime', regex: /Ledger Close Time:\s*([0-9.]+)\s*sec/i, key: 'ledgerCloseTime' },
+            { name: '总储备量', regex: /Total XRP:\s*([0-9,]+\.?[0-9]*)/i, key: 'totalSupply' },
+            { name: '流通量', regex: /Circulating Supply:\s*([0-9,]+\.?[0-9]*)/i, key: 'circulatingSupply' },
+            { name: '平均交易费', regex: /Average Fee:\s*([0-9.]+)/i, key: 'averageFee' }
+          ];
+          
+          for (const metric of metrics) {
+            const match = elementText.match(metric.regex);
+            if (match && match[1]) {
+              const value = parseNumberWithUnits(match[1]);
+              if (value !== null && value > 0) {
+                if (!metricsUpdate.metrics) metricsUpdate.metrics = {};
+                (metricsUpdate.metrics as Record<string, string>)[metric.key] = String(value);
+                console.log(`[线程 ${threadIndex+1}] 从XRPScan统计页提取到XRP ${metric.name}: ${value}`);
+                successCount++;
+              }
+            }
+          }
+        });
+      } catch (error) {
+        console.log(`[线程 ${threadIndex+1}] 爬取XRPScan统计页时出错: ${error}`);
+      }
+    }
+    
+    // 记录来源信息
+    if (!metricsUpdate.metrics) metricsUpdate.metrics = {};
+    (metricsUpdate.metrics as Record<string, string>)['dataSource'] = 'XRPScan';
+    
+    console.log(`[线程 ${threadIndex+1}] XRP专用爬虫完成，成功获取 ${successCount} 个指标`);
+    return successCount > 0;
+    
+  } catch (error) {
+    console.error(`[线程 ${threadIndex+1}] XRP专用爬虫出错: ${error}`);
     return false;
   }
 }
