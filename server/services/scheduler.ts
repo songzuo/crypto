@@ -249,8 +249,8 @@ export async function setupScheduler() {
   });
 
   // Phase 2: Find blockchain explorers for cryptocurrencies without explorers
-  // Runs every 3 minutes for faster discovery
-  cron.schedule('*/3 * * * *', async () => {
+  // Now run every minute for more immediate discovery
+  cron.schedule('* * * * *', async () => {
     console.log('Running scheduled task: Find blockchain explorers');
     
     try {
@@ -258,18 +258,51 @@ export async function setupScheduler() {
       const currentCryptos = await storage.getCryptocurrencies(1, 1, "marketCap", "desc");
       const totalCount = currentCryptos.total || 0;
       
-      let batchSize = 30; // Default
+      // Increased batch sizes significantly
+      let batchSize = 50; // Default
       
       if (totalCount < 100) {
-        batchSize = 30;
-      } else if (totalCount < 200) {
         batchSize = 50;
+      } else if (totalCount < 200) {
+        batchSize = 75;
       } else {
-        batchSize = 75; // Increased for large datasets
+        batchSize = 100; // Much larger batch for big datasets
       }
       
-      console.log(`Processing blockchain explorers: Batch size ${batchSize} cryptocurrencies`);
-      await findExplorersForCryptos(batchSize);
+      // Create an array of promises for parallel explorer finding
+      const explorerTasks: Promise<number>[] = [];
+      
+      // TASK 1: Find explorers for top-ranked cryptocurrencies (most important)
+      explorerTasks.push(
+        (async () => {
+          console.log(`Finding explorers for top-ranked cryptocurrencies...`);
+          return await findExplorersForCryptos(Math.min(50, Math.floor(batchSize / 2)));
+        })().catch(error => {
+          console.error("Error finding explorers for top ranks:", error);
+          return 0;
+        })
+      );
+      
+      // TASK 2: Find explorers for newest added cryptocurrencies
+      explorerTasks.push(
+        (async () => {
+          // Get the most recently added cryptocurrencies (sorted by id desc)
+          const recentCryptos = await storage.getCryptocurrencies(1, Math.floor(batchSize / 2), "id", "desc");
+          if (recentCryptos.data.length > 0) {
+            console.log(`Finding explorers for ${recentCryptos.data.length} most recently added cryptocurrencies...`);
+            // Extract IDs and find explorers specifically for these
+            const recentIds = recentCryptos.data.map(crypto => crypto.id);
+            return await findExplorersForCryptos(recentIds.length, undefined, recentIds);
+          }
+          return 0;
+        })().catch(error => {
+          console.error("Error finding explorers for recent cryptocurrencies:", error);
+          return 0;
+        })
+      );
+      
+      // Run all tasks in parallel
+      await Promise.all(explorerTasks);
     } catch (error) {
       console.error("Error in explorer discovery scheduler:", error);
       // Fallback to smaller size to ensure operation continues

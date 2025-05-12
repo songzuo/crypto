@@ -258,7 +258,11 @@ const Markets: React.FC = () => {
                             </span>
                           </div>
                           <div>
-                            <div className="font-medium">{crypto.name}</div>
+                            <div className="font-medium">
+                              <a href={`/explorer/${crypto.id}`} className="hover:text-blue-600 transition-colors">
+                                {crypto.name}
+                              </a>
+                            </div>
                             <div className="text-xs text-slate-500 dark:text-slate-400">
                               {crypto.symbol}
                             </div>
