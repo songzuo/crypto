@@ -18,6 +18,7 @@ export interface IStorage {
   getCryptocurrency(id: number): Promise<Cryptocurrency | undefined>;
   createCryptocurrency(cryptocurrency: InsertCryptocurrency): Promise<Cryptocurrency>;
   updateCryptocurrency(id: number, data: Partial<InsertCryptocurrency>): Promise<Cryptocurrency | undefined>;
+  deleteCryptocurrency(id: number): Promise<boolean>;
   
   // Blockchain Explorers
   getBlockchainExplorers(cryptocurrencyId: number): Promise<BlockchainExplorer[]>;
@@ -539,6 +540,35 @@ import { eq, and, like, desc, asc } from "drizzle-orm";
 
 // Database Storage implementation
 export class DatabaseStorage implements IStorage {
+  async deleteCryptocurrency(id: number): Promise<boolean> {
+    try {
+      // 1. 先删除相关的区块链浏览器记录
+      await db
+        .delete(blockchainExplorers)
+        .where(eq(blockchainExplorers.cryptocurrencyId, id));
+      
+      // 2. 删除相关的指标记录
+      await db
+        .delete(metrics)
+        .where(eq(metrics.cryptocurrencyId, id));
+      
+      // 3. 删除相关的AI洞察记录
+      await db
+        .delete(aiInsights)
+        .where(eq(aiInsights.cryptocurrencyId, id));
+      
+      // 4. 最后删除加密货币记录
+      const result = await db
+        .delete(cryptocurrencies)
+        .where(eq(cryptocurrencies.id, id));
+      
+      console.log(`成功彻底删除币种ID ${id} 及其所有相关数据`);
+      return true;
+    } catch (error) {
+      console.error(`删除币种ID ${id} 时出错:`, error);
+      return false;
+    }
+  }
   
   async getCryptocurrenciesWithExplorers(limit: number): Promise<{ cryptocurrencyId: number, url: string }[]> {
     try {

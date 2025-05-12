@@ -41,17 +41,24 @@ export async function removeCoinsWithoutMarketCap(): Promise<{
         // 但实际上我们只删除单个币种，所以需要单独删除
         console.log(`删除币种: ${crypto.name} (${crypto.symbol}) [ID: ${crypto.id}]`);
         
-        // 通常应该有单独的delete方法，但目前我们可以使用update方法标记删除
-        // 因为数据库接口中没有提供直接删除单个币种的方法
-        await storage.updateCryptocurrency(crypto.id, { 
-          // 将市值和其他关键字段标记为null，在展示时可以过滤掉这些币种
-          marketCap: null, 
-          price: null,
-          volume24h: null,
-          priceChange24h: null,
-          rank: null,
-          slug: `deleted-${crypto.slug || crypto.symbol.toLowerCase()}-${Date.now()}`
-        });
+        try {
+          // 直接从数据库中彻底删除这个币种
+          await storage.deleteCryptocurrency(crypto.id);
+          console.log(`已彻底删除币种: ${crypto.name} (${crypto.symbol}) [ID: ${crypto.id}]`);
+        } catch (error) {
+          console.error(`彻底删除币种 ${crypto.name} (ID: ${crypto.id}) 失败，尝试标记删除:`, error);
+          
+          // 如果彻底删除失败，使用标记删除作为备选方案
+          await storage.updateCryptocurrency(crypto.id, { 
+            // 将市值和其他关键字段标记为0，在展示时可以过滤掉这些币种
+            marketCap: 0, 
+            price: 0,
+            volume24h: 0,
+            priceChange24h: 0,
+            rank: 9999,
+            slug: `deleted-${crypto.slug || crypto.symbol.toLowerCase()}-${Date.now()}`
+          });
+        }
         
         removedCount++;
       } catch (error) {
