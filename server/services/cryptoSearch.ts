@@ -189,7 +189,7 @@ export async function searchTopCryptocurrencies(count: number = 500): Promise<bo
     // If we're below our target, expand the search to include more lower-ranked coins
     if (totalCount > 0 && totalCount < 500) {
       const lowerBound = Math.max(1, Math.floor(totalCount / 2));
-      const upperBound = lowerBound + Math.min(500, count);
+      const upperBound = lowerBound + 250; // Increase range to ensure we get more data
       console.log(`Expanding search to rank range ${lowerBound}-${upperBound} to find more data`);
       
       // This will find coins that might not be in the top rankings but still have data
@@ -215,45 +215,126 @@ export async function searchTopCryptocurrencies(count: number = 500): Promise<bo
     });
     
     // Collection of cryptocurrencies from multiple sources
-    const cryptocurrencies: { name: string; symbol: string; marketCap: number; rank?: number; slug?: string; price?: number; }[] = [];
-    let sourceUsed = "none";
+    type CryptoData = {
+      name: string;
+      symbol: string;
+      marketCap: number;
+      rank?: number;
+      slug?: string;
+      price?: number;
+      priceChange24h?: number;
+      volume24h?: number;
+      officialWebsite?: string;
+      source?: string;
+      logoUrl?: string;
+      _explorers?: string[];
+    };
     
-    try {
-      // First try: CoinGecko API
-      console.log("Attempting to use CoinGecko API...");
-      const apiUrl = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=${Math.min(fetchBatchSize, 250)}&page=1`;
-      const response = await makeHttpsRequest(apiUrl);
-      const apiData = JSON.parse(response);
-      
-      if (Array.isArray(apiData)) {
-        for (const coin of apiData) {
-          cryptocurrencies.push({
-            name: coin.name,
-            symbol: coin.symbol.toUpperCase(),
-            price: coin.current_price,
-            priceChange24h: coin.price_change_percentage_24h || 0,
-            marketCap: coin.market_cap || 0,
-            volume24h: coin.total_volume || 0,
-            rank: coin.market_cap_rank || 0
-          });
-        }
-        
-        console.log(`Successfully fetched ${cryptocurrencies.length} cryptocurrencies from CoinGecko API.`);
-        sourceUsed = "coingecko";
-      } else {
-        throw new Error("Invalid data format from CoinGecko API");
-      }
-    } catch (apiError) {
-      console.log("CoinGecko API failed, trying CoinCap API...");
-      
+    const cryptocurrencies: CryptoData[] = [];
+    let apiSuccesses = 0; // Track successful API calls
+    
+    // Always try all APIs and combine results to get the most comprehensive data
+    // Define all of our API calls
+    const tryAllApis = async () => {
+      // === CoinGecko API ===
       try {
-        // Second try: CoinCap API
-        const coincapUrl = `https://api.coincap.io/v2/assets?limit=${Math.min(count, 100)}`;
+        console.log("Attempting to use CoinGecko API...");
+        // Try with larger page size to get more data
+        const apiUrl = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1`;
+        const response = await makeHttpsRequest(apiUrl);
+        const apiData = JSON.parse(response);
+        
+        if (Array.isArray(apiData)) {
+          apiSuccesses++;
+          for (const coin of apiData) {
+            // Store actual website URL from API if available
+            let website = null;
+            if (coin.links?.homepage && coin.links.homepage.length > 0) {
+              website = coin.links.homepage[0];
+            }
+            
+            const nameWithoutWhitespace = coin.name.replace(/\s+/g, '');
+            const nameSanitized = nameWithoutWhitespace || coin.id || coin.symbol;
+            
+            cryptocurrencies.push({
+              name: coin.name || nameSanitized,
+              symbol: coin.symbol ? coin.symbol.toUpperCase() : '',
+              price: coin.current_price,
+              priceChange24h: coin.price_change_percentage_24h || 0,
+              marketCap: coin.market_cap || 0,
+              volume24h: coin.total_volume || 0,
+              rank: coin.market_cap_rank || 0,
+              officialWebsite: website,
+              slug: coin.id,
+              source: 'coingecko'
+            });
+          }
+          
+          console.log(`Successfully fetched ${apiData.length} cryptocurrencies from CoinGecko API.`);
+          
+          // Try to get additional details for the top 10 coins
+          try {
+            for (let i = 0; i < 10 && i < apiData.length; i++) {
+              const coin = apiData[i];
+              if (coin && coin.id) {
+                const detailUrl = `https://api.coingecko.com/api/v3/coins/${coin.id}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false`;
+                const detailResponse = await makeHttpsRequest(detailUrl);
+                const detailData = JSON.parse(detailResponse);
+                
+                if (detailData) {
+                  // Find the existing entry
+                  const existingIndex = cryptocurrencies.findIndex(c => 
+                    c.name.toLowerCase() === (detailData.name || '').toLowerCase() && 
+                    c.source === 'coingecko'
+                  );
+                  
+                  if (existingIndex !== -1) {
+                    // Update with more detailed data
+                    if (detailData.links?.homepage && detailData.links.homepage.length > 0) {
+                      cryptocurrencies[existingIndex].officialWebsite = detailData.links.homepage[0];
+                    }
+                    
+                    if (detailData.links?.blockchain_site) {
+                      // Store blockchain explorers for later use
+                      const explorers = detailData.links.blockchain_site.filter(Boolean);
+                      if (explorers.length > 0) {
+                        cryptocurrencies[existingIndex]._explorers = explorers;
+                      }
+                    }
+                  }
+                }
+              }
+              // Small pause to avoid rate limits
+              await new Promise(resolve => setTimeout(resolve, 200));
+            }
+          } catch (detailError) {
+            console.log("Error fetching detailed CoinGecko data:", detailError.message);
+          }
+        }
+      } catch (error) {
+        console.log("CoinGecko API failed:", error.message);
+      }
+      
+      // === CoinCap API ===
+      try {
+        console.log("Trying CoinCap API...");
+        const coincapUrl = `https://api.coincap.io/v2/assets?limit=200`;
         const coincapResponse = await makeHttpsRequest(coincapUrl);
         const coincapData = JSON.parse(coincapResponse);
         
         if (coincapData.data && Array.isArray(coincapData.data)) {
+          apiSuccesses++;
           for (const coin of coincapData.data) {
+            // Generate a website based on explorer or actual data
+            let website = null;
+            if (coin.explorer) {
+              const urlParts = coin.explorer.split('/');
+              if (urlParts.length >= 3) {
+                const hostname = urlParts[2];
+                website = `https://${hostname}`;
+              }
+            }
+            
             cryptocurrencies.push({
               name: coin.name,
               symbol: coin.symbol,
@@ -261,341 +342,659 @@ export async function searchTopCryptocurrencies(count: number = 500): Promise<bo
               priceChange24h: parseFloat(coin.changePercent24Hr) || 0,
               marketCap: parseFloat(coin.marketCapUsd) || 0,
               volume24h: parseFloat(coin.volumeUsd24Hr) || 0,
-              rank: parseInt(coin.rank) || 0
+              rank: parseInt(coin.rank) || 0,
+              officialWebsite: website,
+              slug: coin.id,
+              source: 'coincap'
             });
           }
           
-          console.log(`Successfully fetched ${cryptocurrencies.length} cryptocurrencies from CoinCap API.`);
-          sourceUsed = "coincap";
-        } else {
-          throw new Error("Invalid data format from CoinCap API");
+          console.log(`Successfully fetched ${coincapData.data.length} cryptocurrencies from CoinCap API.`);
         }
-      } catch (coincapError) {
-        console.log("CoinCap API failed, trying CryptoCompare API...");
+      } catch (error) {
+        console.log("CoinCap API failed:", error.message);
+      }
+      
+      // === CryptoCompare API ===
+      try {
+        console.log("Trying CryptoCompare API...");
+        // Increased limit to get more data
+        const cryptocompareUrl = `https://min-api.cryptocompare.com/data/top/mktcapfull?limit=200&tsym=USD`;
+        const cryptocompareResponse = await makeHttpsRequest(cryptocompareUrl);
+        const cryptocompareData = JSON.parse(cryptocompareResponse);
         
-        try {
-          // Third try: CryptoCompare API
-          const cryptocompareUrl = `https://min-api.cryptocompare.com/data/top/mktcapfull?limit=${Math.min(count, 100)}&tsym=USD`;
-          const cryptocompareResponse = await makeHttpsRequest(cryptocompareUrl);
-          const cryptocompareData = JSON.parse(cryptocompareResponse);
-          
-          if (cryptocompareData.Data && Array.isArray(cryptocompareData.Data)) {
-            for (const item of cryptocompareData.Data) {
-              const coinInfo = item.CoinInfo;
-              const raw = item.RAW?.USD;
+        if (cryptocompareData.Data && Array.isArray(cryptocompareData.Data)) {
+          apiSuccesses++;
+          for (const item of cryptocompareData.Data) {
+            const coinInfo = item.CoinInfo;
+            const raw = item.RAW?.USD;
+            const display = item.DISPLAY?.USD;
+            
+            if (coinInfo) {
+              // Generate a cleaner slug
+              const slug = (coinInfo.Name || "").toLowerCase();
               
-              if (coinInfo) {
-                cryptocurrencies.push({
-                  name: coinInfo.FullName || coinInfo.Name,
-                  symbol: coinInfo.Name,
-                  price: raw?.PRICE || 0,
-                  priceChange24h: raw?.CHANGEPCT24HOUR || 0,
-                  marketCap: raw?.MKTCAP || 0,
-                  volume24h: raw?.VOLUME24HOUR || 0,
-                  rank: coinInfo.SortOrder || 0
-                });
+              // Try to get website URL if available, otherwise create a reasonable guess
+              let website = null;
+              if (coinInfo.Url && coinInfo.Url !== "N/A") {
+                website = coinInfo.Url.startsWith('http') ? coinInfo.Url : `https://${coinInfo.Url}`;
+              } else {
+                website = `https://${slug}.org`;
               }
+              
+              cryptocurrencies.push({
+                name: coinInfo.FullName || coinInfo.Name,
+                symbol: coinInfo.Name,
+                price: raw?.PRICE || 0,
+                priceChange24h: raw?.CHANGEPCT24HOUR || 0,
+                marketCap: raw?.MKTCAP || 0,
+                volume24h: raw?.VOLUME24HOUR || 0,
+                rank: parseInt(coinInfo.SortOrder) || 0,
+                officialWebsite: website,
+                slug,
+                source: 'cryptocompare'
+              });
             }
-            
-            console.log(`Successfully fetched ${cryptocurrencies.length} cryptocurrencies from CryptoCompare API.`);
-            sourceUsed = "cryptocompare";
-          } else {
-            throw new Error("Invalid data format from CryptoCompare API");
           }
-        } catch (cryptocompareError) {
-          console.log("CryptoCompare API failed, trying direct web scraping...");
           
+          console.log(`Successfully fetched ${cryptocompareData.Data.length} cryptocurrencies from CryptoCompare API.`);
+          
+          // Get additional info for top coins via individual API calls
           try {
-            // Fourth try: Direct web scraping from crypto ranking websites
-            const websites = [
-              "https://coinmarketcap.com/",
-              "https://www.coingecko.com/en",
-              "https://coinranking.com/",
-              "https://www.livecoinwatch.com/"
-            ];
+            // Get the top 10 coins from our results
+            const topCoins = cryptocurrencies
+              .filter(c => c.source === 'cryptocompare' && c.symbol)
+              .sort((a, b) => (a.rank || 999) - (b.rank || 999))
+              .slice(0, 10)
+              .map(c => c.symbol);
             
-            // Try each website until we get some data
-            for (const website of websites) {
-              try {
-                console.log(`Trying to scrape from ${website}...`);
-                const response = await makeHttpsRequest(website);
-                const $ = cheerio.load(response);
-                
-                // Different websites have different structures, so we need different selectors
-                
-                // General approach - look for tables with cryptocurrency data
-                $('table tbody tr').each((i, element) => {
-                  if (cryptocurrencies.length >= count) return;
-                  
-                  // Try to extract cryptocurrency data from table cells
-                  const nameCell = $(element).find('td:contains("name"), td:contains("Name"), td:contains("coin"), td:contains("Coin"), td[data-sort="name"]').first();
-                  const priceCell = $(element).find('td:contains("price"), td:contains("Price"), td[data-sort="price"]').first();
-                  
-                  // If we found both name and price cells, try to extract data
-                  if (nameCell.length && priceCell.length) {
-                    const nameText = nameCell.text().trim();
-                    const priceText = priceCell.text().trim().replace('$', '').replace(',', '');
+            if (topCoins.length > 0) {
+              const symbols = topCoins.join(',');
+              const detailUrl = `https://min-api.cryptocompare.com/data/coin/generalinfo?fsyms=${symbols}&tsym=USD`;
+              const detailResponse = await makeHttpsRequest(detailUrl);
+              const detailData = JSON.parse(detailResponse);
+              
+              if (detailData.Data && Array.isArray(detailData.Data)) {
+                for (const coinDetail of detailData.Data) {
+                  const coinInfo = coinDetail.CoinInfo;
+                  if (coinInfo) {
+                    // Find the matching cryptocurrency
+                    const existingIndex = cryptocurrencies.findIndex(c => 
+                      c.symbol.toLowerCase() === coinInfo.Name.toLowerCase() && 
+                      c.source === 'cryptocompare'
+                    );
                     
-                    // Extract symbol and name
-                    let name = nameText;
-                    let symbol = "";
-                    
-                    // Sometimes the name contains the symbol in parentheses
-                    const symbolMatch = nameText.match(/\(([A-Z0-9]+)\)/);
-                    if (symbolMatch && symbolMatch[1]) {
-                      symbol = symbolMatch[1];
-                      name = nameText.replace(/\s*\([A-Z0-9]+\)/, '').trim();
-                    } else {
-                      // Create a symbol from the name if needed
-                      symbol = name.substring(0, 3).toUpperCase();
-                    }
-                    
-                    // Extract price
-                    const price = parseFloat(priceText) || 0;
-                    
-                    // Add to cryptocurrencies array if it's not already added
-                    if (name && symbol && price > 0) {
-                      const isDuplicate = cryptocurrencies.some(
-                        c => c.name.toLowerCase() === name.toLowerCase() || 
-                             c.symbol.toLowerCase() === symbol.toLowerCase()
-                      );
+                    if (existingIndex !== -1) {
+                      // Update with better website and logo if available
+                      if (coinInfo.Url && coinInfo.Url !== "N/A") {
+                        const website = coinInfo.Url.startsWith('http') ? coinInfo.Url : `https://${coinInfo.Url}`;
+                        cryptocurrencies[existingIndex].officialWebsite = website;
+                      }
                       
-                      if (!isDuplicate) {
-                        cryptocurrencies.push({
-                          name,
-                          symbol,
-                          price,
-                          priceChange24h: 0, // Not available from scraping
-                          marketCap: price * 100000000, // Rough estimate
-                          volume24h: price * 10000000, // Rough estimate
-                          rank: cryptocurrencies.length + 1
-                        });
+                      if (coinInfo.ImageUrl) {
+                        cryptocurrencies[existingIndex].logoUrl = `https://www.cryptocompare.com${coinInfo.ImageUrl}`;
                       }
                     }
                   }
-                });
-                
-                // If we got enough data, break the loop
-                if (cryptocurrencies.length > 0) {
-                  console.log(`Successfully scraped ${cryptocurrencies.length} cryptocurrencies from ${website}`);
-                  sourceUsed = "webscraping";
-                  break;
                 }
-              } catch (error: any) {
-                console.log(`Failed to scrape from ${website}: ${error.message}`);
               }
             }
-            
-            // If we still don't have any data, throw an error
-            if (cryptocurrencies.length === 0) {
-              throw new Error("Could not scrape cryptocurrency data from any website");
-            }
-          } catch (scrapingError) {
-            console.error("All data sources failed. Cannot fetch cryptocurrency data.");
-            console.error("Please consider providing API keys for cryptocurrency data services.");
-            throw new Error("Could not fetch cryptocurrency data from any source");
+          } catch (detailError) {
+            console.log("Error fetching detailed CryptoCompare data:", detailError.message);
           }
         }
-      }
-    }
-    
-    // Sort cryptocurrencies by market cap (highest to lowest)
-    cryptocurrencies.sort((a, b) => {
-      const marketCapA = a.marketCap || 0;
-      const marketCapB = b.marketCap || 0;
-      return marketCapB - marketCapA; // Descending order - highest market cap first
-    });
-    
-    console.log(`Using ${cryptocurrencies.length} cryptocurrencies from ${sourceUsed}, sorted by market cap (descending).`);
-    
-    // Store the cryptocurrencies with strict validation
-    let newEntriesCount = 0;
-    
-    // First, get all existing cryptocurrencies to check for duplicates more efficiently
-    const allExistingCryptos = await storage.getCryptocurrencies(1, 1000, "marketCap", "desc");
-    console.log(`Found ${allExistingCryptos.total} existing cryptocurrencies in the database.`);
-    
-    // Create a set of existing websites and explorers for faster duplicate checking
-    const existingWebsites = new Set();
-    const existingExplorers = new Set();
-    
-    // Get all existing blockchain explorers
-    for (const crypto of allExistingCryptos.data) {
-      if (crypto.officialWebsite) {
-        existingWebsites.add(crypto.officialWebsite.toLowerCase());
+      } catch (error) {
+        console.log("CryptoCompare API failed:", error.message);
       }
       
-      // Get explorers for this cryptocurrency
-      const explorers = await storage.getBlockchainExplorers(crypto.id);
-      for (const explorer of explorers) {
-        if (explorer.url) {
-          existingExplorers.add(explorer.url.toLowerCase());
+      // If none of the API calls succeeded, try web scraping
+      if (apiSuccesses === 0) {
+        console.log("All API attempts failed. Trying direct web scraping...");
+        
+        try {
+          // Try the direct CoinMarketCap scraper
+          const numCrypto = await import('./webScraper').then(module => 
+            module.scrapeCoinMarketCap(1)
+          );
+          console.log(`Found ${numCrypto} cryptocurrencies on CoinMarketCap page 1`);
+          
+          // Try CoinGecko scraper as a backup
+          try {
+            const geckoResult = await import('./webScraper').then(module => 
+              module.scrapeCoinGecko(1)
+            );
+            console.log(`Found ${geckoResult} cryptocurrencies on CoinGecko page 1`);
+          } catch (geckoError) {
+            console.error("Error using direct CoinGecko scraper:", geckoError);
+          }
+          
+          return numCrypto > 0;
+        } catch (cmcError) {
+          console.error("Error using direct CoinMarketCap scraper:", cmcError);
+          return false;
         }
       }
+      
+      return cryptocurrencies.length > 0;
+    };
+    
+    // Try all APIs and combine results
+    const success = await tryAllApis();
+    if (!success) {
+      console.error("All data source attempts failed. Unable to fetch cryptocurrency data.");
+      return false;
     }
     
+    console.log(`Collected raw data for ${cryptocurrencies.length} cryptocurrencies from all sources.`);
+    
+    // Remove duplicates by creating a map with name_symbol as the key
+    const uniqueCryptos = new Map<string, CryptoData>();
+    
+    // Process each cryptocurrency, prioritizing entries with more complete data
     for (const crypto of cryptocurrencies) {
-      const { name, symbol, price, priceChange24h, marketCap, volume24h, rank } = crypto;
+      // Skip entries without name or symbol
+      if (!crypto.name || !crypto.symbol) continue;
       
-      // Skip if any essential data is missing
-      if (!name || !symbol) {
-        console.log(`Skipping cryptocurrency with missing name or symbol: ${JSON.stringify(crypto)}`);
+      const key = `${crypto.name.toLowerCase()}_${crypto.symbol.toLowerCase()}`;
+      
+      // Prefer entries with rank information
+      if (!uniqueCryptos.has(key)) {
+        uniqueCryptos.set(key, crypto);
+      } else {
+        const existing = uniqueCryptos.get(key)!;
+        
+        // Prioritize entries with more information
+        // First, check if the new entry has rank information while the existing one doesn't
+        if ((crypto.rank && !existing.rank) || 
+            (crypto.rank && existing.rank && crypto.rank < existing.rank)) {
+          uniqueCryptos.set(key, crypto);
+        }
+        // Otherwise, prefer the one with a higher market cap (if both have it)
+        else if (crypto.marketCap && existing.marketCap && crypto.marketCap > existing.marketCap) {
+          uniqueCryptos.set(key, crypto);
+        }
+        // If new entry has a real website and old has a generated one
+        else if (crypto.officialWebsite && existing.officialWebsite && 
+                 (!existing.officialWebsite.endsWith('.org') && crypto.officialWebsite.endsWith('.org'))) {
+          // Keep existing entry but update the website
+          existing.officialWebsite = crypto.officialWebsite;
+        }
+        
+        // Merge information in case one source has some fields that the other doesn't
+        if (!existing.price && crypto.price) existing.price = crypto.price;
+        if (!existing.marketCap && crypto.marketCap) existing.marketCap = crypto.marketCap;
+        if (!existing.volume24h && crypto.volume24h) existing.volume24h = crypto.volume24h;
+        if (!existing.priceChange24h && crypto.priceChange24h) existing.priceChange24h = crypto.priceChange24h;
+        if (!existing.officialWebsite && crypto.officialWebsite) existing.officialWebsite = crypto.officialWebsite;
+      }
+    }
+    
+    // Convert map to array and sort by market cap
+    const mergedCryptos = Array.from(uniqueCryptos.values())
+      .sort((a, b) => ((b.marketCap || 0) - (a.marketCap || 0)));
+    
+    console.log(`After deduplication, found ${mergedCryptos.length} unique cryptocurrencies.`);
+    
+    // Get existing cryptocurrencies
+    const existingCryptos = await storage.getCryptocurrencies(1, 1000, "marketCap", "desc");
+    
+    // Create maps for faster lookup 
+    const existingCryptosByName = new Map();
+    const existingCryptosBySymbol = new Map();
+    
+    // Create maps for both name and symbol lookups
+    for (const crypto of existingCryptos.data) {
+      if (crypto.name) {
+        existingCryptosByName.set(crypto.name.toLowerCase(), crypto);
+      }
+      if (crypto.symbol) {
+        existingCryptosBySymbol.set(crypto.symbol.toLowerCase(), crypto);
+      }
+    }
+    
+    // Create set of existing websites
+    const existingWebsites = new Set(
+      existingCryptos.data
+        .map(c => c.officialWebsite?.toLowerCase())
+        .filter(Boolean)
+    );
+    
+    let newEntriesCount = 0;
+    let updatedEntriesCount = 0;
+    
+    // Track which cryptocurrencies have missing rank/market cap data
+    const cryptosNeedingUpdate = [];
+    
+    // Process each cryptocurrency
+    for (const crypto of mergedCryptos.slice(0, count)) {
+      // Skip entries without crucial data
+      if (!crypto.name || !crypto.symbol) {
         continue;
       }
       
-      // Create slug from name
-      const slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      // Lookup by name or symbol
+      const existingByName = existingCryptosByName.get(crypto.name.toLowerCase());
+      const existingBySymbol = existingCryptosBySymbol.get(crypto.symbol.toLowerCase());
+      const existing = existingByName || existingBySymbol;
       
-      // Check if this cryptocurrency already exists by name or symbol
-      const existingCryptos = await storage.searchCryptocurrencies(name);
-      const existingBySymbol = await storage.searchCryptocurrencies(symbol);
-      
-      // Combine results
-      const allMatches = [...existingCryptos, ...existingBySymbol];
-      
-      // Look for exact matches (case-insensitive)
-      const existingCrypto = allMatches.find(c => 
-        c.name.toLowerCase() === name.toLowerCase() || 
-        c.symbol.toLowerCase() === symbol.toLowerCase()
-      );
-      
-      // Check for duplicates
-      let isDuplicate = !!existingCrypto; // Already have a name/symbol match
-      let websiteForCrypto = null;
-      
-      // Try to generate a standard website format for checking duplicates
-      try {
-        // Common pattern for cryptocurrency websites
-        websiteForCrypto = `https://${slug}.org`;
-        
-        // Check if this website already exists in our database
-        if (websiteForCrypto && existingWebsites.has(websiteForCrypto.toLowerCase())) {
-          console.log(`Skipping duplicate cryptocurrency: ${name} - Website ${websiteForCrypto} already exists.`);
-          isDuplicate = true;
-        }
-      } catch (error) {
-        console.log(`Error generating website pattern for ${name}: ${error}`);
-      }
-      
-      // If this is a duplicate cryptocurrency, update the existing entry
-      if (isDuplicate) {
-        if (existingCrypto) {
-          // Update existing cryptocurrency's market data
-          await storage.updateCryptocurrency(existingCrypto.id, {
-            price,
-            priceChange24h, 
-            marketCap,
-            volume24h,
-            rank,
-            // Don't update these if already exist
-            officialWebsite: existingCrypto.officialWebsite || websiteForCrypto
-          });
-          
-          console.log(`Updated existing cryptocurrency: ${name} (ID: ${existingCrypto.id})`);
-        }
-        continue; // Skip to next cryptocurrency
-      }
-      
-      // At this point, we have a new cryptocurrency to add
-      console.log(`Adding new cryptocurrency: ${name} (${symbol}), market cap: ${marketCap})`);
-      
-      // Try to find official website through various patterns
-      let officialWebsite = websiteForCrypto; // Start with our basic pattern
-      
-      try {
-        // In production, would use proper web scraping or Google search API
-        // For this implementation, we'll try different URL patterns
-        const possibleDomains = [
-          `${slug}.org`,
-          `${slug}.io`,
-          `${slug}.com`,
-          `${slug}.network`,
-          `${slug}.finance`,
-          `${name.toLowerCase().replace(/\s+/g, '')}.org`
-        ];
-        
-        // Already set above, but could be enhanced with more sophisticated check
-        officialWebsite = `https://${possibleDomains[0]}`; // Simplified for testing
-        console.log(`Using website for ${name}: ${officialWebsite}`);
-      } catch (error: any) {
-        console.log(`Error finding better website for ${name}:`, error);
-      }
-      
-      // Now create the cryptocurrency entry with whatever website we found (might be null)
-      const newCrypto: InsertCryptocurrency = {
-        name,
-        symbol,
-        slug,
-        price: price || 0,
-        priceChange24h: priceChange24h || 0,
-        marketCap: marketCap || 0,
-        volume24h: volume24h || 0,
-        rank: rank || 0,
-        officialWebsite,
-        logoUrl: null
-      };
-      
-      // To ensure we get a blockchain explorer too
-      let hasExplorer = false;
-      let explorerUrl = null;
-      
-      try {
-        // Create cryptocurrency in database to get an ID
-        const createdCrypto = await storage.createCryptocurrency(newCrypto);
-        console.log(`Added cryptocurrency ${name} (ID: ${createdCrypto.id}) with website: ${officialWebsite || 'unknown'}`);
-        newEntriesCount++;
-        
-        // Check for a blockchain explorer as a secondary validation source
+      if (existing) {
+        // Update existing cryptocurrency with new data
         try {
-          explorerUrl = await import('./scraper').then(module => 
-            module.findBlockchainExplorer(name, createdCrypto.id)
-          );
+          const updateData: Partial<InsertCryptocurrency> = {};
           
-          if (explorerUrl) {
-            console.log(`Found blockchain explorer for ${name}: ${explorerUrl}`);
-            hasExplorer = true;
-          } else {
-            console.log(`No blockchain explorer found for ${name}`);
+          // Set update flags if specific fields need updating
+          let rankNeedsUpdate = false;
+          let marketCapNeedsUpdate = false;
+          
+          // Check if existing data needs updating
+          if (existing.rank === null || existing.rank === 0) {
+            rankNeedsUpdate = true;
           }
           
-          // Skip empty update
-          // The explorer is found and tracked via the explorer creation
-        } catch (explorerError) {
-          console.error(`Error finding blockchain explorer for ${name}:`, explorerError);
-        }
+          if (existing.marketCap === null || existing.marketCap === 0) {
+            marketCapNeedsUpdate = true;
+          }
           
-        // New condition: Keep crypto if it has EITHER an official website OR an explorer (OR logic)
-        if (!officialWebsite && !hasExplorer) {
-          console.log(`${name} has neither website nor explorer - marking as low priority`);
-          // We'll keep it but mark it with a higher rank to indicate lower priority
-          await storage.updateCryptocurrency(createdCrypto.id, {
-            rank: 5000 // High rank indicates lower priority but we still keep it
-          });
+          // Only update fields if they have valid data and are better than what we have
+          if (crypto.price !== undefined && crypto.price > 0) {
+            updateData.price = crypto.price;
+          }
+          
+          if (crypto.priceChange24h !== undefined) {
+            updateData.priceChange24h = crypto.priceChange24h;
+          }
+          
+          if (crypto.marketCap !== undefined && crypto.marketCap > 0 && 
+             (marketCapNeedsUpdate || crypto.marketCap > existing.marketCap)) {
+            updateData.marketCap = crypto.marketCap;
+            console.log(`Updating market cap for ${crypto.name} (ID: ${existing.id}) to ${crypto.marketCap}`);
+          }
+          
+          if (crypto.volume24h !== undefined && crypto.volume24h > 0) {
+            updateData.volume24h = crypto.volume24h;
+          }
+          
+          if (crypto.rank !== undefined && crypto.rank > 0 && 
+             (rankNeedsUpdate || (existing.rank && crypto.rank < existing.rank))) {
+            updateData.rank = crypto.rank;
+            console.log(`Updating rank for ${crypto.name} (ID: ${existing.id}) to ${crypto.rank}`);
+          }
+          
+          // Update official website if we have a better one (not a placeholder)
+          if (crypto.officialWebsite && 
+              (!existing.officialWebsite || 
+               existing.officialWebsite.endsWith('.org') && !crypto.officialWebsite.endsWith('.org'))) {
+            updateData.officialWebsite = crypto.officialWebsite;
+            console.log(`Updating website for ${crypto.name} (ID: ${existing.id}) to ${crypto.officialWebsite}`);
+          }
+          
+          // Only update if we have meaningful data
+          if (Object.keys(updateData).length > 0) {
+            const updated = await storage.updateCryptocurrency(existing.id, updateData);
+            if (updated) {
+              updatedEntriesCount++;
+              console.log(`Updated existing cryptocurrency: ${crypto.name} (ID: ${existing.id})`);
+            }
+          }
+          
+          // Track this crypto as needing further updates if missing important data
+          if ((existing.rank === null || existing.rank === 0 || existing.marketCap === null || existing.marketCap === 0) && 
+              !updateData.rank && !updateData.marketCap) {
+            cryptosNeedingUpdate.push({
+              id: existing.id,
+              name: existing.name,
+              symbol: existing.symbol
+            });
+          }
+          
+          // If we have blockchain explorers from API data, add them
+          if (crypto._explorers && Array.isArray(crypto._explorers)) {
+            for (const explorerUrl of crypto._explorers) {
+              if (explorerUrl) {
+                try {
+                  await import('./scraper').then(module => 
+                    module.findBlockchainExplorer(crypto.name, existing.id, explorerUrl)
+                  );
+                } catch (explorerError) {
+                  // Just continue if one fails
+                }
+              }
+            }
+          }
+        } catch (updateError) {
+          console.error(`Error updating cryptocurrency ${crypto.name}:`, updateError);
         }
-      } catch (createError) {
-        console.error(`Failed to create cryptocurrency ${name}:`, createError);
+      } else {
+        // Add new cryptocurrency
+        try {
+          // Generate a standard slug if none provided
+          const slug = crypto.slug || crypto.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+          
+          // Use provided website or generate a reasonable one
+          const officialWebsite = crypto.officialWebsite || `https://${slug}.org`;
+          
+          // Create the new cryptocurrency
+          const newCrypto: InsertCryptocurrency = {
+            name: crypto.name,
+            symbol: crypto.symbol,
+            slug,
+            price: crypto.price || 0,
+            priceChange24h: crypto.priceChange24h || 0,
+            marketCap: crypto.marketCap || 0,
+            volume24h: crypto.volume24h || 0,
+            rank: crypto.rank || 0,
+            officialWebsite,
+            logoUrl: crypto.logoUrl || null
+          };
+          
+          // Check if this website already exists to avoid duplicates
+          if (officialWebsite && existingWebsites.has(officialWebsite.toLowerCase())) {
+            console.log(`Skipping duplicate cryptocurrency: ${crypto.name} - Website ${officialWebsite} already exists.`);
+            continue;
+          }
+          
+          const createdCrypto = await storage.createCryptocurrency(newCrypto);
+          console.log(`Added cryptocurrency ${crypto.name} (ID: ${createdCrypto.id}) with rank ${crypto.rank || 'unknown'}`);
+          newEntriesCount++;
+          
+          // Immediately try to find a blockchain explorer for this cryptocurrency
+          try {
+            // If the API provided explorers, use them
+            if (crypto._explorers && Array.isArray(crypto._explorers) && crypto._explorers.length > 0) {
+              for (const explorerUrl of crypto._explorers) {
+                if (explorerUrl) {
+                  await import('./scraper').then(module => 
+                    module.findBlockchainExplorer(crypto.name, createdCrypto.id, explorerUrl)
+                  );
+                }
+              }
+            } else {
+              // Try the standard explorer finder
+              const explorerUrl = await import('./scraper').then(module => 
+                module.findBlockchainExplorer(crypto.name, createdCrypto.id)
+              );
+              
+              if (explorerUrl) {
+                console.log(`Found explorer for ${crypto.name}: ${explorerUrl}`);
+              }
+            }
+          } catch (explorerError) {
+            console.error(`Error finding explorer for ${crypto.name}:`, explorerError);
+          }
+        } catch (createError) {
+          console.error(`Failed to create cryptocurrency ${crypto.name}:`, createError);
+        }
       }
     }
     
-    // Update crawler status
-    await storage.updateCrawlerStatus({
-      webCrawlerActive: true, // Keep this true at all times to maintain 24/7 operation
-      newEntriesCount: newEntriesCount,
-      lastUpdate: new Date()
-    });
+    // Try to update cryptocurrencies with missing data
+    if (cryptosNeedingUpdate.length > 0) {
+      console.log(`Found ${cryptosNeedingUpdate.length} cryptocurrencies with missing ranking or market cap data. Attempting to update...`);
+      
+      // Process in smaller batches to avoid rate limits
+      const batchSize = 10;
+      for (let i = 0; i < Math.min(cryptosNeedingUpdate.length, 50); i += batchSize) {
+        const batch = cryptosNeedingUpdate.slice(i, i + batchSize);
+        
+        // Try to get additional data for each cryptocurrency
+        for (const crypto of batch) {
+          try {
+            console.log(`Attempting to get data for ${crypto.name} (${crypto.symbol})`);
+            
+            // Try multiple data sources
+            let updated = false;
+            
+            // Try CoinGecko individual lookup by name or symbol
+            try {
+              const searchUrl = `https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(crypto.name)}`;
+              const searchResponse = await makeHttpsRequest(searchUrl);
+              const searchData = JSON.parse(searchResponse);
+              
+              if (searchData && searchData.coins && searchData.coins.length > 0) {
+                // Find the most likely match
+                const matches = searchData.coins.filter((coin: any) => 
+                  coin.symbol.toLowerCase() === crypto.symbol.toLowerCase() || 
+                  coin.name.toLowerCase() === crypto.name.toLowerCase()
+                );
+                
+                if (matches.length > 0) {
+                  const match = matches[0];
+                  
+                  // Get detailed data
+                  const detailUrl = `https://api.coingecko.com/api/v3/coins/${match.id}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false`;
+                  const detailResponse = await makeHttpsRequest(detailUrl);
+                  const detailData = JSON.parse(detailResponse);
+                  
+                  if (detailData && detailData.market_data) {
+                    const updateData: Partial<InsertCryptocurrency> = {};
+                    
+                    if (detailData.market_cap_rank) {
+                      updateData.rank = detailData.market_cap_rank;
+                    }
+                    
+                    if (detailData.market_data.market_cap?.usd) {
+                      updateData.marketCap = detailData.market_data.market_cap.usd;
+                    }
+                    
+                    if (detailData.market_data.current_price?.usd) {
+                      updateData.price = detailData.market_data.current_price.usd;
+                    }
+                    
+                    if (detailData.market_data.total_volume?.usd) {
+                      updateData.volume24h = detailData.market_data.total_volume.usd;
+                    }
+                    
+                    if (detailData.links?.homepage && detailData.links.homepage.length > 0) {
+                      const website = detailData.links.homepage[0];
+                      if (website && website !== "" && website !== "N/A") {
+                        updateData.officialWebsite = website;
+                      }
+                    }
+                    
+                    if (Object.keys(updateData).length > 0) {
+                      await storage.updateCryptocurrency(crypto.id, updateData);
+                      console.log(`Updated data for ${crypto.name} (ID: ${crypto.id}) with CoinGecko data`);
+                      updated = true;
+                      
+                      // Add explorers if available
+                      if (detailData.links?.blockchain_site) {
+                        const explorers = detailData.links.blockchain_site.filter(Boolean);
+                        for (const explorer of explorers.slice(0, 2)) { // Limit to first 2 explorers
+                          try {
+                            await import('./scraper').then(module => 
+                              module.findBlockchainExplorer(crypto.name, crypto.id, explorer)
+                            );
+                          } catch (explorerError) {
+                            // Just continue
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            } catch (error) {
+              console.log(`Failed to get CoinGecko data for ${crypto.name}:`, error.message);
+            }
+            
+            // If not updated by CoinGecko, try CryptoCompare
+            if (!updated) {
+              try {
+                const coinInfoUrl = `https://min-api.cryptocompare.com/data/pricemultifull?fsyms=${crypto.symbol}&tsyms=USD`;
+                const response = await makeHttpsRequest(coinInfoUrl);
+                const data = JSON.parse(response);
+                
+                if (data.RAW && data.RAW[crypto.symbol] && data.RAW[crypto.symbol].USD) {
+                  const rawData = data.RAW[crypto.symbol].USD;
+                  
+                  const updateData: Partial<InsertCryptocurrency> = {};
+                  
+                  if (rawData.MKTCAP) {
+                    updateData.marketCap = rawData.MKTCAP;
+                  }
+                  
+                  if (rawData.PRICE) {
+                    updateData.price = rawData.PRICE;
+                  }
+                  
+                  if (rawData.VOLUME24HOUR) {
+                    updateData.volume24h = rawData.VOLUME24HOUR;
+                  }
+                  
+                  if (rawData.CHANGEPCT24HOUR) {
+                    updateData.priceChange24h = rawData.CHANGEPCT24HOUR;
+                  }
+                  
+                  if (Object.keys(updateData).length > 0) {
+                    await storage.updateCryptocurrency(crypto.id, updateData);
+                    console.log(`Updated market data for ${crypto.name} (ID: ${crypto.id}) with CryptoCompare data`);
+                    updated = true;
+                  }
+                }
+              } catch (error) {
+                console.log(`Failed to get CryptoCompare data for ${crypto.name}:`, error.message);
+              }
+            }
+            
+            // Small delay to avoid rate limits
+            await new Promise(resolve => setTimeout(resolve, 500));
+          } catch (error) {
+            console.error(`Failed to update data for ${crypto.name}:`, error.message);
+          }
+        }
+      }
+    }
     
-    console.log(`Finished searching for cryptocurrencies. Found ${cryptocurrencies.length} cryptocurrencies, added ${newEntriesCount} new entries.`);
+    console.log(`Finished cryptocurrency search. Found ${mergedCryptos.length} cryptocurrencies, added ${newEntriesCount} new entries and updated ${updatedEntriesCount} existing entries.`);
+    
+    // Run blockchain explorer finder for top coins if needed
+    const existingWithoutExplorers = await storage.getCryptocurrencies(1, 25, "marketCap", "desc");
+    if (existingWithoutExplorers.data.length > 0) {
+      console.log("Finding explorers for top-ranked cryptocurrencies...");
+      for (const crypto of existingWithoutExplorers.data.slice(0, 25)) {
+        try {
+          await import('./scraper').then(module => 
+            module.findBlockchainExplorer(crypto.name, crypto.id)
+          );
+        } catch (error) {
+          // Just continue to the next one
+        }
+      }
+    }
     
     return true;
   } catch (error) {
-    console.error('Error searching for top cryptocurrencies:', error);
-    
-    // Even in case of error, maintain the webCrawlerActive as true for 24/7 operation
-    await storage.updateCrawlerStatus({
-      webCrawlerActive: true,
-      lastUpdate: new Date()
-    });
-    
+    console.error(`Error in top cryptocurrency search:`, error);
     return false;
+  }
+}
+
+// Function to search for cryptocurrencies (to be called by the web scraper)
+export async function searchCryptocurrenciesByData(
+  cryptocurrencyData: Array<{
+    name: string;
+    symbol: string;
+    price?: number;
+    priceChange24h?: number;
+    marketCap?: number;
+    volume24h?: number;
+    rank?: number;
+    officialWebsite?: string;
+  }>
+): Promise<number> {
+  try {
+    console.log(`Processing ${cryptocurrencyData.length} cryptocurrencies from direct scraping...`);
+    
+    // Get existing cryptocurrencies for comparison
+    const existingCryptos = await storage.getCryptocurrencies(1, 1000, "marketCap", "desc");
+    
+    // Create maps for faster lookups
+    const existingByName = new Map(existingCryptos.data.map(c => [c.name.toLowerCase(), c]));
+    const existingBySymbol = new Map(existingCryptos.data.map(c => [c.symbol.toLowerCase(), c]));
+    
+    let createdCount = 0;
+    let updatedCount = 0;
+    
+    // Process each cryptocurrency
+    for (const crypto of cryptocurrencyData) {
+      const { name, symbol, price, priceChange24h, marketCap, volume24h, rank, officialWebsite } = crypto;
+      
+      // Skip invalid entries
+      if (!name || !symbol) continue;
+      
+      // Look for existing cryptocurrency
+      const existingCrypto = existingByName.get(name.toLowerCase()) || existingBySymbol.get(symbol.toLowerCase());
+      
+      if (existingCrypto) {
+        // Update existing cryptocurrency
+        const updateData: Partial<InsertCryptocurrency> = {};
+        
+        if (price !== undefined && price > 0) updateData.price = price;
+        if (priceChange24h !== undefined) updateData.priceChange24h = priceChange24h;
+        if (marketCap !== undefined && marketCap > 0) {
+          updateData.marketCap = marketCap;
+          console.log(`Updating market cap for ${name} (ID: ${existingCrypto.id}) to ${marketCap}`);
+        }
+        if (volume24h !== undefined && volume24h > 0) updateData.volume24h = volume24h;
+        if (rank !== undefined && rank > 0) {
+          updateData.rank = rank;
+          console.log(`Updating rank for ${name} (ID: ${existingCrypto.id}) to ${rank}`);
+        }
+        if (officialWebsite) updateData.officialWebsite = officialWebsite;
+        
+        // Only update if we have meaningful data
+        if (Object.keys(updateData).length > 0) {
+          const updated = await storage.updateCryptocurrency(existingCrypto.id, updateData);
+          if (updated) {
+            updatedCount++;
+            console.log(`Updated existing cryptocurrency: ${name} (ID: ${existingCrypto.id})`);
+          }
+        }
+      } else {
+        // Create new cryptocurrency
+        try {
+          // Generate slug from name
+          const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+          
+          // Generate website if none provided
+          const website = officialWebsite || `https://${slug}.org`;
+          
+          // Create new cryptocurrency entry
+          const newCrypto: InsertCryptocurrency = {
+            name,
+            symbol,
+            slug,
+            price: price || 0,
+            priceChange24h: priceChange24h || 0,
+            marketCap: marketCap || 0,
+            volume24h: volume24h || 0,
+            rank: rank || 0,
+            officialWebsite: website,
+            logoUrl: null
+          };
+          
+          const createdCrypto = await storage.createCryptocurrency(newCrypto);
+          console.log(`Created new cryptocurrency: ${name} (ID: ${createdCrypto.id})`);
+          createdCount++;
+          
+          // Try to find blockchain explorer
+          try {
+            await import('./scraper').then(module => 
+              module.findBlockchainExplorer(name, createdCrypto.id)
+            );
+          } catch (error) {
+            // Just continue
+          }
+        } catch (error) {
+          console.error(`Error creating cryptocurrency ${name}:`, error);
+        }
+      }
+    }
+    
+    console.log(`Successfully extracted ${createdCount} new cryptocurrencies from direct scraping`);
+    return createdCount;
+  } catch (error) {
+    console.error("Error processing scraped cryptocurrency data:", error);
+    return 0;
   }
 }
