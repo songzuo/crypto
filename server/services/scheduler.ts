@@ -9,6 +9,11 @@ import { startWatchdog, updateActivityTime } from './watchdog';
 import { scrapeCryptoNews } from './cryptoNewsScraper';
 import { analyzeNewsWordTrends } from './wordTrendAnalyzer';
 
+// 创建一个导出对象，用于存储函数引用和最新趋势分析结果
+export const scheduler = {
+  getCachedTrendsAnalysis: null as any
+};
+
 // Function to run initial data collection immediately on startup
 export async function runInitialDataCollection() {
   console.log('运行初始数据收集...');

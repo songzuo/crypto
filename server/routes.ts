@@ -253,13 +253,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('Failed during startup check:', err);
   }
 
-  // Get word trends from news analysis
+  // Get word trends from news analysis - 使用缓存的定时分析结果
   app.get("/api/trends", async (req, res) => {
     try {
-      const limit = parseInt(req.query.limit as string) || 30;
-      const trends = await analyzeNewsWordTrends(limit);
-      res.json(trends);
+      // 获取缓存的趋势分析结果
+      const cachedTrends = scheduler.getCachedTrendsAnalysis();
+      
+      if (!cachedTrends || !cachedTrends.topWords) {
+        // 如果没有缓存或缓存无效，则进行实时分析（仅作为后备）
+        console.log('未找到缓存的趋势分析结果，执行实时分析...');
+        const limit = parseInt(req.query.limit as string) || 30;
+        const trends = await analyzeNewsWordTrends(limit);
+        res.json(trends);
+      } else {
+        // 返回缓存的结果，包括执行时间
+        const result = {
+          ...cachedTrends,
+          // 确保返回lastRunTime属性用于前端显示
+          lastRunTime: cachedTrends.executionTime ? cachedTrends.executionTime.toISOString() : new Date().toISOString()
+        };
+        console.log(`返回缓存的趋势分析结果，分析于: ${result.lastRunTime}`);
+        res.json(result);
+      }
     } catch (error) {
+      console.error('获取趋势分析数据出错:', error);
       res.status(500).json({ error: (error as Error).message });
     }
   });
