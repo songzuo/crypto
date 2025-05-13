@@ -7,6 +7,7 @@ import { updateTrumpCoinData } from './trumpFix';
 import { scrapeAdvancedMarketData } from './advancedMarketDataScraper';
 import { startWatchdog, updateActivityTime } from './watchdog';
 import { scrapeCryptoNews } from './cryptoNewsScraper';
+import { analyzeNewsWordTrends } from './wordTrendAnalyzer';
 
 // Function to run initial data collection immediately on startup
 export async function runInitialDataCollection() {

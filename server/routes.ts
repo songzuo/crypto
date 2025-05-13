@@ -8,6 +8,7 @@ import { findBlockchainExplorer, scrapeBlockchainData } from "./services/scraper
 import { getAiInsightsForCrypto } from "./services/aiInsights";
 import { cryptocurrencies } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
+import { analyzeNewsWordTrends } from "./services/wordTrendAnalyzer";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Get all cryptocurrencies
@@ -251,6 +252,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   } catch (err) {
     console.error('Failed during startup check:', err);
   }
+
+  // Get word trends from news analysis
+  app.get("/api/trends", async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 30;
+      const trends = await analyzeNewsWordTrends(limit);
+      res.json(trends);
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
 
   // Setup the crawler scheduler
   setupScheduler();
