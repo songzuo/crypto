@@ -6,7 +6,31 @@
  */
 
 import { storage } from '../storage';
-import { getLastTrendAnalysisTime, updateLastTrendAnalysisTime } from './cacheStore';
+import { 
+  getLastTrendAnalysisTime, 
+  updateLastTrendAnalysisTime, 
+  cacheTrendAnalysisResult,
+  getCachedTrendAnalysisResult
+} from './cacheStore';
+
+// 创建常见加密货币名称和术语的Set，用于快速查找
+const CRYPTO_NAMES = new Set([
+  "bitcoin", "btc", "ethereum", "eth", "tether", "usdt", 
+  "binance", "bnb", "ripple", "xrp", "cardano", "ada", 
+  "solana", "sol", "dogecoin", "doge", "polkadot", "dot", 
+  "polygon", "matic", "shiba", "shib", "avalanche", "avax",
+  "litecoin", "ltc", "chainlink", "link", "tron", "trx"
+]);
+
+// 创建加密货币特殊术语的Set，用于快速查找
+const CRYPTO_TERMS = new Set([
+  "blockchain", "defi", "nft", "dao", "stablecoin", "altcoin", 
+  "ico", "airdrop", "amm", "dapp", "dex", "kyc", "layer", 
+  "metaverse", "memecoin", "proof of stake", "proof of work", 
+  "smart contract", "web3", "zero knowledge", "layer 2", 
+  "ethereum 2.0", "sharding", "consensus mechanism", 
+  "yield farming", "liquidity mining"
+]);
 
 // 需要过滤掉的常见虚词
 const STOP_WORDS = new Set([
@@ -203,30 +227,34 @@ function isValidWord(word: string): boolean {
  * 增强版：使用更智能的词汇分析和权重算法，识别真正重要的加密货币趋势词汇
  */
 export async function analyzeNewsWordTrends(limit: number = 30): Promise<TrendAnalysisResult> {
+  // 创建分析开始时间戳，这是最重要的时间戳
+  const analysisStartTime = new Date();
+  console.log(`开始全新分析所有新闻词汇趋势 (${analysisStartTime.toISOString()})...`);
+  
   // 获取上次分析时间
   const lastAnalysisTime = getLastTrendAnalysisTime();
-  
-  // 设置当前时间
-  const now = new Date();
-  
-  // 更新全局缓存中的最后运行时间
-  updateLastTrendAnalysisTime(now);
-  
-  console.log('开始全新分析所有新闻词汇趋势...');
   if (lastAnalysisTime) {
     console.log(`上次分析时间: ${lastAnalysisTime.toISOString()}`);
   } else {
     console.log('这是首次运行趋势分析');
   }
   
-  // 获取所有新闻数据（强制读取全部400条）
-  const { data: news, total } = await storage.getCryptoNews(1, 400);
+  // 更新全局缓存中的最后运行时间 - 使用当前分析的开始时间作为时间戳
+  updateLastTrendAnalysisTime(analysisStartTime);
+  
+  // 获取所有新闻数据 - 强制读取全部400条，不受任何参数影响
+  const MAX_NEWS_COUNT = 400;
+  const { data: news, total } = await storage.getCryptoNews(1, MAX_NEWS_COUNT);
   
   console.log(`实际分析 ${news.length} 条新闻的热门词汇趋势 (数据库总量: ${total})`);
   
   if (news.length === 0) {
     console.log('警告: 没有找到任何新闻数据！');
-    return { timestamp: now, topWords: [], lastRunTime: lastAnalysisTime || now };
+    return { 
+      timestamp: analysisStartTime, 
+      topWords: [], 
+      lastRunTime: lastAnalysisTime || analysisStartTime 
+    };
   }
   
   // 分别分析标题和摘要，标题权重更高
@@ -324,13 +352,20 @@ export async function analyzeNewsWordTrends(limit: number = 30): Promise<TrendAn
     sortedWords = sortedWords.slice(0, Math.min(sortedWords.length, limit));
   }
   
-  // 创建结果
+  // 分析结束时间，用于计算性能
+  const analysisEndTime = new Date();
+  const analysisDurationMs = analysisEndTime.getTime() - analysisStartTime.getTime();
+  
+  // 创建结果 - 使用分析开始时间作为时间戳
   const result: TrendAnalysisResult = {
-    timestamp: now,
+    timestamp: analysisStartTime,  // 使用分析开始时间作为时间戳
     topWords: sortedWords,
-    lastRunTime: lastAnalysisTime
+    lastRunTime: lastAnalysisTime || analysisStartTime // 保持上次运行时间的正确值
   };
   
-  console.log(`词汇趋势分析完成，找到 ${sortedWords.length} 个热门词汇`);
+  // 缓存分析结果供API响应使用
+  cacheTrendAnalysisResult(result);
+  
+  console.log(`词汇趋势分析完成，找到 ${sortedWords.length} 个热门词汇，耗时 ${analysisDurationMs}ms`);
   return result;
 }
