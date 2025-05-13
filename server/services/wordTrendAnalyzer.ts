@@ -32,7 +32,11 @@ const STOP_WORDS = new Set([
   // 用户定制过滤的常见词汇 - 这些在新闻中很常见但不提供有效趋势信息
   'price', 'million', 'report', 'may', 'major', 'ceo', 'new', 'investors', 'investor', 
   'invest', 'surge', 'data', 'coin', 'inflows', 'inflow', 'since', 'asset', 'past', 
-  'recent', 'exploit', 'exploited'
+  'recent', 'exploit', 'exploited',
+  
+  // 第二批用户定制过滤词汇
+  'breach', 'digital', 'giant', 'strategy', 'out', 'personal', 'president', 'analyst', 
+  'game', 'reserve', 'top', 'first', 'house', 'details', 'detail', 'rally', 'worth'
 ]);
 
 // 单词频率对象类型
