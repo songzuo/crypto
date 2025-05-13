@@ -51,7 +51,7 @@ const STOP_WORDS = new Set([
   'haven\'t', 'hadn\'t', 'doesn\'t', 'don\'t', 'didn\'t', 'won\'t', 'wouldn\'t', 'shan\'t', 'shouldn\'t',
   'can\'t', 'cannot', 'couldn\'t', 'mustn\'t', 'let\'s', 'that\'s', 'who\'s', 'what\'s', 'here\'s',
   'there\'s', 'when\'s', 'where\'s', 'why\'s', 'how\'s', 'as', 'us', 'among', 'whilst', 'while',
-  'detail', 'details', 'first', 'strategy',
+  'detail', 'details', 'first', 'strategy', 'digital', 'capital', 'retail', 'giant',
   
   // 可能干扰趋势分析的词汇（常见但无明显趋势意义）
   'crypto', 'cryptocurrency', 'says', 'according', 'may', 'one', 'two', 'three',
@@ -175,26 +175,26 @@ function analyzeText(text: string): Map<string, number> {
     if (isValidWord(word)) {
       // 如果是加密货币名称或简写，赋予额外权重
       const isCryptoName = cryptoNames.includes(word);
-      const weight = isCryptoName ? 1.2 : 1; // 给加密货币名称20%的权重提升
+      const weight = isCryptoName ? 1.0 : 1; // 给加密货币名称不再提供权重提升
       
       wordFrequency.set(word, (wordFrequency.get(word) || 0) + weight);
     }
   }
   
-  // 统计2-词短语频率，给予更高权重
+  // 统计2-词短语频率，给予权重
   for (const phrase of bigrams) {
     const currentCount = wordFrequency.get(phrase) || 0;
     // 重要术语获得额外权重
     const isImportant = importantTerms.includes(phrase);
-    const weight = isImportant ? 1.5 : 1.2; // 重要术语获得1.5倍权重，普通短语1.2倍
+    const weight = isImportant ? 1.1 : 1.0; // 重要术语获得1.1倍权重，普通短语1.0倍
     
     wordFrequency.set(phrase, currentCount + weight);
   }
   
-  // 统计3-词短语频率，给予最高权重
+  // 统计3-词短语频率
   for (const phrase of trigrams) {
     const currentCount = wordFrequency.get(phrase) || 0;
-    const weight = 1.2; // 三词短语获得1.2倍权重
+    const weight = 1.0; // 三词短语获得1.0倍权重
     wordFrequency.set(phrase, currentCount + weight);
   }
   
@@ -284,8 +284,8 @@ export async function analyzeNewsWordTrends(limit: number = 30): Promise<TrendAn
   const titleEntries = [...titleWordFrequency.entries()];
   for (const [word, count] of titleEntries) {
     const currentCount = combinedWordFrequency.get(word) || 0;
-    // 标题词汇权重为1.5倍
-    combinedWordFrequency.set(word, currentCount + (count * 1.5));
+    // 标题词汇权重为1.1倍
+    combinedWordFrequency.set(word, currentCount + (count * 1.1));
   }
   
   console.log(`词汇分析完成: 标题分析 ${titleWordFrequency.size} 个词汇，摘要分析 ${summaryWordFrequency.size} 个词汇`);
