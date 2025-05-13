@@ -25,8 +25,14 @@ const STOP_WORDS = new Set([
   'haven\'t', 'hadn\'t', 'doesn\'t', 'don\'t', 'didn\'t', 'won\'t', 'wouldn\'t', 'shan\'t', 'shouldn\'t',
   'can\'t', 'cannot', 'couldn\'t', 'mustn\'t', 'let\'s', 'that\'s', 'who\'s', 'what\'s', 'here\'s',
   'there\'s', 'when\'s', 'where\'s', 'why\'s', 'how\'s', 'as', 'us', 'among', 'whilst', 'while',
+  
   // 加密货币领域特定的常用词汇也可以考虑过滤
-  'crypto', 'cryptocurrency', 'says', 'according'
+  'crypto', 'cryptocurrency', 'says', 'according',
+  
+  // 用户定制过滤的常见词汇 - 这些在新闻中很常见但不提供有效趋势信息
+  'price', 'million', 'report', 'may', 'major', 'ceo', 'new', 'investors', 'investor', 
+  'invest', 'surge', 'data', 'coin', 'inflows', 'inflow', 'since', 'asset', 'past', 
+  'recent', 'exploit', 'exploited'
 ]);
 
 // 单词频率对象类型
@@ -59,8 +65,20 @@ function analyzeText(text: string): Map<string, number> {
   
   // 统计每个单词的出现频率
   for (const word of words) {
-    // 过滤空字符串和停用词
-    if (!word || STOP_WORDS.has(word) || word.length <= 2) continue;
+    // 过滤条件:
+    // 1. 空字符串
+    // 2. 停用词列表中的词
+    // 3. 长度小于等于2的词
+    // 4. 纯数字
+    // 5. 包含特殊字符的词
+    if (!word || 
+        STOP_WORDS.has(word) || 
+        word.length <= 2 || 
+        /^\d+$/.test(word) ||  // 过滤纯数字
+        /[^\w\s]/.test(word)   // 过滤包含特殊字符的词
+       ) {
+      continue;
+    }
     
     // 记录词频
     wordFrequency.set(word, (wordFrequency.get(word) || 0) + 1);
@@ -97,9 +115,10 @@ export async function analyzeNewsWordTrends(limit: number = 30): Promise<TrendAn
   // 分析词频
   const wordFrequency = analyzeText(allText);
   
-  // 转换为数组并按频率排序
+  // 转换为数组，过滤掉出现次数小于2的词汇，并按频率排序
   const sortedWords: WordFrequency[] = Array.from(wordFrequency.entries())
     .map(([word, count]) => ({ word, count }))
+    .filter(item => item.count >= 2) // 只保留出现2次以上的词汇
     .sort((a, b) => b.count - a.count)
     .slice(0, limit);
   
