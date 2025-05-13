@@ -6,6 +6,7 @@
  */
 
 import { storage } from '../storage';
+import { getLastTrendAnalysisTime, updateLastTrendAnalysisTime } from './cacheStore';
 
 // 需要过滤掉的常见虚词
 const STOP_WORDS = new Set([
@@ -73,8 +74,9 @@ export interface WordFrequency {
 
 // 趋势分析结果类型
 export interface TrendAnalysisResult {
-  timestamp: Date;
+  timestamp: Date;        // 当前生成结果的时间戳
   topWords: WordFrequency[];
+  lastRunTime: Date | null; // 上次运行的时间戳（用于显示真实更新时间）
 }
 
 /**
@@ -201,10 +203,21 @@ function isValidWord(word: string): boolean {
  * 增强版：使用更智能的词汇分析和权重算法，识别真正重要的加密货币趋势词汇
  */
 export async function analyzeNewsWordTrends(limit: number = 30): Promise<TrendAnalysisResult> {
-  // 每次都进行全新分析
+  // 获取上次分析时间
+  const lastAnalysisTime = getLastTrendAnalysisTime();
+  
+  // 设置当前时间
   const now = new Date();
   
+  // 更新全局缓存中的最后运行时间
+  updateLastTrendAnalysisTime(now);
+  
   console.log('开始全新分析所有新闻词汇趋势...');
+  if (lastAnalysisTime) {
+    console.log(`上次分析时间: ${lastAnalysisTime.toISOString()}`);
+  } else {
+    console.log('这是首次运行趋势分析');
+  }
   
   // 获取所有新闻数据（强制读取全部400条）
   const { data: news, total } = await storage.getCryptoNews(1, 400);
@@ -213,7 +226,7 @@ export async function analyzeNewsWordTrends(limit: number = 30): Promise<TrendAn
   
   if (news.length === 0) {
     console.log('警告: 没有找到任何新闻数据！');
-    return { timestamp: now, topWords: [] };
+    return { timestamp: now, topWords: [], lastRunTime: lastAnalysisTime || now };
   }
   
   // 分别分析标题和摘要，标题权重更高
