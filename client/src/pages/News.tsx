@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Pagination } from "@/components/ui/pagination";
 import { PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -36,7 +36,7 @@ const NewsPage = () => {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("all");
-  const limit = 10;
+  const limit = 50; // 每页50条新闻，最多6页显示所有300条
   
   // 获取新闻数据
   const { data, isLoading, error } = useQuery<{data: NewsArticle[], total: number}>({
@@ -155,47 +155,71 @@ const NewsPage = () => {
             </Card>
           ))}
           
-          {totalPages > 1 && (
-            <Pagination className="my-8">
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious 
-                    href="#" 
-                    onClick={(e) => {
-                      e.preventDefault();
-                      if (page > 1) setPage(page - 1);
-                    }} 
-                    isActive={page > 1}
-                  />
-                </PaginationItem>
-                
-                {Array.from({ length: Math.min(totalPages, 5) }).map((_, i) => (
-                  <PaginationItem key={i}>
-                    <PaginationLink 
+          {totalPages > 1 && data && (
+            <div className="my-8">
+              <div className="text-center mb-4 text-gray-600">
+                显示 {((page - 1) * limit) + 1} - {Math.min(page * limit, data.total)} 条，共 {data.total} 条新闻
+              </div>
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious 
                       href="#" 
                       onClick={(e) => {
                         e.preventDefault();
-                        setPage(i + 1);
-                      }}
-                      isActive={page === i + 1}
-                    >
-                      {i + 1}
-                    </PaginationLink>
+                        if (page > 1) setPage(page - 1);
+                      }} 
+                    />
                   </PaginationItem>
-                ))}
-                
-                <PaginationItem>
-                  <PaginationNext 
-                    href="#" 
-                    onClick={(e) => {
-                      e.preventDefault();
-                      if (page < totalPages) setPage(page + 1);
-                    }}
-                    isActive={page < totalPages}
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
+                  
+                  {/* 分页逻辑支持多达6页 */}
+                  {Array.from({ length: totalPages }).map((_, i) => {
+                    const pageNum = i + 1;
+                    const isCurrentPage = page === pageNum;
+                    const isFirstPage = pageNum === 1;
+                    const isLastPage = pageNum === totalPages;
+                    const isNearCurrentPage = Math.abs(pageNum - page) <= 1;
+                    
+                    if (isCurrentPage || isFirstPage || isLastPage || isNearCurrentPage) {
+                      return (
+                        <PaginationItem key={i}>
+                          <PaginationLink 
+                            href="#" 
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setPage(pageNum);
+                            }}
+                            isActive={isCurrentPage}
+                          >
+                            {pageNum}
+                          </PaginationLink>
+                        </PaginationItem>
+                      );
+                    }
+                    
+                    if ((pageNum === 2 && page > 3) || (pageNum === totalPages - 1 && page < totalPages - 2)) {
+                      return (
+                        <PaginationItem key={i}>
+                          <span className="px-3 py-2">...</span>
+                        </PaginationItem>
+                      );
+                    }
+                    
+                    return null;
+                  })}
+                  
+                  <PaginationItem>
+                    <PaginationNext 
+                      href="#" 
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (page < totalPages) setPage(page + 1);
+                      }}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </div>
           )}
         </div>
       ) : (
