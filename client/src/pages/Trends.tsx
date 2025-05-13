@@ -98,7 +98,7 @@ export default function Trends() {
   }
 
   // 解析数据
-  const trends: TrendAnalysisResult = data;
+  const trends = data as TrendAnalysisResult;
   
   if (!trends || !trends.topWords || trends.topWords.length === 0) {
     return (

@@ -533,7 +533,7 @@ async function forceBreakthroughScrape(): Promise<void> {
       console.log(`新闻词汇趋势分析完成: 找到 ${result.topWords.length} 个热门词汇`);
       
       // 更新活动时间
-      updateActivityTime('wordTrendAnalyzer');
+      updateActivityTime();
     } catch (error) {
       console.error('新闻词汇趋势分析出错:', error);
     }
