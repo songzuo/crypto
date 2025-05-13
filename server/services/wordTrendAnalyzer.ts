@@ -26,6 +26,7 @@ const STOP_WORDS = new Set([
   'haven\'t', 'hadn\'t', 'doesn\'t', 'don\'t', 'didn\'t', 'won\'t', 'wouldn\'t', 'shan\'t', 'shouldn\'t',
   'can\'t', 'cannot', 'couldn\'t', 'mustn\'t', 'let\'s', 'that\'s', 'who\'s', 'what\'s', 'here\'s',
   'there\'s', 'when\'s', 'where\'s', 'why\'s', 'how\'s', 'as', 'us', 'among', 'whilst', 'while',
+  'detail', 'details', 'first', 'strategy',
   
   // 可能干扰趋势分析的词汇（常见但无明显趋势意义）
   'crypto', 'cryptocurrency', 'says', 'according', 'may', 'one', 'two', 'three',
@@ -158,7 +159,7 @@ function analyzeText(text: string): Map<string, number> {
     const currentCount = wordFrequency.get(phrase) || 0;
     // 重要术语获得额外权重
     const isImportant = importantTerms.includes(phrase);
-    const weight = isImportant ? 2 : 1.5; // 重要术语获得2倍权重，普通短语1.5倍
+    const weight = isImportant ? 1.5 : 1.2; // 重要术语获得1.5倍权重，普通短语1.2倍
     
     wordFrequency.set(phrase, currentCount + weight);
   }
@@ -166,7 +167,7 @@ function analyzeText(text: string): Map<string, number> {
   // 统计3-词短语频率，给予最高权重
   for (const phrase of trigrams) {
     const currentCount = wordFrequency.get(phrase) || 0;
-    const weight = 2.5; // 三词短语获得2.5倍权重
+    const weight = 1.2; // 三词短语获得1.2倍权重
     wordFrequency.set(phrase, currentCount + weight);
   }
   
