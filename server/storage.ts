@@ -574,7 +574,10 @@ export class MemStorage implements IStorage {
   }
   
   async cleanupOldNews(maxNewsCount: number): Promise<number> {
+    console.log(`检查内存中新闻数量: 当前 ${this.cryptoNews.size} 条，最大允许 ${maxNewsCount} 条`);
+    
     if (this.cryptoNews.size <= maxNewsCount) {
+      console.log(`当前新闻数量 ${this.cryptoNews.size} 未超过最大限制 ${maxNewsCount}，无需清理`);
       return 0;
     }
     
@@ -582,12 +585,15 @@ export class MemStorage implements IStorage {
       .sort((a, b) => (a.fetchedAt?.getTime() || 0) - (b.fetchedAt?.getTime() || 0));
     
     const deleteCount = this.cryptoNews.size - maxNewsCount;
+    console.log(`需要删除 ${deleteCount} 条旧新闻`);
+    
     const toDelete = allNews.slice(0, deleteCount);
     
     for (const news of toDelete) {
       this.cryptoNews.delete(news.id);
     }
     
+    console.log(`已删除 ${toDelete.length} 条旧新闻，保持在 ${maxNewsCount} 条限制之内`);
     return toDelete.length;
   }
   
@@ -1190,10 +1196,14 @@ export class DatabaseStorage implements IStorage {
       
       const currentCount = countResult[0].count;
       
+      // 确保使用传入的maxNewsCount（400）而不是固定值
+      console.log(`检查新闻数量: 当前 ${currentCount} 条，最大允许 ${maxNewsCount} 条`);
+      
       // 如果当前新闻数量超过最大限制
       if (currentCount > maxNewsCount) {
         // 计算需要删除的数量
         const deleteCount = currentCount - maxNewsCount;
+        console.log(`需要删除 ${deleteCount} 条旧新闻`);
         
         // 获取最旧的新闻ID列表
         const oldestNews = await db
@@ -1211,8 +1221,11 @@ export class DatabaseStorage implements IStorage {
             .delete(cryptoNews)
             .where(inArray(cryptoNews.id, oldestIds));
           
+          console.log(`已删除 ${oldestIds.length} 条旧新闻，保持在 ${maxNewsCount} 条限制之内`);
           return oldestIds.length;
         }
+      } else {
+        console.log(`当前新闻数量 ${currentCount} 未超过最大限制 ${maxNewsCount}，无需清理`);
       }
       
       return 0; // 没有需要删除的新闻
