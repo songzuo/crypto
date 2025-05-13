@@ -151,9 +151,9 @@ export async function setupScheduler() {
   });
   
   // Phase 2: 市场数据补充任务 - 这里替换了原本的区块链浏览器查找任务
-  // 以增量方式每2分钟从不同来源获取新的加密货币信息 (7/24不间断)
-  cron.schedule('*/2 * * * *', async () => {
-    console.log('运行计划任务: 市场数据补充收集 (每2分钟)');
+  // 以增量方式每3分钟从不同来源获取新的加密货币信息 (7/24不间断)
+  cron.schedule('*/3 * * * *', async () => {
+    console.log('运行计划任务: 市场数据补充收集 (每3分钟)');
     
     try {
       // 检查当前计数以动态调整批处理大小
@@ -286,9 +286,9 @@ export async function setupScheduler() {
   });
   
   // 加密货币新闻爬取任务
-  // 每2分钟爬取一次新闻 (7/24不间断)
-  cron.schedule('*/2 * * * *', async () => {
-    console.log('运行计划任务: 加密货币新闻爬取 (每2分钟)');
+  // 每4分钟爬取一次新闻 (7/24不间断)
+  cron.schedule('*/4 * * * *', async () => {
+    console.log('运行计划任务: 加密货币新闻爬取 (每4分钟)');
     
     try {
       // 爬取加密货币新闻
@@ -456,9 +456,9 @@ async function forceBreakthroughScrape(): Promise<void> {
     }
   });
   
-  // 高级多源市场数据爬取任务 - 每2分钟执行一次 (7/24不间断)
-  cron.schedule('*/2 * * * *', async () => {
-    console.log('运行计划任务: 高级多源市场数据爬取 (每2分钟)');
+  // 高级多源市场数据爬取任务 - 每3分钟执行一次 (7/24不间断)
+  cron.schedule('*/3 * * * *', async () => {
+    console.log('运行计划任务: 高级多源市场数据爬取 (每3分钟)');
     
     try {
       // 执行高级市场数据爬取
@@ -472,9 +472,9 @@ async function forceBreakthroughScrape(): Promise<void> {
     }
   });
   
-  // 突破467限制的专用任务 - 每2分钟执行一次 (7/24不间断)
-  cron.schedule('*/2 * * * *', async () => {
-    console.log('运行计划任务: 强制突破币种数量限制检查 (每2分钟)');
+  // 突破467限制的专用任务 - 每3分钟执行一次 (7/24不间断)
+  cron.schedule('*/3 * * * *', async () => {
+    console.log('运行计划任务: 强制突破币种数量限制检查 (每3分钟)');
     
     try {
       // 获取当前加密货币数量
