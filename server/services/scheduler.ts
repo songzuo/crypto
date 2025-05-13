@@ -8,6 +8,12 @@ import { scrapeAdvancedMarketData } from './advancedMarketDataScraper';
 import { startWatchdog, updateActivityTime } from './watchdog';
 import { scrapeCryptoNews } from './cryptoNewsScraper';
 import { analyzeNewsWordTrends } from './wordTrendAnalyzer';
+import { 
+  updateLastTrendAnalysisTime, 
+  getLastTrendAnalysisTime,
+  cacheTrendAnalysisResult,
+  getCachedTrendAnalysisResult
+} from './cacheStore';
 
 // 创建一个导出对象，用于存储函数引用和最新趋势分析结果
 export const scheduler = {
@@ -552,6 +558,9 @@ async function forceBreakthroughScrape(): Promise<void> {
       const executionTimeMs = endTime.getTime() - startTime.getTime();
       console.log(`趋势分析执行时间: ${executionTimeMs}ms，在 ${startTime.toISOString()} 开始`);
       
+      // 更新最后分析时间到缓存存储
+      updateLastTrendAnalysisTime(startTime);
+      
       // 更新活动时间
       updateActivityTime();
     } catch (error) {
@@ -567,10 +576,14 @@ async function forceBreakthroughScrape(): Promise<void> {
   
   // 声明一个内部函数，用于后面导出
   function getCachedTrendsResult() {
-    return {
-      ...latestTrendsAnalysisResult,
-      executionTime: trendsAnalysisExecutionTime
-    };
+    // 只有在存在结果的情况下才添加executionTime字段
+    if (latestTrendsAnalysisResult) {
+      return {
+        ...latestTrendsAnalysisResult,
+        executionTime: trendsAnalysisExecutionTime
+      };
+    }
+    return null;
   }
   
   // 将内部函数赋值给外部变量

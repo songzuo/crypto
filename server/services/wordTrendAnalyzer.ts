@@ -101,6 +101,7 @@ export interface TrendAnalysisResult {
   timestamp: Date;        // 当前生成结果的时间戳
   topWords: WordFrequency[];
   lastRunTime: Date | null; // 上次运行的时间戳（用于显示真实更新时间）
+  executionTime?: Date;   // 执行时间（从调度器）
 }
 
 /**
