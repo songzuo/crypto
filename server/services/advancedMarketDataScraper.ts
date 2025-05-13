@@ -566,31 +566,23 @@ export async function scrapeAdvancedMarketData(): Promise<number> {
     const uniqueCryptos = removeDuplicates(allCryptos);
     console.log(`去重后共有 ${uniqueCryptos.length} 个唯一加密货币`);
     
-    // 处理每个加密货币，更新或添加到数据库
+    // 优先寻找和添加新币种，然后再更新现有币种
+    // 第一步：找出所有新币种
+    const newCoinPromises = [];
+    const coinToUpdate = [];
+    
     for (const crypto of uniqueCryptos) {
       try {
         // 查找是否已存在
         const existingCrypto = await findExistingCrypto(crypto.symbol);
         
-        if (existingCrypto) {
-          // 更新现有加密货币
-          if (shouldUpdate(existingCrypto, crypto)) {
-            await storage.updateCryptocurrency(existingCrypto.id, {
-              marketCap: crypto.marketCap,
-              price: crypto.price,
-              volume24h: crypto.volume24h,
-              priceChange24h: crypto.priceChange24h,
-              rank: crypto.rank,
-              lastUpdated: new Date()
-            });
-            updatedCryptos++;
-          }
-        } else {
-          // 添加新加密货币
+        if (!existingCrypto) {
+          // 优先添加新加密货币
+          console.log(`发现新币种: ${crypto.name} (${crypto.symbol})，准备添加`);
           const newCrypto: InsertCryptocurrency = {
             symbol: crypto.symbol,
             name: crypto.name,
-            slug: crypto.slug,
+            slug: crypto.slug || crypto.symbol.toLowerCase(),
             marketCap: crypto.marketCap,
             price: crypto.price,
             volume24h: crypto.volume24h,
@@ -602,11 +594,55 @@ export async function scrapeAdvancedMarketData(): Promise<number> {
             createdAt: new Date()
           };
           
-          await storage.createCryptocurrency(newCrypto);
-          newCryptos++;
+          // 将所有新币种加入到一个队列中，等待处理
+          newCoinPromises.push(
+            storage.createCryptocurrency(newCrypto)
+              .then(() => {
+                newCryptos++;
+                console.log(`成功添加新币种: ${crypto.name} (${crypto.symbol})`);
+              })
+              .catch(err => {
+                console.error(`添加新币种 ${crypto.symbol} 失败:`, err);
+              })
+          );
+        } else {
+          // 将现有币种加入更新队列，稍后处理
+          coinToUpdate.push({ existing: existingCrypto, new: crypto });
         }
       } catch (error) {
         console.error(`处理加密货币 ${crypto.symbol} 时出错:`, error);
+      }
+    }
+    
+    // 先等待所有新币种添加完成
+    if (newCoinPromises.length > 0) {
+      console.log(`开始添加 ${newCoinPromises.length} 个新币种...`);
+      await Promise.all(newCoinPromises);
+      console.log(`成功添加了 ${newCryptos} 个新币种`);
+    } else {
+      console.log('未发现任何新币种');
+    }
+    
+    // 第二步：处理现有币种的更新
+    console.log(`检查 ${coinToUpdate.length} 个现有币种是否需要更新...`);
+    
+    for (const coin of coinToUpdate) {
+      try {
+        if (shouldUpdate(coin.existing, coin.new)) {
+          await storage.updateCryptocurrency(coin.existing.id, {
+            marketCap: coin.new.marketCap,
+            price: coin.new.price,
+            volume24h: coin.new.volume24h,
+            priceChange24h: coin.new.priceChange24h,
+            rank: coin.new.rank,
+            officialWebsite: coin.new.officialWebsite || coin.existing.officialWebsite,
+            logoUrl: coin.new.logoUrl || coin.existing.logoUrl,
+            lastUpdated: new Date()
+          });
+          updatedCryptos++;
+        }
+      } catch (error) {
+        console.error(`更新币种 ${coin.existing.symbol} 失败:`, error);
       }
     }
     
@@ -676,19 +712,44 @@ function shouldUpdate(existing: Cryptocurrency, newData: Cryptocurrency): boolea
     return false;
   }
   
-  // 如果现有数据的lastUpdated是最近1小时内，且没有显著变化，不更新
-  const oneHourAgo = new Date();
-  oneHourAgo.setHours(oneHourAgo.getHours() - 1);
+  // 如果现有数据的lastUpdated是最近3小时内，除非有显著变化，否则不更新
+  const threeHoursAgo = new Date();
+  threeHoursAgo.setHours(threeHoursAgo.getHours() - 3);
   
-  if (existing.lastUpdated && new Date(existing.lastUpdated) > oneHourAgo) {
-    // 价格变化小于5%，且排名变化小于10，不更新
+  if (existing.lastUpdated && new Date(existing.lastUpdated) > threeHoursAgo) {
+    // 只有在以下情况下才更新：
+    // 1. 价格变化超过15%
+    // 2. 市值变化超过20%
+    // 3. 排名变化超过15位
+    // 4. 24小时交易量变化超过25%
     const priceChange = Math.abs(((newData.price || 0) - (existing.price || 0)) / (existing.price || 1)) * 100;
+    const marketCapChange = Math.abs(((newData.marketCap || 0) - (existing.marketCap || 0)) / (existing.marketCap || 1)) * 100;
     const rankChange = Math.abs((newData.rank || 9999) - (existing.rank || 9999));
+    const volumeChange = Math.abs(((newData.volume24h || 0) - (existing.volume24h || 0)) / (existing.volume24h || 1)) * 100;
     
-    if (priceChange < 5 && rankChange < 10) {
-      return false;
+    // 检查是否有任何显著变化需要更新
+    if (priceChange >= 15 || marketCapChange >= 20 || rankChange >= 15 || volumeChange >= 25) {
+      console.log(`需要更新币种 ${existing.symbol}，原因：价格变化 ${priceChange.toFixed(2)}%，市值变化 ${marketCapChange.toFixed(2)}%，排名变化 ${rankChange}，交易量变化 ${volumeChange.toFixed(2)}%`);
+      return true;
     }
+    
+    // 如果现有数据缺少官网或logo，但新数据有，也要更新
+    if ((!existing.officialWebsite || existing.officialWebsite === null) && newData.officialWebsite) {
+      console.log(`需要更新币种 ${existing.symbol}，原因：缺少官网信息`);
+      return true;
+    }
+    
+    if ((!existing.logoUrl || existing.logoUrl === null) && newData.logoUrl) {
+      console.log(`需要更新币种 ${existing.symbol}，原因：缺少Logo信息`);
+      return true;
+    }
+    
+    // 不符合更新条件，跳过
+    console.log(`跳过更新币种 ${existing.symbol}，已在3小时内更新且无显著变化`);
+    return false;
   }
   
+  // 如果超过3小时未更新，执行常规更新
+  console.log(`需要更新币种 ${existing.symbol}，原因：超过3小时未更新`);
   return true;
 }
