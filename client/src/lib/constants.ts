@@ -29,6 +29,11 @@ export const navItems = [
     label: "News",
     path: "/news",
     icon: "ri-newspaper-line"
+  },
+  {
+    label: "Trends",
+    path: "/trends",
+    icon: "ri-trending-up-line"
   }
 ];
 

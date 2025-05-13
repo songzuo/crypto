@@ -522,6 +522,23 @@ async function forceBreakthroughScrape(): Promise<void> {
     }
   });
   
+  // News Word Trends Analysis - Every 5 minutes
+  cron.schedule('*/5 * * * *', async () => {
+    console.log('运行计划任务: 新闻词汇趋势分析 (每5分钟)');
+    
+    try {
+      // 分析新闻词汇趋势
+      console.log('开始分析新闻词汇趋势...');
+      const result = await analyzeNewsWordTrends(30);
+      console.log(`新闻词汇趋势分析完成: 找到 ${result.topWords.length} 个热门词汇`);
+      
+      // 更新活动时间
+      updateActivityTime('wordTrendAnalyzer');
+    } catch (error) {
+      console.error('新闻词汇趋势分析出错:', error);
+    }
+  });
+
   console.log('All scheduler tasks have been set up and are running');
   return true;
 }
