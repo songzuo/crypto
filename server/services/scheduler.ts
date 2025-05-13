@@ -296,10 +296,10 @@ export async function setupScheduler() {
       const newsCount = await scrapeCryptoNews();
       console.log(`加密货币新闻爬取完成: 添加了 ${newsCount} 条新闻`);
       
-      // 清理旧新闻，保持在100条限制以内
-      const removedCount = await storage.cleanupOldNews(100);
+      // 清理旧新闻，保持在400条限制以内
+      const removedCount = await storage.cleanupOldNews(400);
       if (removedCount > 0) {
-        console.log(`已清理 ${removedCount} 条旧新闻，保持在 100 条限制之内`);
+        console.log(`已清理 ${removedCount} 条旧新闻，保持在 400 条限制之内`);
       }
     } catch (error) {
       console.error('加密货币新闻爬取任务出错:', error);
