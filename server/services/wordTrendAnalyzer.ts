@@ -2,7 +2,7 @@
  * 词汇趋势分析器
  * 
  * 从加密货币新闻中分析热门词汇趋势
- * 每5分钟更新一次统计数据
+ * 每次被调用时都进行新的分析
  */
 
 import { storage } from '../storage';
@@ -75,10 +75,6 @@ export interface TrendAnalysisResult {
   timestamp: Date;
   topWords: WordFrequency[];
 }
-
-// 完全禁用缓存，确保每次调用都重新计算
-// 移除全局缓存变量，防止缓存影响分析结果
-// 之前存在的两个全局变量已被删除
 
 /**
  * 对文本进行词频分析
@@ -175,7 +171,8 @@ function analyzeText(text: string): Map<string, number> {
   }
   
   // 后处理：移除频率过低的条目
-  for (const [word, count] of wordFrequency.entries()) {
+  const entries = [...wordFrequency.entries()];
+  for (const [word, count] of entries) {
     if (count < 1.5) { // 频率太低的移除
       wordFrequency.delete(word);
     }
@@ -203,14 +200,10 @@ function isValidWord(word: string): boolean {
  * 增强版：使用更智能的词汇分析和权重算法，识别真正重要的加密货币趋势词汇
  */
 export async function analyzeNewsWordTrends(limit: number = 30): Promise<TrendAnalysisResult> {
-  // 强制每次重新分析，不使用缓存
+  // 每次都进行全新分析
   const now = new Date();
   
-  // 清除缓存以确保每次获取最新结果
-  lastAnalysisResult = null;
-  lastAnalysisTime = new Date(0);
-  
-  console.log('开始全新分析所有新闻词汇趋势，不使用缓存...');
+  console.log('开始全新分析所有新闻词汇趋势...');
   
   // 获取所有新闻数据（强制读取全部400条）
   const { data: news, total } = await storage.getCryptoNews(1, 400);
@@ -239,12 +232,14 @@ export async function analyzeNewsWordTrends(limit: number = 30): Promise<TrendAn
   const combinedWordFrequency = new Map<string, number>();
   
   // 先添加摘要中的词汇
-  for (const [word, count] of summaryWordFrequency.entries()) {
+  const summaryEntries = [...summaryWordFrequency.entries()];
+  for (const [word, count] of summaryEntries) {
     combinedWordFrequency.set(word, count);
   }
   
   // 再添加标题中的词汇，权重更高
-  for (const [word, count] of titleWordFrequency.entries()) {
+  const titleEntries = [...titleWordFrequency.entries()];
+  for (const [word, count] of titleEntries) {
     const currentCount = combinedWordFrequency.get(word) || 0;
     // 标题词汇权重为1.5倍
     combinedWordFrequency.set(word, currentCount + (count * 1.5));
@@ -253,7 +248,7 @@ export async function analyzeNewsWordTrends(limit: number = 30): Promise<TrendAn
   console.log(`词汇分析完成: 标题分析 ${titleWordFrequency.size} 个词汇，摘要分析 ${summaryWordFrequency.size} 个词汇`);
   
   // 转换为数组，并应用额外过滤器
-  let sortedWords: WordFrequency[] = Array.from(combinedWordFrequency.entries())
+  let sortedWords: WordFrequency[] = [...combinedWordFrequency.entries()]
     .map(([word, count]) => ({ 
       word, 
       // 四舍五入到小数点后1位
@@ -315,14 +310,11 @@ export async function analyzeNewsWordTrends(limit: number = 30): Promise<TrendAn
     sortedWords = sortedWords.slice(0, Math.min(sortedWords.length, limit));
   }
   
-  // 创建并缓存结果
+  // 创建结果
   const result: TrendAnalysisResult = {
     timestamp: now,
     topWords: sortedWords
   };
-  
-  lastAnalysisResult = result;
-  lastAnalysisTime = now;
   
   console.log(`词汇趋势分析完成，找到 ${sortedWords.length} 个热门词汇`);
   return result;
