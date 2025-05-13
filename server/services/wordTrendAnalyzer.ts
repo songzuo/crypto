@@ -327,7 +327,8 @@ export async function analyzeNewsWordTrends(limit: number = 30): Promise<TrendAn
   // 创建结果
   const result: TrendAnalysisResult = {
     timestamp: now,
-    topWords: sortedWords
+    topWords: sortedWords,
+    lastRunTime: lastAnalysisTime
   };
   
   console.log(`词汇趋势分析完成，找到 ${sortedWords.length} 个热门词汇`);

@@ -13,8 +13,9 @@ interface WordFrequency {
 }
 
 interface TrendAnalysisResult {
-  timestamp: string;
+  timestamp: string;        // 当前请求时间戳
   topWords: WordFrequency[];
+  lastRunTime: string | null; // 上次分析运行时间
 }
 
 function WordFrequencyItem({ word, count, maxCount }: { word: string; count: number; maxCount: number }) {
@@ -234,9 +235,9 @@ export default function Trends() {
         
         <CardFooter className="text-sm text-gray-500 flex items-center">
           <CalendarDays className="h-4 w-4 mr-2" />
-          {trends.timestamp 
-            ? `最后更新: ${formatDistanceToNow(new Date(trends.timestamp))}前 (每5分钟更新一次)`
-            : '数据将每5分钟更新一次'
+          {trends.lastRunTime 
+            ? `最后更新: ${new Date(trends.lastRunTime).toLocaleString()} (服务器时间) - 每5分钟更新一次`
+            : `分析时间: ${new Date(trends.timestamp).toLocaleString()} (服务器时间) - 每5分钟更新一次`
           }
         </CardFooter>
       </Card>
