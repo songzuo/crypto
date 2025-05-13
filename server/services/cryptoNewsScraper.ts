@@ -2,7 +2,7 @@
  * 加密货币新闻爬虫
  * 
  * 专注于从谷歌搜索中获取最新的加密货币新闻
- * 存储最多100条最新新闻，包括标题、URL和简短摘要
+ * 存储最多300条最新新闻，包括标题、URL和简短摘要
  */
 
 import { InsertCryptoNews } from "@shared/schema";
@@ -13,7 +13,7 @@ import { URL } from "url";
 
 // 配置参数
 const CONFIG = {
-  MAX_NEWS_COUNT: 100,
+  MAX_NEWS_COUNT: 300,
   USER_AGENTS: [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15",
