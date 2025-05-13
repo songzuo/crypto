@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import cron from "node-cron";
-import { setupScheduler } from "./services/scheduler";
+import { setupScheduler, getCachedTrendsAnalysis } from "./services/scheduler";
 import { searchTopCryptocurrencies } from "./services/cryptoSearch";
 import { findBlockchainExplorer, scrapeBlockchainData } from "./services/scraper";
 import { getAiInsightsForCrypto } from "./services/aiInsights";

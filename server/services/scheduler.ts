@@ -522,22 +522,54 @@ async function forceBreakthroughScrape(): Promise<void> {
     }
   });
   
-  // News Word Trends Analysis - Every 5 minutes
-  cron.schedule('*/5 * * * *', async () => {
-    console.log('运行计划任务: 新闻词汇趋势分析 (每5分钟)');
+  // 创建一个用于存储最新趋势分析结果的全局变量
+  let latestTrendsAnalysisResult: any = null;
+  let trendsAnalysisExecutionTime: Date | null = null;
+
+  // 执行趋势分析并缓存结果
+  async function executeAndCacheTrendsAnalysis() {
+    console.log('运行定时任务: 新闻词汇趋势分析 (每5分钟)');
     
     try {
+      const startTime = new Date();
+      trendsAnalysisExecutionTime = startTime;
+      
       // 分析新闻词汇趋势
-      console.log('开始分析新闻词汇趋势...');
+      console.log('开始执行后台定时词汇趋势分析...');
       const result = await analyzeNewsWordTrends(30);
-      console.log(`新闻词汇趋势分析完成: 找到 ${result.topWords.length} 个热门词汇`);
+      console.log(`后台词汇趋势分析完成: 找到 ${result.topWords.length} 个热门词汇`);
+      
+      // 保存结果到全局变量，供API调用时直接使用
+      latestTrendsAnalysisResult = result;
+      
+      // 记录执行时间以供未来参考
+      const endTime = new Date();
+      const executionTimeMs = endTime.getTime() - startTime.getTime();
+      console.log(`趋势分析执行时间: ${executionTimeMs}ms，在 ${startTime.toISOString()} 开始`);
       
       // 更新活动时间
       updateActivityTime();
     } catch (error) {
-      console.error('新闻词汇趋势分析出错:', error);
+      console.error('后台词汇趋势分析出错:', error);
     }
-  });
+  }
+
+  // 初始化时立即执行一次
+  executeAndCacheTrendsAnalysis();
+
+  // 设置严格的5分钟间隔定时任务 - 确保每5分钟运行一次而不依赖API请求
+  cron.schedule('*/5 * * * *', executeAndCacheTrendsAnalysis);
+  
+  // 声明一个内部函数，用于后面导出
+  function getCachedTrendsResult() {
+    return {
+      ...latestTrendsAnalysisResult,
+      executionTime: trendsAnalysisExecutionTime
+    };
+  }
+  
+  // 将内部函数赋值给外部变量
+  scheduler.getCachedTrendsAnalysis = getCachedTrendsResult;
 
   console.log('All scheduler tasks have been set up and are running');
   return true;
