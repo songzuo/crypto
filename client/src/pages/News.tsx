@@ -36,7 +36,7 @@ const NewsPage = () => {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("all");
-  const limit = 50; // 每页50条新闻，最多6页显示所有300条
+  const limit = 50; // 每页50条新闻，最多8页显示所有400条
   
   // 获取新闻数据
   const { data, isLoading, error } = useQuery<{data: NewsArticle[], total: number}>({
