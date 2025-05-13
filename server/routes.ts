@@ -2,13 +2,14 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import cron from "node-cron";
-import { setupScheduler, getCachedTrendsAnalysis } from "./services/scheduler";
+import { setupScheduler, scheduler } from "./services/scheduler";
 import { searchTopCryptocurrencies } from "./services/cryptoSearch";
 import { findBlockchainExplorer, scrapeBlockchainData } from "./services/scraper";
 import { getAiInsightsForCrypto } from "./services/aiInsights";
 import { cryptocurrencies } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
 import { analyzeNewsWordTrends } from "./services/wordTrendAnalyzer";
+import { getCachedTrendAnalysisResult } from "./services/cacheStore";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Get all cryptocurrencies
@@ -256,24 +257,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get word trends from news analysis - 使用缓存的定时分析结果
   app.get("/api/trends", async (req, res) => {
     try {
-      // 获取缓存的趋势分析结果
-      const cachedTrends = scheduler.getCachedTrendsAnalysis();
+      // 首先尝试从缓存存储获取趋势分析结果
+      const cachedTrends = getCachedTrendAnalysisResult();
       
-      if (!cachedTrends || !cachedTrends.topWords) {
+      // 如果缓存存储中没有结果，则尝试从调度器获取
+      let result = cachedTrends;
+      if (!result && scheduler.getCachedTrendsAnalysis) {
+        result = scheduler.getCachedTrendsAnalysis();
+      }
+      
+      if (!result || !result.topWords || result.topWords.length === 0) {
         // 如果没有缓存或缓存无效，则进行实时分析（仅作为后备）
-        console.log('未找到缓存的趋势分析结果，执行实时分析...');
+        console.log('未找到有效的缓存趋势分析结果，执行实时分析...');
         const limit = parseInt(req.query.limit as string) || 30;
-        const trends = await analyzeNewsWordTrends(limit);
-        res.json(trends);
-      } else {
-        // 返回缓存的结果，包括执行时间
-        const result = {
-          ...cachedTrends,
-          // 确保返回lastRunTime属性用于前端显示
-          lastRunTime: cachedTrends.executionTime ? cachedTrends.executionTime.toISOString() : new Date().toISOString()
-        };
-        console.log(`返回缓存的趋势分析结果，分析于: ${result.lastRunTime}`);
+        result = await analyzeNewsWordTrends(limit);
         res.json(result);
+      } else {
+        // 确保结果包含lastRunTime用于前端显示
+        const finalResult = {
+          ...result,
+          // 确保返回lastRunTime属性用于前端显示
+          lastRunTime: result.lastRunTime || (result.timestamp ? new Date(result.timestamp).toISOString() : new Date().toISOString())
+        };
+        console.log(`返回缓存的趋势分析结果，分析于: ${finalResult.lastRunTime}`);
+        res.json(finalResult);
       }
     } catch (error) {
       console.error('获取趋势分析数据出错:', error);
