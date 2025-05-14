@@ -273,25 +273,8 @@ const VolumeRatio = () => {
                     <Separator className="my-4" />
                     
                     <div>
-                      <Button 
-                        onClick={() => triggerAnalysis()}
-                        disabled={isAnalyzing}
-                        className="w-full"
-                      >
-                        {isAnalyzing ? (
-                          <>
-                            <Spinner size="small" className="mr-2" />
-                            正在触发分析...
-                          </>
-                        ) : (
-                          <>
-                            <RefreshCw className="mr-2 h-4 w-4" />
-                            手动触发分析
-                          </>
-                        )}
-                      </Button>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        交易量市值比率分析通常每24小时自动运行一次，点击按钮可手动立即触发。分析可能需要5-10分钟完成。
+                      <p className="text-sm text-muted-foreground">
+                        交易量市值比率分析每24小时自动运行一次。系统现在正在执行初始数据收集和分析，完整过程可能需要30-40分钟。
                       </p>
                     </div>
                     
