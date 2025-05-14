@@ -256,7 +256,7 @@ const VolumeRatio = () => {
                       <div className="text-sm font-medium">新增币种数量</div>
                       <div className="flex items-center">
                         <span className="text-2xl font-bold mr-2">{batchesData.data[0].newCount}</span>
-                        {batchesData.data[0].changePercentage !== null && (
+                        {batchesData.data[0].changePercentage !== null && batchesData.data[0].changePercentage !== undefined && (
                           <Badge variant={batchesData.data[0].changePercentage > 0 ? "success" : "secondary"}>
                             {batchesData.data[0].changePercentage > 0 ? '+' : ''}
                             {batchesData.data[0].changePercentage.toFixed(1)}%
