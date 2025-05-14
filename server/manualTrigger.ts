@@ -5,8 +5,7 @@
  */
 
 import { storage } from "./storage";
-import { scrapeTopCryptocurrencies } from "./services/cryptoSearch";
-import { searchRankedCryptocurrencies } from "./services/cryptoSearch";
+import { searchTopCryptocurrencies, searchRankedCryptocurrencies } from "./services/cryptoSearch";
 import { setupScheduler, runInitialDataCollection } from "./services/scheduler";
 import { fixMarketCapAndRankData, fixMetricsData, runDataFixer } from "./services/dataFixer";
 import { removeCoinsWithoutMarketCap } from "./services/marketCapFixer";
@@ -83,7 +82,7 @@ async function executeTask() {
       console.log(`异步分析成功: 创建了批次 #${result.batchId}，包含 ${result.count} 个加密货币`);
       
       // 获取最新批次的数据
-      const batchData = await storage.getVolumeToMarketCapRatiosByBatchId(result.batchId);
+      const batchData = await storage.getVolumeToMarketCapRatiosByBatchId(result.batchId || 0);
       
       // 打印前30个结果
       console.log("\n前30个高交易量市值比率的币种:");
@@ -91,7 +90,16 @@ async function executeTask() {
       console.log("---------------------------------------------");
       
       batchData.slice(0, 30).forEach((item, index) => {
-        console.log(`${index + 1}\t${item.name.padEnd(16)}\t${item.symbol.padEnd(8)}\t${item.ratio.toFixed(2)}`);
+        // 安全地使用volumeToMarketCapRatio并确保它是数字
+        const ratio = typeof item.volumeToMarketCapRatio === 'number' ? 
+          item.volumeToMarketCapRatio.toFixed(2) : 
+          '0.00';
+        
+        // 确保名称和符号是字符串并填充
+        const name = (item.name || 'Unknown').padEnd(16);
+        const symbol = (item.symbol || 'N/A').padEnd(8);
+        
+        console.log(`${index + 1}\t${name}\t${symbol}\t${ratio}`);
       });
     } else {
       console.log(`分析失败: ${result.error}`);

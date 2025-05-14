@@ -625,16 +625,38 @@ export async function runAsyncRatioAnalysis(): Promise<{ success: boolean, batch
     
     // 保存所有比率数据
     for (const result of allResults) {
+      // 确保ratio是数字类型
+      let ratio = 0;
+      if (typeof result.ratio === 'number' && !isNaN(result.ratio)) {
+        ratio = result.ratio;
+      } else if (typeof result.ratio === 'string') {
+        ratio = parseFloat(result.ratio) || 0;
+      }
+      
+      // 确保volume7d是有效数字
+      let volume7d = null;
+      if (result.volume7d && typeof result.volume7d === 'number' && !isNaN(result.volume7d)) {
+        volume7d = result.volume7d;
+      } else if (result.volume24h && typeof result.volume24h === 'number' && !isNaN(result.volume24h)) {
+        volume7d = result.volume24h * 7;
+      }
+      
+      // 确保marketCap是有效数字
+      let marketCap = null;
+      if (result.marketCap && typeof result.marketCap === 'number' && !isNaN(result.marketCap)) {
+        marketCap = result.marketCap;
+      }
+      
       await storage.createVolumeToMarketCapRatio({
         batchId: batch.id,
-        name: result.name,
-        symbol: result.symbol,
-        rank: result.rank,
+        name: result.name || 'Unknown',
+        symbol: result.symbol || 'UNKNOWN',
+        rank: typeof result.rank === 'number' ? result.rank : 0,
         // Use a default cryptocurrencyId of 0 since we don't know real ID yet
         cryptocurrencyId: 0,
-        marketCap: result.marketCap,
-        volume7d: result.volume7d || result.volume24h * 7,
-        volumeToMarketCapRatio: result.ratio
+        marketCap: marketCap,
+        volume7d: volume7d,
+        volumeToMarketCapRatio: ratio
       });
     }
     
