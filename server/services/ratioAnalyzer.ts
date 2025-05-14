@@ -415,7 +415,7 @@ function parseNumber(str: string): number {
   return num;
 }
 
-// 组合多个数据源的结果
+// 组合多个数据源的结果，使用两步筛选优化算法
 async function combineResults(): Promise<{ 
   cryptoId: number; 
   name: string; 
@@ -428,8 +428,9 @@ async function combineResults(): Promise<{
   updateActivityTime();
   
   try {
-    log('开始从多个数据源收集交易量市值比率数据...', 'volume-ratio');
+    log('开始使用优化算法从多个数据源收集交易量市值比率数据...', 'volume-ratio');
     
+    // 步骤1：首先获取24小时交易量与市值数据，快速筛选潜在候选者
     // 并行从所有来源获取数据
     const [coinMarketCapResults, coinGeckoResults, cryptoComResults] = await Promise.all([
       scrapeCoinMarketCap(),
@@ -437,24 +438,28 @@ async function combineResults(): Promise<{
       scrapeCryptocom()
     ]);
     
-    log(`从CoinMarketCap获取了${coinMarketCapResults.length}个加密货币数据`, 'volume-ratio');
-    log(`从CoinGecko获取了${coinGeckoResults.length}个加密货币数据`, 'volume-ratio');
-    log(`从Crypto.com获取了${cryptoComResults.length}个加密货币数据`, 'volume-ratio');
+    log(`步骤1 - 从CoinMarketCap获取了${coinMarketCapResults.length}个加密货币数据`, 'volume-ratio');
+    log(`步骤1 - 从CoinGecko获取了${coinGeckoResults.length}个加密货币数据`, 'volume-ratio');
+    log(`步骤1 - 从Crypto.com获取了${cryptoComResults.length}个加密货币数据`, 'volume-ratio');
     
     // 合并结果
-    let results = [...coinMarketCapResults, ...coinGeckoResults, ...cryptoComResults];
+    let allResults = [...coinMarketCapResults, ...coinGeckoResults, ...cryptoComResults];
     
     // 去重
-    const uniqueResults = removeDuplicates(results);
-    log(`去重后剩余${uniqueResults.length}个加密货币数据`, 'volume-ratio');
+    const uniqueResults = removeDuplicates(allResults);
+    log(`步骤1 - 去重后剩余${uniqueResults.length}个加密货币数据`, 'volume-ratio');
     
-    // 按交易量/市值比率排序（降序）
+    // 按24小时交易量/市值比率排序（降序）
     uniqueResults.sort((a, b) => b.ratio - a.ratio);
     
-    // 查找每种加密货币的ID
-    log('查找加密货币ID...', 'volume-ratio');
-    for (let i = 0; i < uniqueResults.length; i++) {
-      const result = uniqueResults[i];
+    // 选取前100个候选者进行进一步分析
+    const candidates = uniqueResults.slice(0, 100);
+    log(`步骤1 - 选择前${candidates.length}个高交易量/市值比率币种作为候选者`, 'volume-ratio');
+    
+    // 步骤2：查找候选者的加密货币ID和更多数据
+    log('步骤2 - 查找加密货币ID和补充数据...', 'volume-ratio');
+    for (let i = 0; i < candidates.length; i++) {
+      const result = candidates[i];
       if (result.cryptoId === 0) {
         // 使用模式名称或符号查找加密货币ID
         const cryptoId = await findCryptocurrencyId(result.symbol);
@@ -465,10 +470,13 @@ async function combineResults(): Promise<{
           log(`警告: 未能找到${result.name} (${result.symbol})的加密货币ID`, 'volume-ratio');
         }
       }
+      
+      // 这里可以进一步扩展，获取更准确的7天交易量数据
+      // 当前我们使用24小时交易量*7作为近似值
     }
     
     // 再次排序，优先使用有效的加密货币ID（即我们在数据库中有数据的币种）
-    uniqueResults.sort((a, b) => {
+    candidates.sort((a, b) => {
       // 首先按ID排序（有ID的排在前面）
       if (a.cryptoId > 0 && b.cryptoId === 0) return -1;
       if (a.cryptoId === 0 && b.cryptoId > 0) return 1;
@@ -476,9 +484,9 @@ async function combineResults(): Promise<{
       return b.ratio - a.ratio;
     });
     
-    // 获取前100个结果
-    const topResults = uniqueResults.slice(0, 100);
-    log(`成功获取前${topResults.length}个交易量市值比率数据`, 'volume-ratio');
+    // 获取前30个最终结果
+    const topResults = candidates.slice(0, 30);
+    log(`成功获取前${topResults.length}个交易量市值比率数据作为最终结果`, 'volume-ratio');
     
     return topResults;
   } catch (error: any) {

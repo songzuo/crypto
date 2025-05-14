@@ -319,8 +319,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Manually trigger volume-to-market cap ratio analysis
   app.post("/api/volume-to-market-cap/analyze", async (req, res) => {
     try {
-      const { analyzeVolumeToMarketCapRatios } = await import('./services/volumeMarketRatioScraper');
-      console.log('手动触发交易量市值比率分析...');
+      const { analyzeVolumeToMarketCapRatios } = await import('./services/ratioAnalyzer');
+      console.log('手动触发优化版交易量市值比率分析...');
       
       // 执行分析
       const result = await analyzeVolumeToMarketCapRatios();
