@@ -316,6 +316,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Manually trigger volume-to-market cap ratio analysis
+  app.post("/api/volume-to-market-cap/analyze", async (req, res) => {
+    try {
+      const { analyzeVolumeToMarketCapRatios } = await import('./services/volumeMarketRatioScraper');
+      console.log('手动触发交易量市值比率分析...');
+      
+      // 执行分析
+      const result = await analyzeVolumeToMarketCapRatios();
+      
+      if (result) {
+        res.json({ success: true, message: '交易量市值比率分析已成功执行' });
+      } else {
+        res.json({ success: false, message: '交易量市值比率分析执行完成，但未检测到显著变化' });
+      }
+    } catch (error) {
+      console.error('手动触发交易量市值比率分析失败:', error);
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+  
   // Get specific volume-to-market cap ratio batch
   app.get("/api/volume-to-market-cap/batches/:id", async (req, res) => {
     try {
