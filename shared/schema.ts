@@ -46,7 +46,8 @@ export type Cryptocurrency = typeof cryptocurrencies.$inferSelect;
 export const cryptocurrenciesRelations = relations(cryptocurrencies, ({ many }) => ({
   blockchainExplorers: many(blockchainExplorers),
   metrics: many(metrics),
-  aiInsights: many(aiInsights)
+  aiInsights: many(aiInsights),
+  volumeToMarketCapRatios: many(volumeToMarketCapRatios)
 }));
 
 // Blockchain Explorer table
@@ -150,3 +151,64 @@ export const insertCryptoNewsSchema = createInsertSchema(cryptoNews).omit({
 
 export type InsertCryptoNews = z.infer<typeof insertCryptoNewsSchema>;
 export type CryptoNews = typeof cryptoNews.$inferSelect;
+
+// 交易量市值比率表
+export const volumeToMarketCapRatios = pgTable("volume_to_market_cap_ratios", {
+  id: serial("id").primaryKey(),
+  cryptocurrencyId: integer("cryptocurrency_id").notNull(),
+  name: text("name").notNull(),          // 加密货币名称
+  symbol: text("symbol").notNull(),       // 加密货币符号
+  volume7d: real("volume_7d"),           // 7天累计交易量
+  marketCap: real("market_cap"),         // 市值
+  volumeToMarketCapRatio: real("volume_to_market_cap_ratio").notNull(), // 交易量/市值比率
+  includesFutures: boolean("includes_futures").default(true), // 是否包含期货交易量
+  rank: integer("rank"),                 // 排名
+  timestamp: timestamp("timestamp").defaultNow(), // 记录时间戳
+  batchId: integer("batch_id").notNull(), // 批次ID，一个批次包含同一天的30个记录
+});
+
+export const insertVolumeToMarketCapRatioSchema = createInsertSchema(volumeToMarketCapRatios).omit({
+  id: true,
+  timestamp: true,
+});
+
+export type InsertVolumeToMarketCapRatio = z.infer<typeof insertVolumeToMarketCapRatioSchema>;
+export type VolumeToMarketCapRatio = typeof volumeToMarketCapRatios.$inferSelect;
+
+// 交易量市值比率批次表 - 记录每次批量分析的元数据
+export const volumeToMarketCapBatches = pgTable("volume_to_market_cap_batches", {
+  id: serial("id").primaryKey(),
+  createdAt: timestamp("created_at").defaultNow(), // 批次创建时间
+  entriesCount: integer("entries_count").notNull(), // 此批次包含的记录数
+  hasChanges: boolean("has_changes").default(true), // 是否与上一批次有变化
+  previousBatchId: integer("previous_batch_id"),    // 上一个批次ID
+});
+
+export const insertVolumeToMarketCapBatchSchema = createInsertSchema(volumeToMarketCapBatches).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertVolumeToMarketCapBatch = z.infer<typeof insertVolumeToMarketCapBatchSchema>;
+export type VolumeToMarketCapBatch = typeof volumeToMarketCapBatches.$inferSelect;
+
+// 建立交易量市值比率关系
+export const volumeToMarketCapRatiosRelations = relations(volumeToMarketCapRatios, ({ one }) => ({
+  cryptocurrency: one(cryptocurrencies, {
+    fields: [volumeToMarketCapRatios.cryptocurrencyId],
+    references: [cryptocurrencies.id]
+  }),
+  batch: one(volumeToMarketCapBatches, {
+    fields: [volumeToMarketCapRatios.batchId],
+    references: [volumeToMarketCapBatches.id]
+  })
+}));
+
+// 建立批次关系
+export const volumeToMarketCapBatchesRelations = relations(volumeToMarketCapBatches, ({ many, one }) => ({
+  ratios: many(volumeToMarketCapRatios),
+  previousBatch: one(volumeToMarketCapBatches, {
+    fields: [volumeToMarketCapBatches.previousBatchId],
+    references: [volumeToMarketCapBatches.id]
+  })
+}));

@@ -5,7 +5,9 @@ import {
   metrics, type Metric, type InsertMetric,
   aiInsights, type AiInsight, type InsertAiInsight,
   crawlerStatus, type CrawlerStatus, type InsertCrawlerStatus,
-  cryptoNews, type CryptoNews, type InsertCryptoNews
+  cryptoNews, type CryptoNews, type InsertCryptoNews,
+  volumeToMarketCapRatios, type VolumeToMarketCapRatio, type InsertVolumeToMarketCapRatio,
+  volumeToMarketCapBatches, type VolumeToMarketCapBatch, type InsertVolumeToMarketCapBatch
 } from "@shared/schema";
 
 export interface IStorage {
@@ -66,6 +68,17 @@ export interface IStorage {
   createCryptoNews(news: InsertCryptoNews): Promise<CryptoNews>;
   deleteCryptoNews(id: number): Promise<boolean>;
   cleanupOldNews(maxNewsCount: number): Promise<number>;
+  
+  // 交易量市值比率相关方法
+  getVolumeToMarketCapRatios(page: number, limit: number): Promise<{ data: VolumeToMarketCapRatio[], total: number }>;
+  getVolumeToMarketCapRatiosByBatchId(batchId: number): Promise<VolumeToMarketCapRatio[]>;
+  createVolumeToMarketCapRatio(ratio: InsertVolumeToMarketCapRatio): Promise<VolumeToMarketCapRatio>;
+  
+  // 交易量市值比率批次相关方法
+  getVolumeToMarketCapBatches(page: number, limit: number): Promise<{ data: VolumeToMarketCapBatch[], total: number }>;
+  getLatestVolumeToMarketCapBatch(): Promise<VolumeToMarketCapBatch | undefined>;
+  getVolumeToMarketCapBatch(id: number): Promise<VolumeToMarketCapBatch | undefined>;
+  createVolumeToMarketCapBatch(batch: InsertVolumeToMarketCapBatch): Promise<VolumeToMarketCapBatch>;
 }
 
 export class MemStorage implements IStorage {
