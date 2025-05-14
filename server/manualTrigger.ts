@@ -50,7 +50,7 @@ async function main() {
 
 // 你可以修改这个函数来执行不同的任务
 async function executeTask() {
-  console.log("正在执行 突破性爬取 任务...");
+  console.log("正在执行 异步交易量市值比率分析 任务...");
   
   // 选择执行任务的选项：
   
@@ -58,7 +58,7 @@ async function executeTask() {
   // await searchRankedCryptocurrencies(1, 600); 
   
   // 选项2：直接从头搜索前500币
-  await searchTopCryptocurrencies(500);
+  // await searchTopCryptocurrencies(500);
   
   // 选项3：初始数据收集（与应用启动时相同）
   // await runInitialDataCollection();
@@ -68,6 +68,37 @@ async function executeTask() {
   
   // 选项5：删除没有市值的币种
   // await removeCoinsWithoutMarketCap();
+  
+  // 选项6：运行异步交易量市值比率分析 - 新增选项
+  try {
+    console.log("开始执行增强版异步交易量市值比率分析...");
+    
+    // 导入异步分析器
+    const { runAsyncRatioAnalysis } = await import("./services/asyncRatioAnalyzer");
+    
+    // 执行分析
+    const result = await runAsyncRatioAnalysis();
+    
+    if (result.success) {
+      console.log(`异步分析成功: 创建了批次 #${result.batchId}，包含 ${result.count} 个加密货币`);
+      
+      // 获取最新批次的数据
+      const batchData = await storage.getVolumeToMarketCapRatiosByBatchId(result.batchId);
+      
+      // 打印前30个结果
+      console.log("\n前30个高交易量市值比率的币种:");
+      console.log("排名\t币种\t\t符号\t\t比率");
+      console.log("---------------------------------------------");
+      
+      batchData.slice(0, 30).forEach((item, index) => {
+        console.log(`${index + 1}\t${item.name.padEnd(16)}\t${item.symbol.padEnd(8)}\t${item.ratio.toFixed(2)}`);
+      });
+    } else {
+      console.log(`分析失败: ${result.error}`);
+    }
+  } catch (error) {
+    console.error("执行异步分析时出错:", error);
+  }
 }
 
 // 立即执行主函数

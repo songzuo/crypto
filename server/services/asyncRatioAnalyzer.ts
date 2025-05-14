@@ -42,7 +42,19 @@ const DELAY_BETWEEN_REQUESTS = 300; // 请求间隔(毫秒)
 const CONCURRENT_REQUESTS = 5; // 并发请求数
 const MAX_RETRIES = 3; // 最大重试次数
 const MIN_MARKET_CAP_USD = 1000000; // 最小市值(USD)
-const STABLECOIN_SYMBOLS = ['USDT', 'USDC', 'BUSD', 'DAI', 'TUSD', 'UST', 'USDP', 'GUSD', 'FRAX']; // 稳定币符号
+// 扩展稳定币列表，包括First Digital USD在内
+const STABLECOIN_SYMBOLS = [
+  'USDT', 'USDC', 'BUSD', 'DAI', 'TUSD', 'UST', 'USDP', 'GUSD', 'FRAX', 
+  'FDUSD', 'USDD', 'LUSD', 'USDK', 'USDX', 'SUSD', 'EUSD', 'HUSD', 'USDN',
+  'OUSD', 'CUSD', 'MUSD', 'PUSD', 'YUSD', 'ZUSD', 'USDJ', 'AUSD', 'BIDR', 
+  'EURT', 'QCUSD', 'XSGD', 'EURS', 'EUROC', 'PYUSD', 'EURC'
+]; 
+
+// 稳定币名称匹配
+const STABLECOIN_NAMES = [
+  'USD', 'Dollar', 'Stable', 'Stablecoin', 'Tether', 'USDC', 'Binance USD',
+  'First Digital USD', 'Pax Dollar', 'Dai', 'TrueUSD', 'FRAX', 'Gemini Dollar'
+];
 
 // 工具函数
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -149,16 +161,21 @@ class CoinGeckoAPI {
   /**
    * 一次性获取所有主要币种及其交易量数据
    */
-  async getAllCoinVolumeRatios(limit = 500) {
+  async getAllCoinVolumeRatios(limit = 2000) {
     try {
       // 1. 首先获取尽可能多的币种基本信息
       const totalPages = Math.ceil(limit / 250);
+      log(`需要获取${totalPages}页数据，每页250个币种，共计约${totalPages * 250}个币种`, 'async-ratio');
+      
       const pagePromises = [];
       
-      // 请求所有页面
+      // 请求所有页面 - 使用并行请求，但添加一些随机延迟避免限制
       for (let page = 1; page <= totalPages; page++) {
+        // 随机延迟50-300ms，减少同时发起请求的可能性
+        const randomDelay = Math.floor(Math.random() * 250) + 50;
+        await delay(randomDelay);
+        
         pagePromises.push(this.fetchMarkets(page));
-        await delay(DELAY_BETWEEN_REQUESTS); // 避免触发限制
       }
       
       // 等待所有页面请求完成
@@ -168,10 +185,18 @@ class CoinGeckoAPI {
       log(`从CoinGecko获取到${allCoins.length}个币种的基本信息`, 'async-ratio');
       
       // 2. 过滤掉稳定币
-      const filteredCoins = allCoins.filter(coin => 
-        !STABLECOIN_SYMBOLS.includes(coin.symbol.toUpperCase()) &&
-        coin.market_cap > MIN_MARKET_CAP_USD
-      );
+      const filteredCoins = allCoins.filter(coin => {
+        // 检查符号是否匹配稳定币
+        const isStablecoinBySymbol = STABLECOIN_SYMBOLS.includes(coin.symbol.toUpperCase());
+        
+        // 检查名称是否包含稳定币关键词
+        const isStablecoinByName = STABLECOIN_NAMES.some(name => 
+          coin.name.toLowerCase().includes(name.toLowerCase())
+        );
+        
+        // 只保留非稳定币且市值符合要求的币种
+        return !isStablecoinBySymbol && !isStablecoinByName && coin.market_cap > MIN_MARKET_CAP_USD;
+      });
       
       log(`过滤后剩余${filteredCoins.length}个非稳定币`, 'async-ratio');
       
@@ -339,30 +364,68 @@ class CryptoCompareAPI {
  * CoinMarketCap API类
  */
 class CoinMarketCapAPI {
-  async getTopCoins(limit = 500) {
+  /**
+   * 获取CoinMarketCap上的所有币种数据
+   * @param {number} limit - 要获取的币种数量上限
+   * @returns {Promise<CryptoData[]>} - 排序后的加密货币数据
+   */
+  async getTopCoins(limit = 2000) {
     if (!COINMARKETCAP_API_KEY) {
       log('未设置CoinMarketCap API密钥', 'async-ratio');
       return [];
     }
     
     try {
-      const response = await axios.get(`${COINMARKETCAP_BASE}/cryptocurrency/listings/latest`, {
-        headers: {
-          'X-CMC_PRO_API_KEY': COINMARKETCAP_API_KEY
-        },
-        params: {
-          limit,
-          convert: 'USD'
+      // 如果请求量大，可能需要分页获取
+      const maxPerRequest = 1000; // CMC API一次性最多返回1000个结果
+      const pages = Math.ceil(limit / maxPerRequest);
+      const allCoins = [];
+      
+      for (let page = 1; page <= pages; page++) {
+        const start = (page - 1) * maxPerRequest + 1;
+        
+        log(`从CoinMarketCap获取第${page}页数据，起始位置${start}，每页${maxPerRequest}条`, 'async-ratio');
+        
+        const response = await axios.get(`${COINMARKETCAP_BASE}/cryptocurrency/listings/latest`, {
+          headers: {
+            'X-CMC_PRO_API_KEY': COINMARKETCAP_API_KEY
+          },
+          params: {
+            start, // 分页起始位置
+            limit: maxPerRequest, // 每页大小
+            convert: 'USD'
+          }
+        });
+        
+        // 添加到总结果集
+        if (response.data && response.data.data) {
+          allCoins.push(...response.data.data);
+          
+          // 避免频繁请求API被限制
+          if (page < pages) {
+            await delay(1000); // 请求间隔1秒
+          }
         }
+      }
+      
+      log(`从CoinMarketCap总共获取到${allCoins.length}个币种`, 'async-ratio');
+      
+      // 过滤稳定币和低市值币种
+      const filteredCoins = allCoins.filter(coin => {
+        // 检查是否是稳定币(通过符号)
+        const isStablecoinBySymbol = STABLECOIN_SYMBOLS.includes(coin.symbol);
+        
+        // 检查是否是稳定币(通过名称)
+        const isStablecoinByName = STABLECOIN_NAMES.some(name => 
+          coin.name.toLowerCase().includes(name.toLowerCase())
+        );
+        
+        // 市值检查
+        const hasValidMarketCap = coin.quote?.USD?.market_cap > MIN_MARKET_CAP_USD;
+        
+        // 只保留非稳定币且市值足够的币种
+        return !isStablecoinBySymbol && !isStablecoinByName && hasValidMarketCap;
       });
-      
-      const coins = response.data.data;
-      log(`从CoinMarketCap获取到${coins.length}个币种`, 'async-ratio');
-      
-      const filteredCoins = coins.filter(coin => 
-        !STABLECOIN_SYMBOLS.includes(coin.symbol) &&
-        coin.quote.USD.market_cap > MIN_MARKET_CAP_USD
-      );
       
       const results = filteredCoins.map(coin => {
         const marketCap = coin.quote.USD.market_cap;
@@ -517,19 +580,19 @@ export async function runAsyncRatioAnalysis(): Promise<{ success: boolean, batch
     
     // 并行请求所有数据源
     const [geckoResults, capResults, compareResults, cmcResults] = await Promise.all([
-      coinGecko.getAllCoinVolumeRatios(500).catch(e => {
+      coinGecko.getAllCoinVolumeRatios(1500).catch(e => {
         log(`CoinGecko分析失败: ${e.message}`, 'async-ratio');
         return [];
       }),
-      coinCap.getAllCoins(1000).catch(e => {
+      coinCap.getAllCoins(2000).catch(e => {
         log(`CoinCap分析失败: ${e.message}`, 'async-ratio');
         return [];
       }),
-      cryptoCompare.getTopCoins(1000).catch(e => {
+      cryptoCompare.getTopCoins(2000).catch(e => {
         log(`CryptoCompare分析失败: ${e.message}`, 'async-ratio');
         return [];
       }),
-      coinMarketCap.getTopCoins(500).catch(e => {
+      coinMarketCap.getTopCoins(2000).catch(e => {
         log(`CoinMarketCap分析失败: ${e.message}`, 'async-ratio');
         return [];
       })
