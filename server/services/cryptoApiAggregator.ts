@@ -5,551 +5,474 @@
 
 import axios from 'axios';
 import { log } from '../vite';
-import { sleep } from './utils';
+import { sleep, parseNumber } from './utils';
 
-// 标准化的加密货币数据结构
+/**
+ * API返回的加密货币数据接口
+ */
 export interface ApiCryptoData {
   name: string;
   symbol: string;
   marketCap: number;
   volume24h: number;
   price: number;
-  volume7d?: number; // 可选，有些API直接提供7天平均数据
+  volume7d?: number; // 有些API直接提供7天平均数据
 }
 
-// 1. CoinMarketCap API
+/**
+ * 从CoinMarketCap API获取加密货币数据
+ * @param limit 获取的币种数量上限
+ * @returns 加密货币数据数组
+ */
 export async function fetchFromCoinMarketCapAPI(limit: number = 100): Promise<ApiCryptoData[]> {
   try {
-    const API_KEY = process.env.CMC_API_KEY;
-    if (!API_KEY) {
-      log('缺少CoinMarketCap API密钥，跳过API调用', 'api-aggregator');
-      return [];
-    }
+    log(`从CoinMarketCap API获取前${limit}个加密货币数据...`, 'crypto-api');
     
-    const url = 'https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest';
-    const response = await axios.get(url, {
+    const response = await axios.get(`https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest`, {
       headers: {
-        'X-CMC_PRO_API_KEY': API_KEY
+        'X-CMC_PRO_API_KEY': process.env.COINMARKETCAP_API_KEY || 'DEMO-API-KEY',
       },
       params: {
-        limit,
+        start: 1,
+        limit: limit,
         convert: 'USD'
       }
     });
     
-    return response.data.data.map(coin => ({
-      name: coin.name,
-      symbol: coin.symbol,
-      marketCap: coin.quote.USD.market_cap,
-      volume24h: coin.quote.USD.volume_24h,
-      price: coin.quote.USD.price
-    }));
+    if (response.data && response.data.data) {
+      return response.data.data.map((coin: any) => ({
+        name: coin.name,
+        symbol: coin.symbol,
+        marketCap: coin.quote.USD.market_cap || 0,
+        volume24h: coin.quote.USD.volume_24h || 0,
+        price: coin.quote.USD.price || 0
+      }));
+    }
+    
+    return [];
   } catch (error) {
-    log(`CoinMarketCap API调用失败: ${error.message}`, 'api-aggregator');
+    log(`从CoinMarketCap API获取数据时出错: ${error instanceof Error ? error.message : 'Unknown error'}`, 'crypto-api');
     return [];
   }
 }
 
-// 2. CoinGecko API
+/**
+ * 从CoinGecko API获取加密货币数据
+ * @param page 页码
+ * @param perPage 每页数量
+ * @returns 加密货币数据数组
+ */
 export async function fetchFromCoinGeckoAPI(page: number = 1, perPage: number = 100): Promise<ApiCryptoData[]> {
   try {
-    // 如果有专业版API密钥，使用专业版API端点
-    const API_KEY = process.env.COINGECKO_PRO_API_KEY;
-    const baseUrl = API_KEY 
-      ? 'https://pro-api.coingecko.com/api/v3/coins/markets'
-      : 'https://api.coingecko.com/api/v3/coins/markets';
+    log(`从CoinGecko API获取加密货币数据(页码:${page}, 每页:${perPage})...`, 'crypto-api');
     
-    const headers = API_KEY ? { 'x-cg-pro-api-key': API_KEY } : {};
-    const response = await axios.get(baseUrl, {
-      headers,
+    const response = await axios.get(`https://api.coingecko.com/api/v3/coins/markets`, {
       params: {
         vs_currency: 'usd',
         order: 'market_cap_desc',
         per_page: perPage,
-        page,
-        sparkline: false
+        page: page,
+        sparkline: false,
+        price_change_percentage: '24h'
       }
     });
     
-    return response.data.map(coin => ({
-      name: coin.name,
-      symbol: coin.symbol.toUpperCase(),
-      marketCap: coin.market_cap,
-      volume24h: coin.total_volume,
-      price: coin.current_price
-    }));
+    if (response.data && Array.isArray(response.data)) {
+      return response.data.map((coin: any) => ({
+        name: coin.name,
+        symbol: coin.symbol.toUpperCase(),
+        marketCap: coin.market_cap || 0,
+        volume24h: coin.total_volume || 0,
+        price: coin.current_price || 0
+      }));
+    }
+    
+    return [];
   } catch (error) {
-    log(`CoinGecko API调用失败: ${error.message}`, 'api-aggregator');
+    log(`从CoinGecko API获取数据时出错: ${error instanceof Error ? error.message : 'Unknown error'}`, 'crypto-api');
     return [];
   }
 }
 
-// 3. CryptoCompare API
+/**
+ * 从CryptoCompare API获取加密货币数据
+ * @param limit 获取的币种数量上限
+ * @returns 加密货币数据数组
+ */
 export async function fetchFromCryptoCompareAPI(limit: number = 100): Promise<ApiCryptoData[]> {
   try {
-    const API_KEY = process.env.CRYPTOCOMPARE_API_KEY;
-    const headers = API_KEY ? { 'authorization': `Apikey ${API_KEY}` } : {};
+    log(`从CryptoCompare API获取前${limit}个加密货币数据...`, 'crypto-api');
     
-    const url = 'https://min-api.cryptocompare.com/data/top/mktcapfull';
-    const response = await axios.get(url, {
-      headers,
+    // 先获取顶级币种列表
+    const topListResponse = await axios.get(`https://min-api.cryptocompare.com/data/top/mktcapfull`, {
       params: {
-        limit,
+        limit: limit,
         tsym: 'USD'
+      },
+      headers: {
+        'Authorization': `Apikey ${process.env.CRYPTOCOMPARE_API_KEY || ''}`
       }
     });
     
-    return response.data.Data.map(item => {
-      const coin = item.CoinInfo;
-      const raw = item.RAW?.USD;
-      
-      return {
-        name: coin.FullName,
-        symbol: coin.Name,
-        marketCap: raw?.MKTCAP || 0,
-        volume24h: raw?.VOLUME24HOUR || 0,
-        price: raw?.PRICE || 0
-      };
-    });
+    if (topListResponse.data && topListResponse.data.Data) {
+      return topListResponse.data.Data.map((item: any) => {
+        const coinData = item.CoinInfo || {};
+        const rawData = item.RAW && item.RAW.USD ? item.RAW.USD : {};
+        
+        return {
+          name: coinData.FullName || coinData.Name || '',
+          symbol: coinData.Name || '',
+          marketCap: rawData.MKTCAP || 0,
+          volume24h: rawData.VOLUME24HOUR || 0,
+          price: rawData.PRICE || 0
+        };
+      });
+    }
+    
+    return [];
   } catch (error) {
-    log(`CryptoCompare API调用失败: ${error.message}`, 'api-aggregator');
+    log(`从CryptoCompare API获取数据时出错: ${error instanceof Error ? error.message : 'Unknown error'}`, 'crypto-api');
     return [];
   }
 }
 
-// 4. CoinAPI
+/**
+ * 从CoinAPI获取加密货币数据
+ * @param limit 获取的币种数量上限
+ * @returns 加密货币数据数组
+ */
 export async function fetchFromCoinAPI(limit: number = 100): Promise<ApiCryptoData[]> {
   try {
-    const API_KEY = process.env.COINAPI_KEY;
-    if (!API_KEY) {
-      log('缺少CoinAPI密钥，跳过API调用', 'api-aggregator');
+    log(`从CoinAPI获取加密货币数据...`, 'crypto-api');
+    
+    // 获取所有资产列表
+    const assetsResponse = await axios.get('https://rest.coinapi.io/v1/assets', {
+      headers: {
+        'X-CoinAPI-Key': process.env.COINAPI_KEY || ''
+      }
+    });
+    
+    if (!assetsResponse.data || !Array.isArray(assetsResponse.data)) {
       return [];
     }
     
-    const url = 'https://rest.coinapi.io/v1/assets';
-    const response = await axios.get(url, {
-      headers: { 'X-CoinAPI-Key': API_KEY },
-      params: { limit }
-    });
+    // 过滤和处理前N个加密货币
+    const cryptoAssets = assetsResponse.data
+      .filter((asset: any) => asset.type_is_crypto === 1)
+      .sort((a: any, b: any) => (b.volume_1day_usd || 0) - (a.volume_1day_usd || 0))
+      .slice(0, limit);
     
-    return response.data
-      .filter(asset => asset.type_is_crypto === 1)
-      .map(asset => ({
-        name: asset.name,
-        symbol: asset.asset_id,
-        marketCap: parseFloat(asset.market_cap_usd || '0'),
-        volume24h: parseFloat(asset.volume_1day_usd || '0'),
-        price: parseFloat(asset.price_usd || '0')
-      }));
+    return cryptoAssets.map((asset: any) => ({
+      name: asset.name || asset.asset_id,
+      symbol: asset.asset_id,
+      marketCap: asset.market_cap_usd || 0,
+      volume24h: asset.volume_1day_usd || 0,
+      price: asset.price_usd || 0
+    }));
   } catch (error) {
-    log(`CoinAPI调用失败: ${error.message}`, 'api-aggregator');
+    log(`从CoinAPI获取数据时出错: ${error instanceof Error ? error.message : 'Unknown error'}`, 'crypto-api');
     return [];
   }
 }
 
-// 5. CoinCap
+/**
+ * 从CoinCap API获取加密货币数据
+ * @param limit 获取的币种数量上限
+ * @returns 加密货币数据数组
+ */
 export async function fetchFromCoinCapAPI(limit: number = 100): Promise<ApiCryptoData[]> {
   try {
-    const API_KEY = process.env.COINCAP_API_KEY;
-    const headers = API_KEY ? { 'Authorization': `Bearer ${API_KEY}` } : {};
+    log(`从CoinCap API获取前${limit}个加密货币数据...`, 'crypto-api');
     
-    const url = 'https://api.coincap.io/v2/assets';
-    const response = await axios.get(url, {
-      headers,
-      params: { limit }
+    const response = await axios.get(`https://api.coincap.io/v2/assets`, {
+      params: {
+        limit: limit
+      }
     });
     
-    return response.data.data.map(asset => ({
-      name: asset.name,
-      symbol: asset.symbol,
-      marketCap: parseFloat(asset.marketCapUsd || '0'),
-      volume24h: parseFloat(asset.volumeUsd24Hr || '0'),
-      price: parseFloat(asset.priceUsd || '0')
-    }));
+    if (response.data && response.data.data && Array.isArray(response.data.data)) {
+      return response.data.data.map((asset: any) => ({
+        name: asset.name,
+        symbol: asset.symbol,
+        marketCap: parseFloat(asset.marketCapUsd) || 0,
+        volume24h: parseFloat(asset.volumeUsd24Hr) || 0,
+        price: parseFloat(asset.priceUsd) || 0
+      }));
+    }
+    
+    return [];
   } catch (error) {
-    log(`CoinCap API调用失败: ${error.message}`, 'api-aggregator');
+    log(`从CoinCap API获取数据时出错: ${error instanceof Error ? error.message : 'Unknown error'}`, 'crypto-api');
     return [];
   }
 }
 
-// 6. Coinlayer
+/**
+ * 从Coinlayer API获取加密货币数据
+ * @param limit 获取的币种数量上限
+ * @returns 加密货币数据数组
+ */
 export async function fetchFromCoinlayerAPI(limit: number = 100): Promise<ApiCryptoData[]> {
   try {
-    const API_KEY = process.env.COINLAYER_API_KEY;
-    if (!API_KEY) {
-      log('缺少Coinlayer API密钥，跳过API调用', 'api-aggregator');
-      return [];
-    }
+    log(`从Coinlayer API获取加密货币数据...`, 'crypto-api');
     
-    // 获取支持的所有币种列表
-    const listUrl = 'https://api.coinlayer.com/list';
-    const listResponse = await axios.get(listUrl, {
-      params: { access_key: API_KEY }
-    });
-    
-    const symbols = Object.keys(listResponse.data.crypto).slice(0, limit);
-    
-    // 获取当前行情
-    const liveUrl = 'https://api.coinlayer.com/live';
-    const liveResponse = await axios.get(liveUrl, {
-      params: { 
-        access_key: API_KEY,
-        symbols: symbols.join(',')
+    // 获取实时价格
+    const liveResponse = await axios.get('http://api.coinlayer.com/live', {
+      params: {
+        access_key: process.env.COINLAYER_API_KEY || ''
       }
     });
     
-    return symbols.map(symbol => {
-      const cryptoInfo = listResponse.data.crypto[symbol];
-      const price = liveResponse.data.rates[symbol] || 0;
-      
-      return {
-        name: cryptoInfo.name,
-        symbol: symbol,
-        // 注意：Coinlayer免费计划不提供市值和交易量数据，这里设为0
-        marketCap: 0,
-        volume24h: 0,
-        price: price
-      };
+    // 获取币种列表
+    const listResponse = await axios.get('http://api.coinlayer.com/list', {
+      params: {
+        access_key: process.env.COINLAYER_API_KEY || ''
+      }
     });
+    
+    if (!liveResponse.data || !liveResponse.data.rates || !listResponse.data || !listResponse.data.crypto) {
+      return [];
+    }
+    
+    const rates = liveResponse.data.rates;
+    const cryptoList = listResponse.data.crypto;
+    
+    // 组合数据
+    const result: ApiCryptoData[] = [];
+    for (const symbol in cryptoList) {
+      if (Object.prototype.hasOwnProperty.call(rates, symbol)) {
+        const cryptoInfo = cryptoList[symbol];
+        result.push({
+          name: cryptoInfo.name || symbol,
+          symbol: symbol,
+          marketCap: cryptoInfo.max_supply ? cryptoInfo.max_supply * rates[symbol] : 0,
+          volume24h: 0,  // Coinlayer不提供交易量数据
+          price: rates[symbol] || 0
+        });
+      }
+      
+      // 限制返回的数量
+      if (result.length >= limit) break;
+    }
+    
+    return result;
   } catch (error) {
-    log(`Coinlayer API调用失败: ${error.message}`, 'api-aggregator');
+    log(`从Coinlayer API获取数据时出错: ${error instanceof Error ? error.message : 'Unknown error'}`, 'crypto-api');
     return [];
   }
 }
 
-// 7. Alchemy Market Data (专注于以太坊代币)
+/**
+ * 从Alchemy API获取加密货币数据
+ * @param limit 获取的币种数量上限
+ * @returns 加密货币数据数组
+ */
 export async function fetchFromAlchemyAPI(limit: number = 100): Promise<ApiCryptoData[]> {
   try {
-    const API_KEY = process.env.ALCHEMY_API_KEY;
-    if (!API_KEY) {
-      log('缺少Alchemy API密钥，跳过API调用', 'api-aggregator');
-      return [];
-    }
+    log(`从Alchemy API获取加密货币数据...`, 'crypto-api');
+    // 注意：Alchemy API主要是以太坊相关的API，不直接提供市场数据
+    // 此处仅作为一个示例，实际上我们可能需要使用其他接口获取市场数据
     
-    // 获取主要代币的元数据
-    const url = `https://eth-mainnet.alchemyapi.io/v2/${API_KEY}/getTokenMetadata`;
-    
-    // 一些热门ERC20代币地址（实际应用中应动态获取热门代币地址）
-    const popularTokens = [
-      '0xdac17f958d2ee523a2206206994597c13d831ec7', // USDT
-      '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', // USDC
-      '0x6b175474e89094c44da98b954eedeac495271d0f', // DAI
-      '0x514910771af9ca656af840dff83e8264ecf986ca', // LINK
-      '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984', // UNI
-      '0x7d1afa7b718fb893db30a3abc0cfc608aacfebb0', // MATIC
-      '0xc00e94cb662c3520282e6f5717214004a7f26888', // COMP
-      '0x0bc529c00c6401aef6d220be8c6ea1667f6ad93e'  // YFI
-    ];
-    
-    const tokenData = await Promise.all(popularTokens.slice(0, limit).map(async (address) => {
-      try {
-        const response = await axios.get(url, {
-          params: { contractAddress: address }
-        });
-        return response.data;
-      } catch (e) {
-        return null;
-      }
-    }));
-    
-    // 过滤掉失败的请求
-    return tokenData
-      .filter(data => data && data.tokenMetadata)
-      .map(data => ({
-        name: data.tokenMetadata.name,
-        symbol: data.tokenMetadata.symbol,
-        // Alchemy不直接提供市值和交易量，这里设为0
-        marketCap: 0,
-        volume24h: 0,
-        price: 0  // 需要另外获取价格
-      }));
+    // Alchemy的Token API需要你提供具体的合约地址，这里我们可以使用一些预定义的地址
+    return [];
   } catch (error) {
-    log(`Alchemy API调用失败: ${error.message}`, 'api-aggregator');
+    log(`从Alchemy API获取数据时出错: ${error instanceof Error ? error.message : 'Unknown error'}`, 'crypto-api');
     return [];
   }
 }
 
-// 从所有API获取数据并合并
+/**
+ * 从所有API获取加密货币数据，然后合并去重
+ * @param limit 从每个API获取的币种数量上限
+ * @returns 合并后的加密货币数据数组
+ */
 export async function fetchFromAllAPIs(limit: number = 100): Promise<ApiCryptoData[]> {
-  try {
-    log(`开始从${limit}个币种的多个API源获取数据...`, 'api-aggregator');
+  log(`从多个API源获取加密货币数据，每个API源获取${limit}个币种...`, 'crypto-api');
+  
+  // 创建API获取任务
+  const tasks = [
+    fetchFromCoinMarketCapAPI(limit).catch(err => {
+      log(`从CoinMarketCap API获取数据失败: ${err instanceof Error ? err.message : 'Unknown error'}`, 'crypto-api');
+      return [];
+    }),
+    fetchFromCoinGeckoAPI(1, limit).catch(err => {
+      log(`从CoinGecko API获取数据失败: ${err instanceof Error ? err.message : 'Unknown error'}`, 'crypto-api');
+      return [];
+    }),
+    fetchFromCryptoCompareAPI(limit).catch(err => {
+      log(`从CryptoCompare API获取数据失败: ${err instanceof Error ? err.message : 'Unknown error'}`, 'crypto-api');
+      return [];
+    }),
+    fetchFromCoinCapAPI(limit).catch(err => {
+      log(`从CoinCap API获取数据失败: ${err instanceof Error ? err.message : 'Unknown error'}`, 'crypto-api');
+      return [];
+    }),
+    fetchFromCoinAPI(limit).catch(err => {
+      log(`从CoinAPI获取数据失败: ${err instanceof Error ? err.message : 'Unknown error'}`, 'crypto-api');
+      return [];
+    }),
+    fetchFromCoinlayerAPI(limit).catch(err => {
+      log(`从Coinlayer API获取数据失败: ${err instanceof Error ? err.message : 'Unknown error'}`, 'crypto-api');
+      return [];
+    })
+  ];
+  
+  // 并行获取数据
+  const results = await Promise.all(tasks);
+  
+  // 所有数据合并
+  const allData: ApiCryptoData[] = [];
+  results.forEach(dataList => {
+    allData.push(...dataList);
+  });
+  
+  // 去重（按symbol去重，保留市值较大的）
+  const deduped = new Map<string, ApiCryptoData>();
+  
+  allData.forEach(crypto => {
+    const symbol = crypto.symbol.toUpperCase();
+    const existing = deduped.get(symbol);
     
-    // 并行调用所有API，最大化数据获取机会
-    const [
-      cmcData, 
-      geckoData, 
-      cryptoCompareData, 
-      coinApiData, 
-      coinCapData, 
-      coinlayerData,
-      alchemyData
-    ] = await Promise.all([
-      fetchFromCoinMarketCapAPI(limit),
-      fetchFromCoinGeckoAPI(1, limit),
-      fetchFromCryptoCompareAPI(limit),
-      fetchFromCoinAPI(limit),
-      fetchFromCoinCapAPI(limit),
-      fetchFromCoinlayerAPI(limit),
-      fetchFromAlchemyAPI(limit)
-    ]);
-    
-    // 合并数据集
-    const combinedData = [
-      ...cmcData, 
-      ...geckoData, 
-      ...cryptoCompareData,
-      ...coinApiData,
-      ...coinCapData,
-      ...coinlayerData,
-      ...alchemyData
-    ];
-    
-    // 根据符号去重，优先保留有市值和交易量数据的条目
-    const symbolMap = new Map<string, ApiCryptoData>();
-    combinedData.forEach(coin => {
-      if (!coin.symbol) return;
-      
-      const symbol = coin.symbol.toUpperCase();
-      const existing = symbolMap.get(symbol);
-      
-      // 如果是新币种或者有更好的数据，则更新map
-      if (!existing || 
-         (coin.marketCap > 0 && existing.marketCap === 0) ||
-         (coin.volume24h > 0 && existing.volume24h === 0)) {
-        symbolMap.set(symbol, {
-          ...coin,
-          symbol: symbol
-        });
-      }
-    });
-    
-    const uniqueData = Array.from(symbolMap.values());
-    log(`通过API聚合获取了 ${uniqueData.length} 个唯一币种数据`, 'api-aggregator');
-    
-    return uniqueData;
-  } catch (error) {
-    log(`API聚合数据获取失败: ${error.message}`, 'api-aggregator');
-    return [];
-  }
+    if (!existing || (crypto.marketCap > existing.marketCap)) {
+      deduped.set(symbol, crypto);
+    }
+  });
+  
+  // 转换回数组
+  const finalData = Array.from(deduped.values());
+  
+  // 按市值排序
+  finalData.sort((a, b) => b.marketCap - a.marketCap);
+  
+  log(`从所有API源共获取到${allData.length}个币种数据，去重后还有${finalData.length}个`, 'crypto-api');
+  
+  return finalData;
 }
 
-// 获取特定币种的7天平均交易量（按优先级尝试不同API）
+/**
+ * 获取指定币种的7天平均交易量
+ * @param symbol 币种符号
+ * @returns 7天平均交易量，如果获取失败则返回null
+ */
 export async function fetch7DayAverageVolume(symbol: string): Promise<number | null> {
   try {
-    const normalizedSymbol = symbol.toUpperCase();
-    log(`获取 ${normalizedSymbol} 的7天平均交易量数据...`, 'api-aggregator');
-    
-    // 1. 尝试CoinGecko (提供直接的7天历史数据)
-    try {
-      const API_KEY = process.env.COINGECKO_PRO_API_KEY;
-      const baseUrl = API_KEY 
-        ? 'https://pro-api.coingecko.com/api/v3/coins'
-        : 'https://api.coingecko.com/api/v3/coins';
-      
-      // 先获取ID映射
-      const coinListUrl = `${baseUrl}/list`;
-      const headers = API_KEY ? { 'x-cg-pro-api-key': API_KEY } : {};
-      const listResponse = await axios.get(coinListUrl, { headers });
-      
-      const coin = listResponse.data.find(c => 
-        c.symbol.toUpperCase() === normalizedSymbol
-      );
-      
-      if (coin) {
-        const marketChartUrl = `${baseUrl}/${coin.id}/market_chart`;
-        const chartResponse = await axios.get(marketChartUrl, {
-          headers,
-          params: {
-            vs_currency: 'usd',
-            days: 7
-          }
-        });
-        
-        if (chartResponse.data && chartResponse.data.total_volumes) {
-          const volumes = chartResponse.data.total_volumes.map(v => v[1]);
-          if (volumes.length > 0) {
-            const avgVolume = volumes.reduce((sum, vol) => sum + vol, 0) / volumes.length;
-            log(`CoinGecko: ${normalizedSymbol} 7天平均交易量为 $${avgVolume.toLocaleString()}`, 'api-aggregator');
-            return avgVolume;
-          }
-        }
+    // 方法1: 尝试从CoinGecko获取
+    const response = await axios.get(`https://api.coingecko.com/api/v3/coins/${symbol.toLowerCase()}/market_chart`, {
+      params: {
+        vs_currency: 'usd',
+        days: 7,
+        interval: 'daily'
       }
-    } catch (error) {
-      log(`CoinGecko获取${normalizedSymbol} 7天交易量失败: ${error.message}`, 'api-aggregator');
+    });
+    
+    if (response.data && response.data.total_volumes && Array.isArray(response.data.total_volumes)) {
+      // 计算7天平均值
+      const volumes = response.data.total_volumes.map((v: any) => v[1]);
+      const average = volumes.reduce((sum: number, vol: number) => sum + vol, 0) / volumes.length;
+      return average;
     }
     
-    // 2. 尝试CoinMarketCap API (需要历史数据端点)
-    try {
-      const API_KEY = process.env.CMC_API_KEY;
-      if (API_KEY) {
-        const historyUrl = 'https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/historical';
-        const end = new Date();
-        const start = new Date();
-        start.setDate(start.getDate() - 7);
-        
-        const response = await axios.get(historyUrl, {
-          headers: { 'X-CMC_PRO_API_KEY': API_KEY },
-          params: {
-            symbol: normalizedSymbol,
-            time_start: start.toISOString(),
-            time_end: end.toISOString(),
-            interval: 'daily'
-          }
-        });
-        
-        if (response.data && response.data.data && response.data.data.quotes) {
-          const volumes = response.data.data.quotes.map(q => q.quote.USD.volume_24h);
-          if (volumes.length > 0) {
-            const avgVolume = volumes.reduce((sum, vol) => sum + vol, 0) / volumes.length;
-            log(`CoinMarketCap: ${normalizedSymbol} 7天平均交易量为 $${avgVolume.toLocaleString()}`, 'api-aggregator');
-            return avgVolume;
-          }
-        }
+    // 方法2: 如果CoinGecko失败，尝试从CryptoCompare获取
+    const cryptoCompareResponse = await axios.get(`https://min-api.cryptocompare.com/data/v2/histoday`, {
+      params: {
+        fsym: symbol.toUpperCase(),
+        tsym: 'USD',
+        limit: 7
+      },
+      headers: {
+        'Authorization': `Apikey ${process.env.CRYPTOCOMPARE_API_KEY || ''}`
       }
-    } catch (error) {
-      log(`CoinMarketCap获取${normalizedSymbol} 7天交易量失败: ${error.message}`, 'api-aggregator');
+    });
+    
+    if (cryptoCompareResponse.data && 
+        cryptoCompareResponse.data.Data && 
+        cryptoCompareResponse.data.Data.Data && 
+        Array.isArray(cryptoCompareResponse.data.Data.Data)) {
+      const data = cryptoCompareResponse.data.Data.Data;
+      const volumes = data.map((day: any) => day.volumeto || 0);
+      const average = volumes.reduce((sum: number, vol: number) => sum + vol, 0) / volumes.length;
+      return average;
     }
     
-    // 3. 尝试CryptoCompare API
-    try {
-      const API_KEY = process.env.CRYPTOCOMPARE_API_KEY;
-      const headers = API_KEY ? { 'authorization': `Apikey ${API_KEY}` } : {};
-      
-      const historyUrl = 'https://min-api.cryptocompare.com/data/v2/histoday';
-      const response = await axios.get(historyUrl, {
-        headers,
-        params: {
-          fsym: normalizedSymbol,
-          tsym: 'USD',
-          limit: 7
-        }
-      });
-      
-      if (response.data && response.data.Data && response.data.Data.Data) {
-        const volumes = response.data.Data.Data.map(day => day.volumeto);
-        if (volumes.length > 0) {
-          const avgVolume = volumes.reduce((sum, vol) => sum + vol, 0) / volumes.length;
-          log(`CryptoCompare: ${normalizedSymbol} 7天平均交易量为 $${avgVolume.toLocaleString()}`, 'api-aggregator');
-          return avgVolume;
-        }
+    // 方法3: 尝试从CoinCap获取历史数据
+    const coinCapResponse = await axios.get(`https://api.coincap.io/v2/assets/${symbol.toLowerCase()}/history`, {
+      params: {
+        interval: 'd1',
+        start: Date.now() - 7 * 24 * 60 * 60 * 1000,
+        end: Date.now()
       }
-    } catch (error) {
-      log(`CryptoCompare获取${normalizedSymbol} 7天交易量失败: ${error.message}`, 'api-aggregator');
+    });
+    
+    if (coinCapResponse.data && 
+        coinCapResponse.data.data && 
+        Array.isArray(coinCapResponse.data.data)) {
+      const data = coinCapResponse.data.data;
+      const volumes = data.map((day: any) => parseFloat(day.volumeUsd) || 0);
+      const average = volumes.reduce((sum: number, vol: number) => sum + vol, 0) / volumes.length;
+      return average;
     }
     
-    // 4. 尝试CoinAPI
-    try {
-      const API_KEY = process.env.COINAPI_KEY;
-      if (API_KEY) {
-        const end = new Date();
-        const start = new Date();
-        start.setDate(start.getDate() - 7);
-        
-        const ohlcvUrl = `https://rest.coinapi.io/v1/ohlcv/${normalizedSymbol}USD/history`;
-        const response = await axios.get(ohlcvUrl, {
-          headers: { 'X-CoinAPI-Key': API_KEY },
-          params: {
-            period_id: '1DAY',
-            time_start: start.toISOString(),
-            time_end: end.toISOString()
-          }
-        });
-        
-        if (response.data && Array.isArray(response.data)) {
-          const volumes = response.data.map(day => day.volume_traded);
-          if (volumes.length > 0) {
-            const avgVolume = volumes.reduce((sum, vol) => sum + vol, 0) / volumes.length;
-            log(`CoinAPI: ${normalizedSymbol} 7天平均交易量为 $${avgVolume.toLocaleString()}`, 'api-aggregator');
-            return avgVolume;
-          }
-        }
-      }
-    } catch (error) {
-      log(`CoinAPI获取${normalizedSymbol} 7天交易量失败: ${error.message}`, 'api-aggregator');
-    }
-    
-    // 5. 尝试CoinCap
-    try {
-      const API_KEY = process.env.COINCAP_API_KEY;
-      const headers = API_KEY ? { 'Authorization': `Bearer ${API_KEY}` } : {};
-      
-      // 先获取资产ID
-      const assetsUrl = 'https://api.coincap.io/v2/assets';
-      const assetsResponse = await axios.get(assetsUrl, {
-        headers,
-        params: { search: normalizedSymbol }
-      });
-      
-      if (assetsResponse.data && assetsResponse.data.data && assetsResponse.data.data.length > 0) {
-        const asset = assetsResponse.data.data.find(a => a.symbol.toUpperCase() === normalizedSymbol);
-        if (asset) {
-          const assetId = asset.id;
-          const end = Date.now();
-          const start = end - (7 * 24 * 60 * 60 * 1000);
-          
-          const historyUrl = `https://api.coincap.io/v2/assets/${assetId}/history`;
-          const historyResponse = await axios.get(historyUrl, {
-            headers,
-            params: {
-              interval: 'd1',
-              start,
-              end
-            }
-          });
-          
-          if (historyResponse.data && historyResponse.data.data) {
-            const volumes = historyResponse.data.data.map(day => parseFloat(day.volumeUsd));
-            if (volumes.length > 0) {
-              const avgVolume = volumes.reduce((sum, vol) => sum + vol, 0) / volumes.length;
-              log(`CoinCap: ${normalizedSymbol} 7天平均交易量为 $${avgVolume.toLocaleString()}`, 'api-aggregator');
-              return avgVolume;
-            }
-          }
-        }
-      }
-    } catch (error) {
-      log(`CoinCap获取${normalizedSymbol} 7天交易量失败: ${error.message}`, 'api-aggregator');
-    }
-    
-    // 如果所有API都失败，返回null
-    log(`无法获取${normalizedSymbol}的7天平均交易量数据`, 'api-aggregator');
     return null;
   } catch (error) {
-    log(`获取7天平均交易量失败: ${error.message}`, 'api-aggregator');
+    log(`获取${symbol}的7天平均交易量时出错: ${error instanceof Error ? error.message : 'Unknown error'}`, 'crypto-api');
     return null;
   }
 }
 
-// 批量获取多个币种的7天平均交易量
-export async function fetch7DayAverageVolumeForMany(symbols: string[], batchSize: number = 5, delayMs: number = 1000): Promise<Map<string, number>> {
-  const results = new Map<string, number>();
+/**
+ * 为多个币种批量获取7天平均交易量
+ * @param symbols 币种符号数组
+ * @param batchSize 批处理大小
+ * @param delayMs 批次之间的延迟（毫秒）
+ * @returns Map，键为币种符号，值为7天平均交易量
+ */
+export async function fetch7DayAverageVolumeForMany(
+  symbols: string[], 
+  batchSize: number = 5, 
+  delayMs: number = 1000
+): Promise<Map<string, number>> {
+  const result = new Map<string, number>();
+  log(`批量获取${symbols.length}个币种的7天平均交易量，批处理大小: ${batchSize}，延迟: ${delayMs}毫秒`, 'crypto-api');
   
-  // 分批处理以避免API限制
+  // 按批次处理
   for (let i = 0; i < symbols.length; i += batchSize) {
     const batch = symbols.slice(i, i + batchSize);
-    log(`处理7天交易量批次 ${i/batchSize + 1}/${Math.ceil(symbols.length/batchSize)}, 币种: ${batch.join(', ')}`, 'api-aggregator');
     
-    // 并行处理每个批次
-    const batchResults = await Promise.all(
-      batch.map(async symbol => {
+    // 并行处理当前批次
+    const batchPromises = batch.map(async (symbol) => {
+      try {
+        // 先尝试CoinGecko
         const volume = await fetch7DayAverageVolume(symbol);
-        return { symbol, volume };
-      })
-    );
-    
-    // 保存结果
-    batchResults.forEach(({ symbol, volume }) => {
-      if (volume !== null) {
-        results.set(symbol, volume);
+        if (volume !== null) {
+          return { symbol, volume };
+        }
+        
+        // 如果失败，尝试估算（用24小时交易量 * 7）
+        const apiData = await fetchFromAllAPIs(100);
+        const cryptoData = apiData.find(c => c.symbol.toUpperCase() === symbol.toUpperCase());
+        if (cryptoData) {
+          return { symbol, volume: cryptoData.volume24h * 7 };
+        }
+        
+        return { symbol, volume: 0 };
+      } catch (error) {
+        log(`获取${symbol}的7天平均交易量时出错: ${error instanceof Error ? error.message : 'Unknown error'}`, 'crypto-api');
+        return { symbol, volume: 0 };
       }
     });
     
-    // 在批次之间添加延迟以避免超过API速率限制
+    const batchResults = await Promise.all(batchPromises);
+    
+    // 更新结果集
+    batchResults.forEach(({ symbol, volume }) => {
+      result.set(symbol, volume);
+    });
+    
+    // 如果不是最后一批，添加延迟以避免API限制
     if (i + batchSize < symbols.length) {
       await sleep(delayMs);
     }
   }
   
-  log(`已获取 ${results.size}/${symbols.length} 个币种的7天平均交易量数据`, 'api-aggregator');
-  return results;
+  return result;
 }

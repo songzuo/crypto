@@ -4,17 +4,16 @@
  */
 
 import axios from 'axios';
-import cheerio from 'cheerio';
+import * as cheerio from 'cheerio';
 import { log } from '../vite';
 import { storage } from '../storage';
-import { sleep } from './utils';
+import { sleep, parseNumber } from './utils';
 import { 
   fetch7DayAverageVolumeForMany, 
   fetchFromAllAPIs, 
   ApiCryptoData 
 } from './cryptoApiAggregator';
 import { generateRandomUserAgent } from './webScraper';
-import { parseNumber } from './utils';
 
 // 稳定币列表（排除稳定币是因为它们的交易量市值比率不具有参考价值）
 const STABLECOINS = new Set([
@@ -570,22 +569,19 @@ export async function runEnhancedVolumeToMarketCapAnalysis(): Promise<void> {
     
     // 创建批次记录
     const batch = await storage.createVolumeToMarketCapBatch({
-      createdAt: new Date(),
       description: `交易量市值比率分析结果 (${new Date().toLocaleDateString()})`,
-      cryptoCount: finalTop30.length
+      entriesCount: finalTop30.length
     });
     
     // 存储每个币种的比率数据
     for (const crypto of finalTop30) {
       await storage.createVolumeToMarketCapRatio({
         batchId: batch.id,
-        cryptocurrencySymbol: crypto.symbol,
-        cryptocurrencyName: crypto.name,
+        symbol: crypto.symbol,
+        name: crypto.name,
         marketCap: crypto.marketCap,
-        volume24h: crypto.volume24h,
         volume7d: crypto.volume7d || crypto.volume24h * 7,
-        volumeToMarketCapRatio: crypto.volumeToMarketCapRatio,
-        calculatedAt: new Date()
+        volumeToMarketCapRatio: crypto.volumeToMarketCapRatio
       });
     }
     

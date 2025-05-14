@@ -9,6 +9,7 @@ import { startWatchdog, updateActivityTime } from './watchdog';
 import { scrapeCryptoNews } from './cryptoNewsScraper';
 import { analyzeNewsWordTrends } from './wordTrendAnalyzer';
 import { analyzeVolumeToMarketCapRatios } from './ratioAnalyzer';
+import { runEnhancedVolumeToMarketCapAnalysis } from './enhancedRatioAnalyzer';
 import { 
   updateLastTrendAnalysisTime, 
   getLastTrendAnalysisTime,
@@ -105,17 +106,26 @@ export async function setupScheduler() {
     console.error('启动时市场数据爬取出错:', err);
   });
   
-  // 立即执行一次交易量市值比率分析
-  console.log('启动时执行交易量市值比率分析...');
+  // 立即执行基本交易量市值比率分析
+  console.log('启动时执行基本交易量市值比率分析...');
   try {
     const result = await analyzeVolumeToMarketCapRatios();
     if (result) {
-      console.log('初始交易量市值比率分析完成，已生成数据');
+      console.log('初始基本交易量市值比率分析完成，已生成数据');
     } else {
-      console.log('初始交易量市值比率分析完成，未检测到显著变化');
+      console.log('初始基本交易量市值比率分析完成，未检测到显著变化');
     }
   } catch (error) {
-    console.error('初始交易量市值比率分析失败:', error);
+    console.error('初始基本交易量市值比率分析失败:', error);
+  }
+  
+  // 立即执行增强型交易量市值比率分析
+  console.log('启动时执行增强型交易量市值比率分析...');
+  try {
+    await runEnhancedVolumeToMarketCapAnalysis();
+    console.log('初始增强型交易量市值比率分析完成，已生成数据');
+  } catch (error) {
+    console.error('初始增强型交易量市值比率分析失败:', error);
   }
 
   console.log('Setting up scheduled tasks...');
@@ -547,21 +557,34 @@ async function forceBreakthroughScrape(): Promise<void> {
     }
   });
   
-  // Volume-to-Market Cap Ratio Analysis - Runs once per day at 04:00
+  // 基本交易量市值比率分析 - 每天04:00运行一次
   cron.schedule('0 4 * * *', async () => {
-    console.log('Running scheduled task: Volume-to-Market Cap Ratio Analysis');
+    console.log('Running scheduled task: Volume-to-Market Cap Ratio Analysis (Basic)');
     
     try {
-      // Execute the volume-to-market cap ratio analysis
+      // 执行基本的交易量市值比率分析
       const result = await analyzeVolumeToMarketCapRatios();
       
       if (result) {
-        console.log('Volume-to-Market Cap Ratio analysis completed successfully with new data');
+        console.log('Basic Volume-to-Market Cap Ratio analysis completed successfully with new data');
       } else {
-        console.log('Volume-to-Market Cap Ratio analysis completed: No significant changes detected');
+        console.log('Basic Volume-to-Market Cap Ratio analysis completed: No significant changes detected');
       }
     } catch (error) {
-      console.error('Volume-to-Market Cap Ratio analysis task error:', error);
+      console.error('Basic Volume-to-Market Cap Ratio analysis task error:', error);
+    }
+  });
+  
+  // 增强型交易量市值比率分析 - 每天12:00运行一次
+  cron.schedule('0 12 * * *', async () => {
+    console.log('Running scheduled task: Enhanced Volume-to-Market Cap Ratio Analysis');
+    
+    try {
+      // 执行增强型交易量市值比率分析，结合API和爬虫数据
+      await runEnhancedVolumeToMarketCapAnalysis();
+      console.log('Enhanced Volume-to-Market Cap Ratio analysis completed successfully');
+    } catch (error) {
+      console.error('Enhanced Volume-to-Market Cap Ratio analysis task error:', error);
     }
   });
   

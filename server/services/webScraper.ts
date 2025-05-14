@@ -1,340 +1,251 @@
-import https from 'https';
-import { storage } from '../storage';
-import { InsertCryptocurrency } from '@shared/schema';
-import * as cheerio from 'cheerio';
+/**
+ * Web爬虫辅助工具库
+ */
 
-// Common function to make HTTPS requests with proper error handling
-function makeHttpsRequest(url: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const req = https.get(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-        'Cache-Control': 'max-age=0'
-      },
-      timeout: 10000
-    }, (res) => {
-      // Check for redirect
-      if (res.statusCode && (res.statusCode === 301 || res.statusCode === 302) && res.headers.location) {
-        return makeHttpsRequest(res.headers.location).then(resolve).catch(reject);
-      }
+import axios, { AxiosRequestConfig } from 'axios';
+import { sleep } from './utils';
 
-      if (res.statusCode !== 200) {
-        return reject(new Error(`HTTP Error: ${res.statusCode}`));
-      }
+// 常用浏览器用户代理列表（模拟不同浏览器）
+const USER_AGENTS = [
+  // Chrome on Windows
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+  // Chrome on macOS
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+  // Chrome on Linux
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+  // Firefox on Windows
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/114.0',
+  // Firefox on macOS
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/114.0',
+  // Firefox on Linux
+  'Mozilla/5.0 (X11; Linux i686; rv:109.0) Gecko/20100101 Firefox/114.0',
+  'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/114.0',
+  // Safari on macOS
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Safari/605.1.15',
+  // Microsoft Edge
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36 Edg/114.0.1823.51',
+  // Opera
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36 OPR/99.0.0.0',
+];
 
-      let data = '';
-      res.on('data', (chunk) => {
-        data += chunk;
-      });
-      res.on('end', () => {
-        resolve(data);
-      });
-    });
-
-    req.on('error', (error) => {
-      reject(error);
-    });
-
-    req.on('timeout', () => {
-      req.destroy();
-      reject(new Error('Request timeout'));
-    });
-
-    req.end();
-  });
+/**
+ * 随机生成一个浏览器用户代理字符串
+ * @returns 随机用户代理字符串
+ */
+export function generateRandomUserAgent(): string {
+  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 }
 
 /**
- * Function to scrape CoinMarketCap directly (no API required)
- * This gets additional cryptocurrency data
+ * 基础HTTP请求头
+ * @returns 请求头对象
  */
-export async function scrapeCoinMarketCap(page: number = 1): Promise<number> {
-  console.log(`Scraping CoinMarketCap page ${page}...`);
-  try {
-    // Build URL - each page has 100 listings
-    const url = `https://coinmarketcap.com/?page=${page}`;
-    
-    const html = await makeHttpsRequest(url);
-    const $ = cheerio.load(html);
-    
-    // Parse the cryptocurrency data from the table
-    // The table structure in CoinMarketCap has rows for each cryptocurrency
-    const cryptos: Array<Partial<InsertCryptocurrency>> = [];
-    
-    // This is the main table containing crypto data
-    const tableRows = $('table tbody tr');
-    
-    console.log(`Found ${tableRows.length} cryptocurrencies on CoinMarketCap page ${page}`);
-    
-    tableRows.each((index: number, element: any) => {
-      try {
-        // Extract name, symbol, market cap, etc.
-        const name = $(element).find('.cmc-link').text().trim();
-        const symbol = $(element).find('.coin-item-symbol').text().trim();
-        
-        if (!name || !symbol) return; // Skip if name or symbol isn't found
-        
-        // Extract market cap value - look for the specific column
-        let marketCapStr = '';
-        $(element).find('td').each((i: number, td: any) => {
-          // Market cap is typically in the specific column (index may change)
-          if ($(td).find('p:contains("$")').length > 0 && !marketCapStr) {
-            marketCapStr = $(td).text().trim();
-          }
-        });
-        
-        // Parse market cap with proper handling of B, M, K notations
-        let marketCap: number | null = null;
-        if (marketCapStr) {
-          marketCapStr = marketCapStr.replace(/[^0-9.BKM]/g, '');
-          if (marketCapStr.includes('B')) {
-            marketCap = parseFloat(marketCapStr.replace('B', '')) * 1000000000;
-          } else if (marketCapStr.includes('M')) {
-            marketCap = parseFloat(marketCapStr.replace('M', '')) * 1000000;
-          } else if (marketCapStr.includes('K')) {
-            marketCap = parseFloat(marketCapStr.replace('K', '')) * 1000;
-          } else {
-            marketCap = parseFloat(marketCapStr);
-          }
-        }
-        
-        // Convert name to slug for URL purposes
-        const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-        
-        // Create a cryptocurrency object with the extracted data
-        cryptos.push({
-          name,
-          symbol,
-          slug,
-          marketCap,
-          // Additional fields will be handled by the storage layer
-          price: null,
-          volume24h: null,
-          priceChange24h: null,
-          rank: index + 1 + ((page - 1) * 100), // Calculate rank based on page and position
-          officialWebsite: `https://${slug}.org`,  // Default website format
-          logoUrl: null,
-          
-        });
-      } catch (err) {
-        console.error(`Error parsing cryptocurrency at index ${index}:`, err);
-        // Continue with the next cryptocurrency
-      }
-    });
-    
-    console.log(`Successfully extracted ${cryptos.length} cryptocurrencies from CoinMarketCap page ${page}`);
-    
-    // Process cryptocurrencies (add to storage if they don't exist)
-    for (const crypto of cryptos) {
-      try {
-        // Check if crypto already exists by name or symbol
-        const existingByName = await storage.searchCryptocurrencies(crypto.name || '');
-        const existingBySymbol = await storage.searchCryptocurrencies(crypto.symbol || '');
-        
-        const exists = existingByName.some(c => 
-          c.name.toLowerCase() === crypto.name?.toLowerCase() || 
-          c.symbol.toLowerCase() === crypto.symbol?.toLowerCase()
-        ) || existingBySymbol.some(c => 
-          c.name.toLowerCase() === crypto.name?.toLowerCase() || 
-          c.symbol.toLowerCase() === crypto.symbol?.toLowerCase()
-        );
-        
-        if (!exists) {
-          console.log(`Adding new cryptocurrency from CoinMarketCap: ${crypto.name} (${crypto.symbol}), market cap: ${crypto.marketCap})`);
-          await storage.createCryptocurrency(crypto as InsertCryptocurrency);
-        } else {
-          // Update existing cryptocurrency with market cap if needed
-          const existing = [...existingByName, ...existingBySymbol].find(
-            c => c.name.toLowerCase() === crypto.name?.toLowerCase() || 
-                 c.symbol.toLowerCase() === crypto.symbol?.toLowerCase()
-          );
-          
-          if (existing && crypto.marketCap && (!existing.marketCap || existing.marketCap < crypto.marketCap)) {
-            console.log(`Updating market cap for ${existing.name} (ID: ${existing.id}) to ${crypto.marketCap}`);
-            await storage.updateCryptocurrency(existing.id, { 
-              marketCap: crypto.marketCap,
-              
-            });
-          } else {
-            console.log(`Skipping duplicate cryptocurrency: ${crypto.name} - Already exists.`);
-          }
-        }
-      } catch (err) {
-        console.error(`Error processing cryptocurrency ${crypto.name}:`, err);
-        // Continue with next cryptocurrency
-      }
-    }
-    
-    return cryptos.length;
-  } catch (error) {
-    console.error(`Error scraping CoinMarketCap page ${page}:`, error);
-    return 0;
-  }
+export function getBaseHeaders(): Record<string, string> {
+  return {
+    'User-Agent': generateRandomUserAgent(),
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.5',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Connection': 'keep-alive',
+    'Upgrade-Insecure-Requests': '1',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-Site': 'none',
+    'Sec-Fetch-User': '?1',
+    'Cache-Control': 'max-age=0',
+  };
 }
 
 /**
- * Function to scrape CoinGecko website directly (no API required)
+ * 带有重试机制的HTTP请求函数
+ * @param url 请求的URL
+ * @param options Axios请求配置
+ * @param maxRetries 最大重试次数
+ * @param retryDelay 重试延迟（毫秒）
+ * @param retryCallback 重试回调函数
+ * @returns Promise<AxiosResponse>
  */
-export async function scrapeCoinGecko(page: number = 1): Promise<number> {
-  console.log(`Scraping CoinGecko page ${page}...`);
-  try {
-    // Build URL - each page has 100 coins
-    const url = `https://www.coingecko.com/?page=${page}`;
-    
-    const html = await makeHttpsRequest(url);
-    const $ = cheerio.load(html);
-    
-    // Parse the cryptocurrency data from the table
-    const cryptos: Array<Partial<InsertCryptocurrency>> = [];
-    
-    // This is the main table containing crypto data on CoinGecko
-    const tableRows = $('table tbody tr');
-    
-    console.log(`Found ${tableRows.length} cryptocurrencies on CoinGecko page ${page}`);
-    
-    tableRows.each((index: number, element: any) => {
-      try {
-        // Extract name, symbol, market cap from CoinGecko's structure
-        const name = $(element).find('.tw-font-bold').text().trim();
-        const symbol = $(element).find('.tw-hidden').text().trim();
-        
-        if (!name || !symbol) return; // Skip if name or symbol isn't found
-        
-        // Extract market cap
-        let marketCapStr = '';
-        $(element).find('td').each((i: number, td: any) => {
-          // Look for the market cap column
-          if ($(td).find('span:contains("$")').length > 0 && !marketCapStr) {
-            marketCapStr = $(td).text().trim();
-          }
-        });
-        
-        // Parse market cap with proper handling of B, M, K notations
-        let marketCap: number | null = null;
-        if (marketCapStr) {
-          marketCapStr = marketCapStr.replace(/[^0-9.BKM]/g, '');
-          if (marketCapStr.includes('B')) {
-            marketCap = parseFloat(marketCapStr.replace('B', '')) * 1000000000;
-          } else if (marketCapStr.includes('M')) {
-            marketCap = parseFloat(marketCapStr.replace('M', '')) * 1000000;
-          } else if (marketCapStr.includes('K')) {
-            marketCap = parseFloat(marketCapStr.replace('K', '')) * 1000;
-          } else {
-            marketCap = parseFloat(marketCapStr);
-          }
-        }
-        
-        // Create slug for URL purposes
-        const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-        
-        // Create cryptocurrency object with extracted data
-        cryptos.push({
-          name,
-          symbol,
-          slug,
-          marketCap,
-          price: null,
-          volume24h: null,
-          priceChange24h: null,
-          rank: index + 1 + ((page - 1) * 100), // Calculate rank based on page and position
-          officialWebsite: `https://${slug}.org`,  // Default website format
-          logoUrl: null,
-          
-        });
-      } catch (err) {
-        console.error(`Error parsing cryptocurrency at index ${index} on CoinGecko:`, err);
-        // Continue with the next cryptocurrency
+export async function fetchWithRetry(
+  url: string,
+  options: AxiosRequestConfig = {},
+  maxRetries: number = 3,
+  retryDelay: number = 1000,
+  retryCallback?: (attempt: number, error: any) => void
+) {
+  // 确保有合理的超时设置
+  const config: AxiosRequestConfig = {
+    timeout: 15000, // 默认15秒超时
+    ...options,
+    headers: {
+      ...getBaseHeaders(),
+      ...(options.headers || {})
+    }
+  };
+  
+  let lastError: any;
+  
+  for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
+    try {
+      return await axios(url, config);
+    } catch (error) {
+      lastError = error;
+      
+      // 调用回调函数（如果提供）
+      if (retryCallback) {
+        retryCallback(attempt, error);
       }
-    });
-    
-    console.log(`Successfully extracted ${cryptos.length} cryptocurrencies from CoinGecko page ${page}`);
-    
-    // Process cryptocurrencies (add to storage if they don't exist)
-    for (const crypto of cryptos) {
-      try {
-        // Check if crypto already exists by name or symbol
-        const existingByName = await storage.searchCryptocurrencies(crypto.name || '');
-        const existingBySymbol = await storage.searchCryptocurrencies(crypto.symbol || '');
+      
+      // 如果还有重试次数，则等待后重试
+      if (attempt <= maxRetries) {
+        // 使用指数退避策略增加等待时间
+        const delay = retryDelay * Math.pow(1.5, attempt - 1);
+        await sleep(delay);
         
-        const exists = existingByName.some(c => 
-          c.name.toLowerCase() === crypto.name?.toLowerCase() || 
-          c.symbol.toLowerCase() === crypto.symbol?.toLowerCase()
-        ) || existingBySymbol.some(c => 
-          c.name.toLowerCase() === crypto.name?.toLowerCase() || 
-          c.symbol.toLowerCase() === crypto.symbol?.toLowerCase()
-        );
-        
-        if (!exists) {
-          console.log(`Adding new cryptocurrency from CoinGecko: ${crypto.name} (${crypto.symbol}), market cap: ${crypto.marketCap})`);
-          await storage.createCryptocurrency(crypto as InsertCryptocurrency);
-        } else {
-          // Update existing cryptocurrency with market cap if needed
-          const existing = [...existingByName, ...existingBySymbol].find(
-            c => c.name.toLowerCase() === crypto.name?.toLowerCase() || 
-                 c.symbol.toLowerCase() === crypto.symbol?.toLowerCase()
-          );
-          
-          if (existing && crypto.marketCap && (!existing.marketCap || existing.marketCap < crypto.marketCap)) {
-            console.log(`Updating market cap for ${existing.name} (ID: ${existing.id}) to ${crypto.marketCap}`);
-            await storage.updateCryptocurrency(existing.id, { 
-              marketCap: crypto.marketCap,
-              
-            });
-          } else {
-            console.log(`Skipping duplicate cryptocurrency: ${crypto.name} - Already exists.`);
-          }
+        // 更换用户代理以减少被屏蔽的可能性
+        if (config.headers) {
+          config.headers['User-Agent'] = generateRandomUserAgent();
         }
-      } catch (err) {
-        console.error(`Error processing cryptocurrency ${crypto.name}:`, err);
-        // Continue with next cryptocurrency
+      } else {
+        // 已用完所有重试机会，抛出最后一个错误
+        throw lastError;
       }
     }
-    
-    return cryptos.length;
-  } catch (error) {
-    console.error(`Error scraping CoinGecko page ${page}:`, error);
-    return 0;
   }
+  
+  // 这一行代码实际上不会执行，因为循环中已经处理了所有情况
+  throw lastError;
 }
 
-// Run multiple scraping sources in parallel to maximize data collection
-export async function scrapeMultipleSources(): Promise<void> {
-  console.log("Starting parallel scraping from multiple cryptocurrency data sources...");
+/**
+ * 绕过Cloudflare保护的请求函数
+ * 注意：这只是一种基本方法，可能不适用于所有Cloudflare保护页面
+ * @param url 请求的URL
+ * @param options Axios请求配置
+ * @returns Promise<AxiosResponse>
+ */
+export async function fetchBypassingCloudflare(url: string, options: AxiosRequestConfig = {}) {
+  // 添加更复杂的头部以尝试绕过Cloudflare
+  const config: AxiosRequestConfig = {
+    ...options,
+    headers: {
+      ...getBaseHeaders(),
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+      'Referer': new URL(url).origin,
+      'DNT': '1',
+      'Cookie': 'cf_clearance=placeholder; _ga=GA1.2.placeholder',
+      ...(options.headers || {})
+    }
+  };
   
   try {
-    // Run multiple scraping tasks in parallel to speed up data collection
-    const tasks = [
-      // CoinMarketCap pages 1-3 (top 300 cryptocurrencies)
-      scrapeCoinMarketCap(1),
-      scrapeCoinMarketCap(2),
-      scrapeCoinMarketCap(3),
-      
-      // CoinGecko pages 1-3 (top 300 cryptocurrencies)
-      scrapeCoinGecko(1),
-      scrapeCoinGecko(2),
-      scrapeCoinGecko(3)
-    ];
+    // 先访问域名主页
+    const domainUrl = new URL(url).origin;
+    await axios.get(domainUrl, config);
     
-    // Execute all scraping tasks in parallel
-    const results = await Promise.allSettled(tasks);
+    // 短暂延迟后再访问目标页面
+    await sleep(1000);
     
-    // Count successful scrapes
-    let totalCryptosFound = 0;
-    results.forEach((result, index) => {
-      if (result.status === 'fulfilled') {
-        totalCryptosFound += result.value;
-        console.log(`Scraping task ${index + 1} completed successfully with ${result.value} cryptocurrencies.`);
-      } else {
-        console.error(`Scraping task ${index + 1} failed:`, result.reason);
-      }
+    return await axios(url, config);
+  } catch (error) {
+    console.error(`绕过Cloudflare保护请求时出错: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * 分批请求多个URL
+ * @param urls 要请求的URL数组
+ * @param batchSize 每批次的大小
+ * @param delayBetweenBatches 批次之间的延迟（毫秒）
+ * @param requestOptions Axios请求配置
+ * @returns Promise<Array<{url: string, data: any, error?: any}>>
+ */
+export async function fetchBatch(
+  urls: string[],
+  batchSize: number = 5,
+  delayBetweenBatches: number = 2000,
+  requestOptions: AxiosRequestConfig = {}
+) {
+  const results: Array<{url: string, data?: any, error?: any}> = [];
+  
+  // 将URL分成多个批次
+  for (let i = 0; i < urls.length; i += batchSize) {
+    const batchUrls = urls.slice(i, i + batchSize);
+    const batchPromises = batchUrls.map(url => 
+      fetchWithRetry(url, requestOptions)
+        .then(response => ({ url, data: response.data }))
+        .catch(error => ({ url, error }))
+    );
+    
+    // 并行处理当前批次
+    const batchResults = await Promise.all(batchPromises);
+    results.push(...batchResults);
+    
+    // 如果不是最后一批，则等待
+    if (i + batchSize < urls.length) {
+      await sleep(delayBetweenBatches);
+    }
+  }
+  
+  return results;
+}
+
+/**
+ * 检查一个URL是否可访问
+ * @param url 要检查的URL
+ * @param timeout 超时时间（毫秒）
+ * @returns Promise<boolean>
+ */
+export async function isUrlAccessible(url: string, timeout: number = 10000): Promise<boolean> {
+  try {
+    await axios.get(url, {
+      timeout,
+      headers: {
+        'User-Agent': generateRandomUserAgent()
+      },
+      validateStatus: status => status < 400 // 只有状态码小于400才视为成功
     });
     
-    console.log(`Multi-source scraping completed. Found a total of ${totalCryptosFound} cryptocurrencies.`);
+    return true;
   } catch (error) {
-    console.error("Error in multi-source scraping:", error);
+    return false;
+  }
+}
+
+/**
+ * 从HTML中提取所有链接
+ * @param html HTML内容
+ * @param baseUrl 基础URL（用于解析相对路径）
+ * @returns 链接数组
+ */
+export function extractLinks(html: string, baseUrl: string): string[] {
+  const links: string[] = [];
+  const linkRegex = /href=["'](.*?)["']/g;
+  let match;
+  
+  while ((match = linkRegex.exec(html)) !== null) {
+    try {
+      const url = new URL(match[1], baseUrl).href;
+      links.push(url);
+    } catch (error) {
+      // 忽略无效URL
+    }
+  }
+  
+  return links;
+}
+
+/**
+ * 从URL创建一个规范化的主机名（用于去重）
+ * @param url URL字符串
+ * @returns 规范化的主机名
+ */
+export function getNormalizedHostname(url: string): string {
+  try {
+    const { hostname } = new URL(url);
+    return hostname.replace(/^www\./, '');
+  } catch (error) {
+    return '';
   }
 }
