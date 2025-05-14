@@ -6,16 +6,28 @@
 
 import axios from 'axios';
 import { storage } from '../storage';
-import { InsertVolumeToMarketCapBatch, InsertVolumeToMarketCapRatio } from '@shared/schema';
 import { log } from '../vite';
 import asyncPool from 'tiny-async-pool';
 import * as cheerio from 'cheerio';
+import { z } from 'zod';
 
 // API密钥
 const CRYPTOCOMPARE_API_KEY = process.env.CRYPTOCOMPARE_API_KEY;
 const COINMARKETCAP_API_KEY = process.env.COINMARKETCAP_API_KEY;
 const COINAPI_KEY = process.env.COINAPI_KEY;
 const COINLAYER_API_KEY = process.env.COINLAYER_API_KEY;
+
+// 定义类型
+interface CryptoData {
+  name: string;
+  symbol: string;
+  price: number;
+  marketCap: number;
+  volume24h: number;
+  volume7d: number;
+  ratio: number;
+  rank: number;
+}
 
 // API基础URL
 const COINGECKO_BASE = "https://api.coingecko.com/api/v3";
@@ -450,9 +462,9 @@ class CoinLayerAPI {
 /**
  * 合并多个数据源的结果
  */
-function mergeResults(results: any[][]): any[] {
+function mergeResults(results: CryptoData[][]): CryptoData[] {
   // 创建币种符号到数据的映射
-  const coinMap = new Map();
+  const coinMap = new Map<string, CryptoData>();
   
   // 合并所有数据源
   for (const sourceResults of results) {
@@ -463,7 +475,7 @@ function mergeResults(results: any[][]): any[] {
         coinMap.set(key, coin);
       } else {
         // 如果已存在，取平均值或选择非空值
-        const existing = coinMap.get(key);
+        const existing = coinMap.get(key)!;
         
         existing.price = existing.price || coin.price;
         existing.marketCap = existing.marketCap || coin.marketCap;
@@ -542,9 +554,8 @@ export async function runAsyncRatioAnalysis(): Promise<{ success: boolean, batch
     
     // 创建批次
     const batch = await storage.createVolumeToMarketCapBatch({
-      createdAt: new Date(),
-      totalItems: allResults.length,
-      source: 'async-api-aggregator'
+      entriesCount: allResults.length,
+      hasChanges: true
     });
     
     log(`创建了批次#${batch.id}`, 'async-ratio');
@@ -556,12 +567,11 @@ export async function runAsyncRatioAnalysis(): Promise<{ success: boolean, batch
         name: result.name,
         symbol: result.symbol,
         rank: result.rank,
-        price: result.price,
+        // Use a default cryptocurrencyId of 0 since we don't know real ID yet
+        cryptocurrencyId: 0,
         marketCap: result.marketCap,
-        volume24h: result.volume24h,
         volume7d: result.volume7d || result.volume24h * 7,
-        volumeToMarketCapRatio: result.ratio,
-        createdAt: new Date()
+        volumeToMarketCapRatio: result.ratio
       });
     }
     
