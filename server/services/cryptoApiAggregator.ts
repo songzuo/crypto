@@ -429,7 +429,8 @@ export async function fetch7DayAverageVolume(symbol: string): Promise<number | n
 export async function fetch7DayAverageVolumeForMany(
   symbols: string[], 
   batchSize: number = 5, 
-  delayMs: number = 1000
+  delayMs: number = 1000,
+  maxRetries: number = 3
 ): Promise<Map<string, number>> {
   const result = new Map<string, number>();
   log(`批量获取${symbols.length}个币种的7天平均交易量，批处理大小: ${batchSize}，延迟: ${delayMs}毫秒`, 'crypto-api');
@@ -440,39 +441,77 @@ export async function fetch7DayAverageVolumeForMany(
     
     // 并行处理当前批次
     const batchPromises = batch.map(async (symbol) => {
-      try {
-        // 先尝试CoinGecko
-        const volume = await fetch7DayAverageVolume(symbol);
-        if (volume !== null) {
-          return { symbol, volume };
+      // 增加额外随机延迟，以错开请求
+      await sleep(Math.random() * 500);
+      
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          // 先从CoinMarketCap获取数据（使用API密钥，速率限制较高）
+          const cmcData = await fetchFromCoinMarketCapAPI(200);
+          const cmcMatch = cmcData.find(c => c.symbol.toUpperCase() === symbol.toUpperCase());
+          if (cmcMatch && cmcMatch.volume24h > 0) {
+            return { symbol, volume: cmcMatch.volume24h * 7 };
+          }
+          
+          // 如果CoinMarketCap没有数据，尝试CoinGecko
+          // 通过估算减少对API的直接调用
+          const estimatedVolume = await fetch7DayAverageVolume(symbol).catch(() => null);
+          if (estimatedVolume !== null && estimatedVolume > 0) {
+            return { symbol, volume: estimatedVolume };
+          }
+          
+          // 如果都失败，使用CryptoCompare
+          const ccData = await fetchFromCryptoCompareAPI(200);
+          const ccMatch = ccData.find(c => c.symbol.toUpperCase() === symbol.toUpperCase());
+          if (ccMatch && ccMatch.volume24h > 0) {
+            return { symbol, volume: ccMatch.volume24h * 7 };
+          }
+          
+          // 最后尝试汇总数据
+          const combinedData = await fetchFromAllAPIs(200);
+          const match = combinedData.find(c => c.symbol.toUpperCase() === symbol.toUpperCase());
+          if (match && match.volume24h > 0) {
+            return { symbol, volume: match.volume24h * 7 };
+          }
+          
+          // 如果所有尝试都失败，返回0交易量
+          return { symbol, volume: 0 };
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+          log(`获取${symbol}的7天平均交易量时出错(尝试 ${attempt}/${maxRetries}): ${errorMsg}`, 'crypto-api');
+          
+          // 如果不是最后一次尝试，添加延迟后重试
+          if (attempt < maxRetries) {
+            await sleep(delayMs * attempt); // 指数递增延迟
+          }
         }
-        
-        // 如果失败，尝试估算（用24小时交易量 * 7）
-        const apiData = await fetchFromAllAPIs(100);
-        const cryptoData = apiData.find(c => c.symbol.toUpperCase() === symbol.toUpperCase());
-        if (cryptoData) {
-          return { symbol, volume: cryptoData.volume24h * 7 };
-        }
-        
-        return { symbol, volume: 0 };
-      } catch (error) {
-        log(`获取${symbol}的7天平均交易量时出错: ${error instanceof Error ? error.message : 'Unknown error'}`, 'crypto-api');
-        return { symbol, volume: 0 };
       }
+      
+      // 所有重试都失败后，返回0
+      return { symbol, volume: 0 };
     });
     
-    const batchResults = await Promise.all(batchPromises);
-    
-    // 更新结果集
-    batchResults.forEach(({ symbol, volume }) => {
-      result.set(symbol, volume);
-    });
+    try {
+      const batchResults = await Promise.all(batchPromises);
+      
+      // 更新结果集
+      batchResults.forEach(({ symbol, volume }) => {
+        if (symbol && volume >= 0) {
+          result.set(symbol, volume);
+        }
+      });
+    } catch (error) {
+      log(`处理批次${i / batchSize + 1}时发生错误: ${error instanceof Error ? error.message : String(error)}`, 'crypto-api');
+      // 即使出错也继续处理其他批次
+    }
     
     // 如果不是最后一批，添加延迟以避免API限制
     if (i + batchSize < symbols.length) {
-      await sleep(delayMs);
+      // 使用更长的延迟，并增加随机成分
+      await sleep(delayMs + Math.random() * 1000);
     }
   }
   
+  log(`成功获取了${result.size}/${symbols.length}个币种的7天平均交易量`, 'crypto-api');
   return result;
 }
