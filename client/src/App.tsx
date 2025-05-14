@@ -13,6 +13,7 @@ import Explorer from "./pages/Explorer";
 import AiInsights from "./pages/AiInsights";
 import News from "./pages/News";
 import Trends from "./pages/Trends";
+import VolumeRatio from "./pages/VolumeRatio";
 
 function Router() {
   return (
@@ -26,6 +27,7 @@ function Router() {
         <Route path="/ai-insights" component={AiInsights} />
         <Route path="/news" component={News} />
         <Route path="/trends" component={Trends} />
+        <Route path="/volume-ratio" component={VolumeRatio} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

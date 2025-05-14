@@ -287,6 +287,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: (error as Error).message });
     }
   });
+  
+  // Get volume-to-market cap ratios (latest batch)
+  app.get("/api/volume-to-market-cap", async (req, res) => {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 30;
+      
+      const result = await storage.getVolumeToMarketCapRatios(page, limit);
+      res.json(result);
+    } catch (error) {
+      console.error('获取交易量市值比率数据出错:', error);
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+  
+  // Get volume-to-market cap ratio batches (historical)
+  app.get("/api/volume-to-market-cap/batches", async (req, res) => {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 10;
+      
+      const result = await storage.getVolumeToMarketCapBatches(page, limit);
+      res.json(result);
+    } catch (error) {
+      console.error('获取交易量市值比率批次数据出错:', error);
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+  
+  // Get specific volume-to-market cap ratio batch
+  app.get("/api/volume-to-market-cap/batches/:id", async (req, res) => {
+    try {
+      const batchId = parseInt(req.params.id);
+      
+      if (isNaN(batchId)) {
+        return res.status(400).json({ error: "Invalid batch ID" });
+      }
+      
+      const batch = await storage.getVolumeToMarketCapBatch(batchId);
+      
+      if (!batch) {
+        return res.status(404).json({ error: "Batch not found" });
+      }
+      
+      const ratios = await storage.getVolumeToMarketCapRatiosByBatchId(batchId);
+      
+      res.json({
+        batch,
+        ratios
+      });
+    } catch (error) {
+      console.error('获取特定交易量市值比率批次数据出错:', error);
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
 
   // Setup the crawler scheduler
   setupScheduler();
