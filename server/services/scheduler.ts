@@ -607,25 +607,35 @@ async function forceBreakthroughScrape(): Promise<void> {
     }
   });
   
-  // 增强型交易量市值比率分析 (备用) - 每天12:00运行一次
+  // 异步交易量市值比率分析 - 每天12:00运行一次
   cron.schedule('0 12 * * *', async () => {
-    console.log('Running scheduled task: Backup Analysis for Volume-to-Market Cap Ratio');
+    console.log('Running scheduled task: Async Volume-to-Market Cap Ratio Analysis');
     
     try {
-      // 先尝试一步式分析
-      const { runOneStepRatioAnalysis } = await import('./oneStepRatioAnalyzer');
-      const result = await runOneStepRatioAnalysis();
+      // 首先尝试异步分析器
+      const { runAsyncRatioAnalysis } = await import('./asyncRatioAnalyzer');
+      const asyncResult = await runAsyncRatioAnalysis();
       
-      if (result.success) {
-        console.log(`Backup One-Step analysis completed: Batch #${result.batchId} with ${result.count} cryptocurrencies`);
+      if (asyncResult.success) {
+        console.log(`Async analysis completed: Batch #${asyncResult.batchId} with ${asyncResult.count} cryptocurrencies`);
       } else {
-        // 如果一步式分析失败，尝试使用增强型分析器
-        console.log('One-Step analysis failed, switching to enhanced analyzer');
-        await runEnhancedVolumeToMarketCapAnalysis();
-        console.log('Backup Enhanced analysis completed successfully');
+        console.log(`Async analysis failed: ${asyncResult.error}, switching to one-step analyzer`);
+        
+        // 如果异步分析失败，尝试一步式分析器
+        const { runOneStepRatioAnalysis } = await import('./oneStepRatioAnalyzer');
+        const result = await runOneStepRatioAnalysis();
+        
+        if (result.success) {
+          console.log(`Fallback One-Step analysis completed: Batch #${result.batchId} with ${result.count} cryptocurrencies`);
+        } else {
+          // 如果一步式分析失败，尝试使用增强型分析器
+          console.log('One-Step analysis failed, switching to enhanced analyzer');
+          await runEnhancedVolumeToMarketCapAnalysis();
+          console.log('Final fallback Enhanced analysis completed successfully');
+        }
       }
     } catch (error) {
-      console.error('Backup Volume-to-Market Cap Ratio analysis task error:', error);
+      console.error('Volume-to-Market Cap Ratio analysis task error:', error);
     }
   });
   
