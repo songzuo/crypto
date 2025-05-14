@@ -534,6 +534,24 @@ async function forceBreakthroughScrape(): Promise<void> {
     }
   });
   
+  // Volume-to-Market Cap Ratio Analysis - Runs once per day at 04:00
+  cron.schedule('0 4 * * *', async () => {
+    console.log('Running scheduled task: Volume-to-Market Cap Ratio Analysis');
+    
+    try {
+      // Execute the volume-to-market cap ratio analysis
+      const result = await analyzeVolumeToMarketCapRatios();
+      
+      if (result) {
+        console.log('Volume-to-Market Cap Ratio analysis completed successfully with new data');
+      } else {
+        console.log('Volume-to-Market Cap Ratio analysis completed: No significant changes detected');
+      }
+    } catch (error) {
+      console.error('Volume-to-Market Cap Ratio analysis task error:', error);
+    }
+  });
+  
   // 创建一个用于存储最新趋势分析结果的全局变量
   let latestTrendsAnalysisResult: any = null;
   let trendsAnalysisExecutionTime: Date | null = null;
