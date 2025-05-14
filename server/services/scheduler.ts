@@ -104,6 +104,19 @@ export async function setupScheduler() {
   await marketScraper.scrapeAllMarketData().catch(err => {
     console.error('启动时市场数据爬取出错:', err);
   });
+  
+  // 立即执行一次交易量市值比率分析
+  console.log('启动时执行交易量市值比率分析...');
+  try {
+    const result = await analyzeVolumeToMarketCapRatios();
+    if (result) {
+      console.log('初始交易量市值比率分析完成，已生成数据');
+    } else {
+      console.log('初始交易量市值比率分析完成，未检测到显著变化');
+    }
+  } catch (error) {
+    console.error('初始交易量市值比率分析失败:', error);
+  }
 
   console.log('Setting up scheduled tasks...');
   
