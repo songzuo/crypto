@@ -132,10 +132,38 @@ async function scrapeCoinMarketCap(): Promise<{
             const marketCapText = $(element).find('td:nth-child(7)').text().trim();
             const volume24hText = $(element).find('td:nth-child(8)').text().trim();
             
-            // 移除货币符号并转换为数字
-            const price = parseFloat(priceText.replace(/[$,]/g, ''));
-            const marketCap = parseFloat(marketCapText.replace(/[$,]/g, ''));
-            const volume24h = parseFloat(volume24hText.replace(/[$,]/g, ''));
+            // 使用改进的parseNumber函数来正确处理带后缀的数值
+            const price = parseNumber(priceText);
+            let parsedMarketCap = parseNumber(marketCapText);
+            let parsedVolume24h = parseNumber(volume24hText);
+            
+            // 市值通常以百万(M)或十亿(B)为单位显示
+            // 如果解析出的值异常小（小于1），可能是单位使用了百万或十亿
+            // 检查原始文本是否包含"M"或"B"但解析未正确处理
+            if (!isNaN(parsedMarketCap) && parsedMarketCap < 100 && 
+                (marketCapText.includes('M') || marketCapText.includes('m'))) {
+                log(`发现疑似错误解析的市值: ${marketCapText} -> ${parsedMarketCap}，修正为百万单位`, 'volume-ratio');
+                parsedMarketCap = parsedMarketCap * 1000000;
+            } else if (!isNaN(parsedMarketCap) && parsedMarketCap < 1 && 
+                (marketCapText.includes('B') || marketCapText.includes('b'))) {
+                log(`发现疑似错误解析的市值: ${marketCapText} -> ${parsedMarketCap}，修正为十亿单位`, 'volume-ratio');
+                parsedMarketCap = parsedMarketCap * 1000000000;
+            }
+            
+            // 同理处理交易量
+            if (!isNaN(parsedVolume24h) && parsedVolume24h < 100 && 
+                (volume24hText.includes('M') || volume24hText.includes('m'))) {
+                log(`发现疑似错误解析的交易量: ${volume24hText} -> ${parsedVolume24h}，修正为百万单位`, 'volume-ratio');
+                parsedVolume24h = parsedVolume24h * 1000000;
+            } else if (!isNaN(parsedVolume24h) && parsedVolume24h < 1 && 
+                (volume24hText.includes('B') || volume24hText.includes('b'))) {
+                log(`发现疑似错误解析的交易量: ${volume24hText} -> ${parsedVolume24h}，修正为十亿单位`, 'volume-ratio');
+                parsedVolume24h = parsedVolume24h * 1000000000;
+            }
+            
+            // 使用解析后的值
+            const marketCap = parsedMarketCap;
+            const volume24h = parsedVolume24h;
             
             // 计算7天交易量（粗略估计为24小时交易量的7倍）
             const volume7d = volume24h * 7;
@@ -234,9 +262,36 @@ async function scrapeCoinGecko(): Promise<{
             const marketCapText = $(element).find('td:nth-child(7) span').text().trim();
             const volume24hText = $(element).find('td:nth-child(8) span').text().trim();
             
-            // 移除货币符号并转换为数字
-            const marketCap = parseFloat(marketCapText.replace(/[$,]/g, ''));
-            const volume24h = parseFloat(volume24hText.replace(/[$,]/g, ''));
+            // 使用改进的parseNumber函数来正确处理带后缀的数值
+            let parsedMarketCap = parseNumber(marketCapText);
+            let parsedVolume24h = parseNumber(volume24hText);
+            
+            // 市值通常以百万(M)或十亿(B)为单位显示
+            // 如果解析出的值异常小（小于1），可能是单位使用了百万或十亿
+            // 检查原始文本是否包含"M"或"B"但解析未正确处理
+            if (!isNaN(parsedMarketCap) && parsedMarketCap < 100 && 
+                (marketCapText.includes('M') || marketCapText.includes('m'))) {
+                log(`发现疑似错误解析的市值: ${marketCapText} -> ${parsedMarketCap}，修正为百万单位`, 'volume-ratio');
+                parsedMarketCap = parsedMarketCap * 1000000;
+            } else if (!isNaN(parsedMarketCap) && parsedMarketCap < 1 && 
+                (marketCapText.includes('B') || marketCapText.includes('b'))) {
+                log(`发现疑似错误解析的市值: ${marketCapText} -> ${parsedMarketCap}，修正为十亿单位`, 'volume-ratio');
+                parsedMarketCap = parsedMarketCap * 1000000000;
+            }
+            
+            // 同理处理交易量
+            if (!isNaN(parsedVolume24h) && parsedVolume24h < 100 && 
+                (volume24hText.includes('M') || volume24hText.includes('m'))) {
+                log(`发现疑似错误解析的交易量: ${volume24hText} -> ${parsedVolume24h}，修正为百万单位`, 'volume-ratio');
+                parsedVolume24h = parsedVolume24h * 1000000;
+            } else if (!isNaN(parsedVolume24h) && parsedVolume24h < 1 && 
+                (volume24hText.includes('B') || volume24hText.includes('b'))) {
+                log(`发现疑似错误解析的交易量: ${volume24hText} -> ${parsedVolume24h}，修正为十亿单位`, 'volume-ratio');
+                parsedVolume24h = parsedVolume24h * 1000000000;
+            }
+            
+            const marketCap = parsedMarketCap;
+            const volume24h = parsedVolume24h;
             
             // 估算7天交易量（近似值）
             const volume7d = volume24h * 7;
@@ -393,6 +448,9 @@ async function scrapeCryptocom(): Promise<{
 
 // 辅助函数：将带有K、M、B、T等后缀的数字字符串转换为实际数值
 function parseNumber(str: string): number {
+  // 首先清理字符串，移除所有货币符号和逗号
+  const cleanStr = str.replace(/[$€£¥,]/g, '').trim();
+  
   const multipliers: Record<string, number> = {
     k: 1000,
     m: 1000000,
@@ -400,16 +458,31 @@ function parseNumber(str: string): number {
     t: 1000000000000
   };
   
-  const match = str.match(/^([\d.]+)([kmbt])?$/i);
+  // 改进的正则表达式，可以处理各种格式的数字，包括带有小数点和不同后缀的数字
+  // 例如: "1.23k", "45M", "$67.89B", "123,456.78", "9.1T"
+  const match = cleanStr.match(/^([\d.]+)\s*([kmbt])?$/i);
   
-  if (!match) return NaN;
+  if (!match) {
+    log(`无法解析数字: ${str} -> ${cleanStr}`, 'volume-ratio');
+    return NaN;
+  }
   
   const [, numStr, suffix] = match;
   const num = parseFloat(numStr);
   
+  if (isNaN(num)) {
+    log(`数字解析为NaN: ${str} -> ${numStr}`, 'volume-ratio');
+    return NaN;
+  }
+  
   if (suffix) {
     const multiplier = multipliers[suffix.toLowerCase()];
-    return num * multiplier;
+    if (multiplier) {
+      return num * multiplier;
+    } else {
+      log(`未知的单位后缀: ${suffix} 在 ${str}`, 'volume-ratio');
+      return num;
+    }
   }
   
   return num;
