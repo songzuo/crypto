@@ -119,22 +119,33 @@ export async function setupScheduler() {
     console.error('初始基本交易量市值比率分析失败:', error);
   }
   
-  // 立即执行增强型交易量市值比率分析
-  console.log('启动时执行一步式交易量市值比率分析...');
+  // 立即执行异步交易量市值比率分析
+  console.log('启动时执行异步交易量市值比率分析...');
   try {
-    // 导入一步式分析器
-    const { runOneStepRatioAnalysis } = await import('./oneStepRatioAnalyzer');
-    const result = await runOneStepRatioAnalysis();
+    // 首先尝试异步分析器
+    const { runAsyncRatioAnalysis } = await import('./asyncRatioAnalyzer');
+    const asyncResult = await runAsyncRatioAnalysis();
     
-    if (result.success) {
-      console.log(`初始一步式交易量市值比率分析完成，已创建批次#${result.batchId}，共${result.count}个币种`);
+    if (asyncResult.success) {
+      console.log(`初始异步交易量市值比率分析完成，已创建批次#${asyncResult.batchId}，共${asyncResult.count}个币种`);
     } else {
-      console.error(`初始一步式交易量市值比率分析失败: ${result.error}`);
+      console.error(`初始异步交易量市值比率分析失败: ${asyncResult.error}`);
       
-      // 备用：如果一步式分析失败，尝试使用增强型分析
-      console.log('尝试使用备用增强型分析...');
-      await runEnhancedVolumeToMarketCapAnalysis();
-      console.log('备用增强型交易量市值比率分析完成');
+      // 备用1：尝试一步式分析器
+      console.log('尝试使用备用一步式分析器...');
+      const { runOneStepRatioAnalysis } = await import('./oneStepRatioAnalyzer');
+      const result = await runOneStepRatioAnalysis();
+      
+      if (result.success) {
+        console.log(`备用一步式分析完成，已创建批次#${result.batchId}，共${result.count}个币种`);
+      } else {
+        console.error(`备用一步式分析也失败: ${result.error}`);
+        
+        // 备用2：如果一步式分析失败，尝试使用增强型分析
+        console.log('尝试使用备用增强型分析...');
+        await runEnhancedVolumeToMarketCapAnalysis();
+        console.log('备用增强型交易量市值比率分析完成');
+      }
     }
   } catch (error) {
     console.error('初始交易量市值比率分析失败:', error);

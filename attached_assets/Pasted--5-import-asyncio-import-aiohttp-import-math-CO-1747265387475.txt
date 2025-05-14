@@ -1,0 +1,82 @@
+
+
+以下代码可以一次性获取全部币种和他们的成交额。其他的5个接口可以参考这个算法。
+
+
+
+import asyncio
+import aiohttp
+import math
+
+COINGECKO_BASE = "https://api.coingecko.com/api/v3"
+
+async def fetch_markets(session, page, per_page=250):
+    """分页拉取币种列表（包含 id 与 name）"""
+    url = f"{COINGECKO_BASE}/coins/markets"
+    params = {
+        "vs_currency": "usd",
+        "order": "market_cap_desc",
+        "per_page": per_page,
+        "page": page,
+        "sparkline": "false"
+    }
+    async with session.get(url, params=params) as resp:
+        return await resp.json()
+
+async def fetch_7d_volume(session, coin_id):
+    """获取单个币种过去7天的总成交量并计算日均"""
+    url = f"{COINGECKO_BASE}/coins/{coin_id}/market_chart"
+    params = {"vs_currency": "usd", "days": 7}
+    async with session.get(url, params=params) as resp:
+        data = await resp.json()
+    vols = [vol for _, vol in data.get("total_volumes", [])]
+    return sum(vols) / len(vols) if vols else None
+
+async def main():
+    async with aiohttp.ClientSession() as session:
+        # 首先获取总页数
+        first_page = await fetch_markets(session, page=1)
+        total_coins = len(first_page)  # 单页项数
+        # 假设 CoinGecko 上有 ~16000 币种，用每页250来估算
+        pages = math.ceil(16000 / 250)
+
+        # 并发拉取所有页面的币种基本信息
+        tasks = [fetch_markets(session, page=i) for i in range(1, pages+1)]
+        pages_data = await asyncio.gather(*tasks)
+        all_coins = [coin for page in pages_data for coin in page]
+
+        # 并发拉取每个币种的7天平均成交量
+        vol_tasks = {
+            coin["id"]: asyncio.create_task(fetch_7d_volume(session, coin["id"]))
+            for coin in all_coins
+        }
+        results = {}
+        for coin_id, task in vol_tasks.items():
+            avg_vol = await task
+            if avg_vol is not None:
+                results[coin_id] = avg_vol
+
+        # 输出所有币种的名称及7天平均成交量
+        for coin in all_coins:
+            cid = coin["id"]
+            name = coin["name"]
+            avg_vol = results.get(cid, 0)
+            print(f"{name} ({cid}): 7日平均成交量 = ${avg_vol:,.2f}")
+
+# 运行
+asyncio.run(main())
+分页参数：/coins/markets 端点支持 per_page（最大 250）与 page 参数，用于遍历所有币种列表
+CoinGecko API Documentation
+。
+
+历史成交量接口：/coins/{id}/market_chart?vs_currency=usd&days=7 返回过去 7 天 “24h 总成交量”数组，通过 total_volumes 字段获取
+CoinGecko API Documentation
+。
+
+并发处理：使用 aiohttp 与 asyncio 大幅提高对大量币种请求的效率。
+
+限速提醒：CoinGecko 公共 API 对请求频率有限制（约 50 次/分钟），建议添加请求间隔或使用 Pro API 提升限额
+CoinGecko API Documentation
+。
+
+以上代码可一键获取所有上架币种的七天日均成交量，并打印出它们的名称与对应数据，适用于全面批量数据分析场景。
