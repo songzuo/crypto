@@ -337,7 +337,7 @@ const VolumeRatio = () => {
                       <TableCell className="text-right">${formatNumber(ratio.marketCap)}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end">
-                          <span className="font-medium">{(ratio.ratio * 100).toFixed(2)}%</span>
+                          <span className="font-medium">{(ratio.volumeToMarketCapRatio * 100).toFixed(2)}%</span>
                           <Percent className="ml-1 h-4 w-4 text-muted-foreground" />
                         </div>
                       </TableCell>
@@ -470,7 +470,7 @@ const VolumeRatio = () => {
                               <TableCell className="text-right">${formatNumber(ratio.marketCap)}</TableCell>
                               <TableCell className="text-right">
                                 <div className="flex items-center justify-end">
-                                  <span className="font-medium">{(ratio.ratio * 100).toFixed(2)}%</span>
+                                  <span className="font-medium">{(ratio.volumeToMarketCapRatio * 100).toFixed(2)}%</span>
                                   <Percent className="ml-1 h-4 w-4 text-muted-foreground" />
                                 </div>
                               </TableCell>
