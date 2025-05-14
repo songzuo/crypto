@@ -74,8 +74,10 @@ async function scrapeCoinMarketCap(): Promise<{
   ratio: number 
 }[]> {
   try {
-    // 使用CoinMarketCap的交易量页面
-    const url = 'https://coinmarketcap.com/rankings/exchanges/';
+    // 使用CoinMarketCap的主页面，这里包含了所有必要的数据
+    const url = 'https://coinmarketcap.com/';
+    log(`从${url}抓取交易量市值数据...`, 'volume-ratio');
+    
     const html = await makeHttpRequest(url);
     const $ = cheerio.load(html);
     
@@ -88,27 +90,43 @@ async function scrapeCoinMarketCap(): Promise<{
       ratio: number 
     }[] = [];
     
+    // 分析页面结构，找到包含加密货币列表的表格
+    log(`分析页面结构，提取加密货币数据...`, 'volume-ratio');
+    
+    // CoinMarketCap在主页上表格的选择器 - 可能需要根据当前页面结构调整
+    const tableSelector = 'table tbody tr';
+    const rows = $(tableSelector);
+    
+    log(`找到${rows.length}行加密货币数据`, 'volume-ratio');
+    
     // 解析页面中的数据行
-    // 注意：以下选择器可能需要根据实际页面结构调整
-    $('table tbody tr').each((i, element) => {
+    $(tableSelector).each((i, element) => {
       try {
-        const name = $(element).find('td:nth-child(2) .crypto-name').text().trim();
-        const symbol = $(element).find('td:nth-child(2) .crypto-symbol').text().trim();
-        const volume7dText = $(element).find('td:nth-child(3)').text().trim();
-        const marketCapText = $(element).find('td:nth-child(4)').text().trim();
+        // 注意：这些选择器可能需要定期更新，因为网站结构可能会变化
+        const nameElement = $(element).find('td:nth-child(3)');
+        const name = nameElement.find('.cmc-link').text().trim();
+        const symbol = nameElement.find('.coin-item-symbol').text().trim();
+        
+        // 获取价格和市值
+        const priceText = $(element).find('td:nth-child(4)').text().trim();
+        const marketCapText = $(element).find('td:nth-child(7)').text().trim();
+        const volume24hText = $(element).find('td:nth-child(8)').text().trim();
         
         // 移除货币符号并转换为数字
-        const volume7d = parseFloat(volume7dText.replace(/[$,]/g, ''));
+        const price = parseFloat(priceText.replace(/[$,]/g, ''));
         const marketCap = parseFloat(marketCapText.replace(/[$,]/g, ''));
+        const volume24h = parseFloat(volume24hText.replace(/[$,]/g, ''));
+        
+        // 计算7天交易量（粗略估计为24小时交易量的7倍）
+        const volume7d = volume24h * 7;
         
         if (name && symbol && !isNaN(volume7d) && !isNaN(marketCap) && marketCap > 0) {
           const ratio = volume7d / marketCap;
           
-          // 查找加密货币ID
-          const cryptoId = 0; // 将在完善过程中实现查找ID的方法
+          log(`解析到加密货币: ${name} (${symbol}), 7日交易量: ${volume7d}, 市值: ${marketCap}, 比率: ${ratio.toFixed(4)}`, 'volume-ratio');
           
           results.push({
-            cryptoId,
+            cryptoId: 0, // 临时值，将在后续步骤中查找
             name,
             symbol,
             volume7d,
@@ -121,6 +139,7 @@ async function scrapeCoinMarketCap(): Promise<{
       }
     });
     
+    log(`从CoinMarketCap成功解析了${results.length}个加密货币的交易量/市值数据`, 'volume-ratio');
     return results;
   } catch (error: any) {
     log(`从CoinMarketCap抓取数据失败: ${error.message}`, 'volume-ratio');
@@ -138,8 +157,10 @@ async function scrapeCoinGecko(): Promise<{
   ratio: number 
 }[]> {
   try {
-    // 使用CoinGecko的交易量页面
-    const url = 'https://www.coingecko.com/en/exchanges/volume';
+    // 使用CoinGecko的主页面
+    const url = 'https://www.coingecko.com/en';
+    log(`从${url}抓取交易量市值数据...`, 'volume-ratio');
+    
     const html = await makeHttpRequest(url);
     const $ = cheerio.load(html);
     
@@ -153,17 +174,29 @@ async function scrapeCoinGecko(): Promise<{
     }[] = [];
     
     // 解析页面中的数据行
-    // 注意：以下选择器可能需要根据实际页面结构调整
-    $('table tbody tr').each((i, element) => {
+    log(`分析CoinGecko页面结构，提取加密货币数据...`, 'volume-ratio');
+    
+    // CoinGecko主页上加密货币表格的选择器
+    const tableSelector = 'table.table tbody tr';
+    const rows = $(tableSelector);
+    
+    log(`在CoinGecko找到${rows.length}行加密货币数据`, 'volume-ratio');
+    
+    // 解析每一行
+    $(tableSelector).each((i, element) => {
       try {
-        const name = $(element).find('td:nth-child(2) .coin-name').text().trim();
-        const symbol = $(element).find('td:nth-child(2) .coin-symbol').text().trim();
-        const volume24hText = $(element).find('td:nth-child(3)').text().trim();
-        const marketCapText = $(element).find('td:nth-child(5)').text().trim();
+        // 注意：这些选择器可能需要定期更新，因为网站结构可能会变化
+        const nameElement = $(element).find('td:nth-child(3)');
+        const name = nameElement.find('a.tw-hidden').text().trim();
+        const symbol = nameElement.find('a span.text-xs').text().trim().toUpperCase();
+        
+        // 获取市值和交易量
+        const marketCapText = $(element).find('td:nth-child(7) span').text().trim();
+        const volume24hText = $(element).find('td:nth-child(8) span').text().trim();
         
         // 移除货币符号并转换为数字
-        const volume24h = parseFloat(volume24hText.replace(/[$,]/g, ''));
         const marketCap = parseFloat(marketCapText.replace(/[$,]/g, ''));
+        const volume24h = parseFloat(volume24hText.replace(/[$,]/g, ''));
         
         // 估算7天交易量（近似值）
         const volume7d = volume24h * 7;
@@ -171,11 +204,10 @@ async function scrapeCoinGecko(): Promise<{
         if (name && symbol && !isNaN(volume7d) && !isNaN(marketCap) && marketCap > 0) {
           const ratio = volume7d / marketCap;
           
-          // 查找加密货币ID
-          const cryptoId = 0; // 将在完善过程中实现查找ID的方法
+          log(`解析到CoinGecko加密货币: ${name} (${symbol}), 7日交易量: ${volume7d}, 市值: ${marketCap}, 比率: ${ratio.toFixed(4)}`, 'volume-ratio');
           
           results.push({
-            cryptoId,
+            cryptoId: 0, // 临时值，将在后续步骤中查找
             name,
             symbol,
             volume7d,
@@ -183,13 +215,14 @@ async function scrapeCoinGecko(): Promise<{
             ratio
           });
         }
-      } catch (err) {
-        log(`解析行数据时出错: ${err.message}`, 'volume-ratio');
+      } catch (err: any) {
+        log(`解析CoinGecko行数据时出错: ${err.message}`, 'volume-ratio');
       }
     });
     
+    log(`从CoinGecko成功解析了${results.length}个加密货币的交易量/市值数据`, 'volume-ratio');
     return results;
-  } catch (error) {
+  } catch (error: any) {
     log(`从CoinGecko抓取数据失败: ${error.message}`, 'volume-ratio');
     return [];
   }
@@ -205,8 +238,10 @@ async function scrapeCryptocom(): Promise<{
   ratio: number 
 }[]> {
   try {
-    // 使用Crypto.com的交易量页面
+    // 使用Crypto.com的价格页面
     const url = 'https://crypto.com/price';
+    log(`从${url}抓取交易量市值数据...`, 'volume-ratio');
+    
     const html = await makeHttpRequest(url);
     const $ = cheerio.load(html);
     
@@ -220,17 +255,42 @@ async function scrapeCryptocom(): Promise<{
     }[] = [];
     
     // 解析页面中的数据行
-    // 注意：以下选择器可能需要根据实际页面结构调整
-    $('table tbody tr').each((i, element) => {
+    log(`分析Crypto.com页面结构，提取加密货币数据...`, 'volume-ratio');
+    
+    // Crypto.com主页上加密货币表格的选择器
+    const tableSelector = '.css-tlfecz-tbody tr';
+    const rows = $(tableSelector);
+    
+    log(`在Crypto.com找到${rows.length}行加密货币数据`, 'volume-ratio');
+    
+    $(tableSelector).each((i, element) => {
       try {
-        const name = $(element).find('td:nth-child(2) .coin-name').text().trim();
-        const symbol = $(element).find('td:nth-child(2) .coin-symbol').text().trim();
-        const volume24hText = $(element).find('td:nth-child(4)').text().trim();
-        const marketCapText = $(element).find('td:nth-child(6)').text().trim();
+        // 注意：这些选择器可能需要定期更新，因为网站结构可能会变化
+        const nameElement = $(element).find('td:nth-child(3)');
+        const name = nameElement.text().trim();
+        const symbolElement = $(element).find('td:nth-child(2)');
+        const symbol = symbolElement.text().trim().toUpperCase();
+        
+        // 获取市值和交易量
+        const volume24hText = $(element).find('td:nth-child(9)').text().trim();
+        const marketCapText = $(element).find('td:nth-child(8)').text().trim();
         
         // 移除货币符号并转换为数字
-        const volume24h = parseFloat(volume24hText.replace(/[$,]/g, ''));
-        const marketCap = parseFloat(marketCapText.replace(/[$,]/g, ''));
+        const volumeMatch = volume24hText.match(/[$€£¥]?[\d,]+(\.\d+)?[KMBTkmbt]?/);
+        const marketCapMatch = marketCapText.match(/[$€£¥]?[\d,]+(\.\d+)?[KMBTkmbt]?/);
+        
+        let volume24h = 0;
+        let marketCap = 0;
+        
+        if (volumeMatch) {
+          const volumeStr = volumeMatch[0].replace(/[$€£¥,]/g, '');
+          volume24h = parseNumber(volumeStr);
+        }
+        
+        if (marketCapMatch) {
+          const marketCapStr = marketCapMatch[0].replace(/[$€£¥,]/g, '');
+          marketCap = parseNumber(marketCapStr);
+        }
         
         // 估算7天交易量（近似值）
         const volume7d = volume24h * 7;
@@ -238,11 +298,10 @@ async function scrapeCryptocom(): Promise<{
         if (name && symbol && !isNaN(volume7d) && !isNaN(marketCap) && marketCap > 0) {
           const ratio = volume7d / marketCap;
           
-          // 查找加密货币ID
-          const cryptoId = 0; // 将在完善过程中实现查找ID的方法
+          log(`解析到Crypto.com加密货币: ${name} (${symbol}), 7日交易量: ${volume7d}, 市值: ${marketCap}, 比率: ${ratio.toFixed(4)}`, 'volume-ratio');
           
           results.push({
-            cryptoId,
+            cryptoId: 0, // 临时值，将在后续步骤中查找
             name,
             symbol,
             volume7d,
@@ -250,16 +309,41 @@ async function scrapeCryptocom(): Promise<{
             ratio
           });
         }
-      } catch (err) {
-        log(`解析行数据时出错: ${err.message}`, 'volume-ratio');
+      } catch (err: any) {
+        log(`解析Crypto.com行数据时出错: ${err.message}`, 'volume-ratio');
       }
     });
     
+    log(`从Crypto.com成功解析了${results.length}个加密货币的交易量/市值数据`, 'volume-ratio');
     return results;
-  } catch (error) {
+  } catch (error: any) {
     log(`从Crypto.com抓取数据失败: ${error.message}`, 'volume-ratio');
     return [];
   }
+}
+
+// 辅助函数：将带有K、M、B、T等后缀的数字字符串转换为实际数值
+function parseNumber(str: string): number {
+  const multipliers: Record<string, number> = {
+    k: 1000,
+    m: 1000000,
+    b: 1000000000,
+    t: 1000000000000
+  };
+  
+  const match = str.match(/^([\d.]+)([kmbt])?$/i);
+  
+  if (!match) return NaN;
+  
+  const [, numStr, suffix] = match;
+  const num = parseFloat(numStr);
+  
+  if (suffix) {
+    const multiplier = multipliers[suffix.toLowerCase()];
+    return num * multiplier;
+  }
+  
+  return num;
 }
 
 // 组合多个数据源的结果
@@ -272,33 +356,67 @@ async function combineResults(): Promise<{
   ratio: number 
 }[]> {
   // 更新看门狗活动时间
-  updateActivityTime('volumeMarketRatioScraper');
+  updateActivityTime();
   
   try {
+    log('开始从多个数据源收集交易量市值比率数据...', 'volume-ratio');
+    
     // 首先尝试CoinMarketCap，如果失败再尝试其他来源
     let results = await scrapeCoinMarketCap();
+    log(`从CoinMarketCap获取了${results.length}个加密货币数据`, 'volume-ratio');
     
     if (results.length < 30) {
       log('CoinMarketCap数据不足，尝试从CoinGecko获取数据', 'volume-ratio');
       const geckoResults = await scrapeCoinGecko();
+      log(`从CoinGecko获取了${geckoResults.length}个加密货币数据`, 'volume-ratio');
       results = [...results, ...geckoResults];
     }
     
     if (results.length < 30) {
       log('CoinGecko数据仍不足，尝试从Crypto.com获取数据', 'volume-ratio');
       const cryptoComResults = await scrapeCryptocom();
+      log(`从Crypto.com获取了${cryptoComResults.length}个加密货币数据`, 'volume-ratio');
       results = [...results, ...cryptoComResults];
     }
     
     // 去重
     const uniqueResults = removeDuplicates(results);
+    log(`去重后剩余${uniqueResults.length}个加密货币数据`, 'volume-ratio');
     
     // 按交易量/市值比率排序（降序）
     uniqueResults.sort((a, b) => b.ratio - a.ratio);
     
+    // 查找每种加密货币的ID
+    log('查找加密货币ID...', 'volume-ratio');
+    for (let i = 0; i < uniqueResults.length; i++) {
+      const result = uniqueResults[i];
+      if (result.cryptoId === 0) {
+        // 使用模式名称或符号查找加密货币ID
+        const cryptoId = await findCryptocurrencyId(result.symbol);
+        if (cryptoId > 0) {
+          result.cryptoId = cryptoId;
+          log(`找到${result.name} (${result.symbol})的ID: ${cryptoId}`, 'volume-ratio');
+        } else {
+          log(`警告: 未能找到${result.name} (${result.symbol})的加密货币ID`, 'volume-ratio');
+        }
+      }
+    }
+    
+    // 再次排序，优先使用有效的加密货币ID（即我们在数据库中有数据的币种）
+    uniqueResults.sort((a, b) => {
+      // 首先按ID排序（有ID的排在前面）
+      if (a.cryptoId > 0 && b.cryptoId === 0) return -1;
+      if (a.cryptoId === 0 && b.cryptoId > 0) return 1;
+      // 然后按交易量市值比率排序
+      return b.ratio - a.ratio;
+    });
+    
     // 获取前30个结果
-    return uniqueResults.slice(0, 30);
-  } catch (error) {
+    const topResults = uniqueResults.slice(0, 30);
+    log(`成功获取前${topResults.length}个交易量市值比率数据`, 'volume-ratio');
+    
+    return topResults;
+  } catch (error: any) {
     log(`组合数据源结果失败: ${error.message}`, 'volume-ratio');
     return [];
   }
