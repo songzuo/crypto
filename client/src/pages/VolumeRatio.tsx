@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
@@ -7,9 +7,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { ChevronLeft, ChevronRight, ArrowUpDown, Percent } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ArrowUpDown, Percent, RefreshCw } from 'lucide-react';
 import { formatNumber, formatDate } from '@/lib/utils';
 import Spinner from '@/components/ui/spinner';
+import { useToast } from '@/hooks/use-toast';
 
 interface VolumeToMarketCapRatio {
   id: number;
@@ -37,6 +38,8 @@ const VolumeRatio = () => {
   const [selectedBatchId, setSelectedBatchId] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const [limit] = useState(30);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   
   // Query to get the latest ratios
   const { 
@@ -86,6 +89,43 @@ const VolumeRatio = () => {
       return response.json();
     },
     enabled: !!selectedBatchId
+  });
+  
+  // Mutation to manually trigger volume-to-market cap analysis
+  const { mutate: triggerAnalysis, isPending: isAnalyzing } = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/api/volume-to-market-cap/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '触发分析失败');
+      }
+      
+      return response.json();
+    },
+    onSuccess: (data) => {
+      // Invalidate queries to refetch the updated data
+      queryClient.invalidateQueries({ queryKey: ['/api/volume-to-market-cap'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/volume-to-market-cap/batches'] });
+      
+      toast({
+        title: '分析触发成功',
+        description: data.message || '交易量市值比率分析已开始执行，结果将在几分钟后显示',
+        variant: 'default'
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: '分析触发失败',
+        description: (error as Error).message || '无法启动交易量市值比率分析',
+        variant: 'destructive'
+      });
+    }
   });
   
   // If we have batches data but no selectedBatchId yet, set it to the latest batch id
@@ -228,6 +268,31 @@ const VolumeRatio = () => {
                     <div>
                       <div className="text-sm font-medium">数据来源</div>
                       <div className="text-lg">{batchesData.data[0].dataSource || '多来源汇总'}</div>
+                    </div>
+                    
+                    <Separator className="my-4" />
+                    
+                    <div>
+                      <Button 
+                        onClick={() => triggerAnalysis()}
+                        disabled={isAnalyzing}
+                        className="w-full"
+                      >
+                        {isAnalyzing ? (
+                          <>
+                            <Spinner size="small" className="mr-2" />
+                            正在触发分析...
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="mr-2 h-4 w-4" />
+                            手动触发分析
+                          </>
+                        )}
+                      </Button>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        交易量市值比率分析通常每24小时自动运行一次，点击按钮可手动立即触发。分析可能需要5-10分钟完成。
+                      </p>
                     </div>
                     
                     <Separator className="my-4" />
