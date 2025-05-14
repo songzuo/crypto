@@ -1,0 +1,201 @@
+
+1. CoinMarketCap API
+python
+复制
+编辑
+import os
+import requests
+import datetime
+
+# 请先在环境变量中设置 CMC_API_KEY
+API_KEY = os.getenv("CMC_API_KEY")
+BASE_URL = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/historical"
+
+def get_cmc_7d_avg_volume(symbol):
+    headers = {"X-CMC_PRO_API_KEY": API_KEY}
+    # 7 天之前到今天
+    end = datetime.datetime.utcnow()
+    start = end - datetime.timedelta(days=7)
+    params = {
+        "symbol": symbol,
+        "time_start": start.isoformat(),
+        "time_end": end.isoformat(),
+        "interval": "daily"
+    }
+    r = requests.get(BASE_URL, headers=headers, params=params).json()
+    volumes = [day["quote"]["USD"]["volume"] for day in r["data"]["quotes"]]
+    return sum(volumes) / len(volumes)
+
+if __name__ == "__main__":
+    sym = "BTC"  # 替换为你关注的币种
+    avg_vol = get_cmc_7d_avg_volume(sym)
+    print(f"{sym} 过去7天日均成交量: ${avg_vol:,.2f}")
+说明：
+
+quotes/historical 接口返回每日成交量数据
+
+计算得到 7 天区间内的平均值
+
+2. CoinGecko API
+python
+复制
+编辑
+import requests
+import time
+
+BASE_URL = "https://api.coingecko.com/api/v3/coins/{id}/market_chart"
+
+def get_coingecko_7d_avg_volume(coin_id):
+    params = {"vs_currency": "usd", "days": 7}
+    r = requests.get(BASE_URL.format(id=coin_id), params=params).json()
+    # volume 是个二维数组 [[timestamp, volume], ...]
+    vols = [v[1] for v in r["total_volumes"]]
+    return sum(vols) / len(vols)
+
+if __name__ == "__main__":
+    coin = "bitcoin"  # CoinGecko 的 coin id
+    avg_vol = get_coingecko_7d_avg_volume(coin)
+    print(f"{coin} 过去7天日均成交量: ${avg_vol:,.2f}")
+说明：
+
+coins/{id}/market_chart?days=7 接口一次返回 7 天内多点成交量
+
+取 total_volumes 字段中的数值进行平均
+
+CoinAPI
+CoinAPI 提供丰富的 OHLCV 时序数据，包括成交量字段
+CoinAPI
+CoinAPI
+。以下示例调用 /v1/ohlcv/{symbol_id}/history 接口拉取过去 7 天的日级成交量并计算平均值：
+
+python
+复制
+编辑
+import os, requests, datetime
+
+API_KEY = os.getenv("COINAPI_KEY")
+BASE = "https://rest.coinapi.io/v1/ohlcv/{symbol_id}/history"
+HEADERS = {"X-CoinAPI-Key": API_KEY}
+
+def cmc_7d_avg_volume(symbol_id):
+    end = datetime.datetime.utcnow()
+    start = end - datetime.timedelta(days=7)
+    params = {
+        "period_id": "1DAY",
+        "time_start": start.isoformat(),
+        "time_end": end.isoformat()
+    }
+    url = BASE.format(symbol_id=symbol_id)
+    r = requests.get(url, headers=HEADERS, params=params).json()
+    vols = [entry["volume_traded"] for entry in r]
+    return sum(vols) / len(vols)
+
+# 示例
+print("BTC 7日均成交量:", cmc_7d_avg_volume("BITSTAMP_SPOT_BTC_USD"))
+参考：CoinAPI 历史 OHLCV 文档 
+CoinAPI
+；历史数据指南 
+CoinAPI
+；接口请求格式 
+old.docs.coinapi.io
+。
+
+CoinCap
+CoinCap 的 /candles 端点返回 OHLCV 烛台数据，可指定交易所、交易对与时间区间
+pro.coincap.io
+。以下示例调用过去 7 天的日线烛台，并累加成交量，计算平均值：
+
+python
+复制
+编辑
+import requests, time, datetime
+
+API = "https://api.coincap.io/v2/candles"
+HEADERS = {"Authorization": "Bearer YOUR_COINCAP_KEY"}
+
+def coincap_7d_avg_volume(exchange, base, quote):
+    end = int(time.time() * 1000)
+    start = end - 7*24*3600*1000
+    params = {
+        "exchange": exchange,
+        "interval": "d1",
+        "baseId": base,
+        "quoteId": quote,
+        "start": start,
+        "end": end
+    }
+    data = requests.get(API, headers=HEADERS, params=params).json()["data"]
+    vols = [float(c["volumeQuote"]) for c in data]
+    return sum(vols) / len(vols)
+
+# 示例
+print("ETH 7日均成交量:", coincap_7d_avg_volume("binance", "ethereum", "tether"))
+参考：CoinCap API 文档 
+pro.coincap.io
+；Postman 示例 
+Postman API Platform
+。
+
+Coinlayer
+Coinlayer 的 Timeframe 端点支持指定日期区间，返回每日汇率及成交量等
+David Walsh Blog
+。下面示例通过 timeframe 接口获取过去 7 天的成交量并取平均（仅 Professional 付费计划可用变化数据）：
+
+python
+复制
+编辑
+import requests, datetime
+
+API_KEY = "YOUR_COINLAYER_KEY"
+URL = "https://api.coinlayer.com/timeframe"
+
+def coinlayer_7d_avg_volume(symbol):
+    today = datetime.date.today()
+    start = today - datetime.timedelta(days=7)
+    params = {
+        "access_key": API_KEY,
+        "symbols": symbol,
+        "start_date": start.isoformat(),
+        "end_date": today.isoformat()
+    }
+    r = requests.get(URL, params=params).json()
+    # 假设返回中包含 daily 'vol' 字段
+    vols = [v.get("vol", 0) for v in r["timeframe"].values()]
+    return sum(vols) / len(vols)
+
+# 示例
+print("LTC 7日均成交量:", coinlayer_7d_avg_volume("LTC"))
+参考：Coinlayer 时序数据文档 
+David Walsh Blog
+；官方 FAQ 
+Coinlayer
+；GitHub 示例 
+GitHub
+。
+
+Alchemy Prices API
+Alchemy 提供专门的市场数据端点，包含 getAssetTransfers 与 getAssetMetadata，但最直接的成交量接口是 Market Data API。以下示例通过 Alchemy 的 REST 端点获取过去 7 天的交易量：
+
+python
+复制
+编辑
+import requests, datetime, statistics
+
+API_KEY = "YOUR_ALCHEMY_KEY"
+BASE = "https://eth-mainnet.alchemyapi.io/v2"
+
+def alchemy_7d_avg_volume(symbol, start_block, end_block):
+    # 演示：按天分段查询交易量（需先映射 block height）
+    daily_vols = []
+    for i in range(7):
+        # 这里仅为伪代码，实际需根据区块时间戳查 block range
+        params = {"fromBlock": start_block+i, "toBlock": start_block+i+1, "contractAddresses[]": symbol}
+        url = f"{BASE}/{API_KEY}/getAssetTransfers"
+        r = requests.get(url, params=params).json()
+        vol = sum(int(tx["value"], 16) for tx in r["transfers"])
+        daily_vols.append(vol/1e18)  # 转为 ETH 单位
+    return statistics.mean(daily_vols)
+
+# 示例（需自行获取 block 范围）
+# print("USDC 7日均成交量:", alchemy_7d_avg_volume("0xA0b86991...", 17100000, 17100007))
+参考：Alchemy Market Data 文档 ；Alchemy API 概览 。
