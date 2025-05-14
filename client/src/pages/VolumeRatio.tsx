@@ -16,12 +16,12 @@ interface VolumeToMarketCapRatio {
   id: number;
   batchId: number;
   cryptocurrencyId: number | null;
-  cryptocurrencyName: string | null;
-  cryptocurrencySymbol: string | null;
+  name: string | null;        // 直接使用API返回的name字段
+  symbol: string | null;      // 直接使用API返回的symbol字段
   volume7d: number;
   marketCap: number;
   volumeToMarketCapRatio: number;
-  createdAt: string;
+  timestamp: string;          // API中是timestamp而不是createdAt
 }
 
 interface VolumeToMarketCapBatch {
@@ -138,7 +138,7 @@ const VolumeRatio = () => {
   // Prepare chart data for visualization
   const prepareChartData = (ratios: VolumeToMarketCapRatio[]) => {
     return ratios.slice(0, 15).map(ratio => ({
-      name: ratio.cryptocurrencySymbol || `Crypto #${ratio.cryptocurrencyId}`,
+      name: ratio.symbol || `Crypto #${ratio.cryptocurrencyId}`,
       ratio: parseFloat((ratio.volumeToMarketCapRatio * 100).toFixed(2))
     })).sort((a, b) => a.ratio - b.ratio);
   };
@@ -286,7 +286,7 @@ const VolumeRatio = () => {
                         <div key={ratio.id} className="flex justify-between items-center mb-2">
                           <div className="flex items-center">
                             <Badge variant="outline" className="mr-2">{index + 1}</Badge>
-                            <span>{ratio.cryptocurrencySymbol || 'Unknown'}</span>
+                            <span>{ratio.symbol || 'Unknown'}</span>
                           </div>
                           <div className="font-medium">{(ratio.volumeToMarketCapRatio * 100).toFixed(2)}%</div>
                         </div>
@@ -331,8 +331,8 @@ const VolumeRatio = () => {
                   {latestRatiosData?.data?.map((ratio: VolumeToMarketCapRatio, index: number) => (
                     <TableRow key={ratio.id}>
                       <TableCell className="font-medium">{(page - 1) * limit + index + 1}</TableCell>
-                      <TableCell>{ratio.cryptocurrencyName || '未知币种'}</TableCell>
-                      <TableCell>{ratio.cryptocurrencySymbol || '-'}</TableCell>
+                      <TableCell>{ratio.name || '未知币种'}</TableCell>
+                      <TableCell>{ratio.symbol || '-'}</TableCell>
                       <TableCell className="text-right">${formatNumber(ratio.volume7d)}</TableCell>
                       <TableCell className="text-right">${formatNumber(ratio.marketCap)}</TableCell>
                       <TableCell className="text-right">
@@ -464,8 +464,8 @@ const VolumeRatio = () => {
                           {selectedBatchData.ratios?.map((ratio: VolumeToMarketCapRatio, index: number) => (
                             <TableRow key={ratio.id}>
                               <TableCell className="font-medium">{index + 1}</TableCell>
-                              <TableCell>{ratio.cryptocurrencyName || '未知币种'}</TableCell>
-                              <TableCell>{ratio.cryptocurrencySymbol || '-'}</TableCell>
+                              <TableCell>{ratio.name || '未知币种'}</TableCell>
+                              <TableCell>{ratio.symbol || '-'}</TableCell>
                               <TableCell className="text-right">${formatNumber(ratio.volume7d)}</TableCell>
                               <TableCell className="text-right">${formatNumber(ratio.marketCap)}</TableCell>
                               <TableCell className="text-right">
