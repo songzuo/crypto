@@ -120,12 +120,24 @@ export async function setupScheduler() {
   }
   
   // 立即执行增强型交易量市值比率分析
-  console.log('启动时执行增强型交易量市值比率分析...');
+  console.log('启动时执行一步式交易量市值比率分析...');
   try {
-    await runEnhancedVolumeToMarketCapAnalysis();
-    console.log('初始增强型交易量市值比率分析完成，已生成数据');
+    // 导入一步式分析器
+    const { runOneStepRatioAnalysis } = await import('./oneStepRatioAnalyzer');
+    const result = await runOneStepRatioAnalysis();
+    
+    if (result.success) {
+      console.log(`初始一步式交易量市值比率分析完成，已创建批次#${result.batchId}，共${result.count}个币种`);
+    } else {
+      console.error(`初始一步式交易量市值比率分析失败: ${result.error}`);
+      
+      // 备用：如果一步式分析失败，尝试使用增强型分析
+      console.log('尝试使用备用增强型分析...');
+      await runEnhancedVolumeToMarketCapAnalysis();
+      console.log('备用增强型交易量市值比率分析完成');
+    }
   } catch (error) {
-    console.error('初始增强型交易量市值比率分析失败:', error);
+    console.error('初始交易量市值比率分析失败:', error);
   }
 
   console.log('Setting up scheduled tasks...');
@@ -557,34 +569,52 @@ async function forceBreakthroughScrape(): Promise<void> {
     }
   });
   
-  // 基本交易量市值比率分析 - 每天04:00运行一次
+  // 一步式交易量市值比率分析 - 每天04:00运行一次
   cron.schedule('0 4 * * *', async () => {
-    console.log('Running scheduled task: Volume-to-Market Cap Ratio Analysis (Basic)');
+    console.log('Running scheduled task: One-Step Volume-to-Market Cap Ratio Analysis');
     
     try {
-      // 执行基本的交易量市值比率分析
-      const result = await analyzeVolumeToMarketCapRatios();
+      // 导入一步式分析器
+      const { runOneStepRatioAnalysis } = await import('./oneStepRatioAnalyzer');
+      const result = await runOneStepRatioAnalysis();
       
-      if (result) {
-        console.log('Basic Volume-to-Market Cap Ratio analysis completed successfully with new data');
+      if (result.success) {
+        console.log(`One-Step Volume-to-Market Cap Ratio analysis completed: Batch #${result.batchId} with ${result.count} cryptocurrencies`);
       } else {
-        console.log('Basic Volume-to-Market Cap Ratio analysis completed: No significant changes detected');
+        console.log(`One-Step analysis failed: ${result.error}, switching to basic analyzer`);
+        
+        // 如果一步式分析失败，尝试使用基本分析器
+        const basicResult = await analyzeVolumeToMarketCapRatios();
+        if (basicResult) {
+          console.log('Fallback Basic analysis completed successfully with new data');
+        } else {
+          console.log('Fallback Basic analysis completed: No significant changes detected');
+        }
       }
     } catch (error) {
-      console.error('Basic Volume-to-Market Cap Ratio analysis task error:', error);
+      console.error('Volume-to-Market Cap Ratio analysis task error:', error);
     }
   });
   
-  // 增强型交易量市值比率分析 - 每天12:00运行一次
+  // 增强型交易量市值比率分析 (备用) - 每天12:00运行一次
   cron.schedule('0 12 * * *', async () => {
-    console.log('Running scheduled task: Enhanced Volume-to-Market Cap Ratio Analysis');
+    console.log('Running scheduled task: Backup Analysis for Volume-to-Market Cap Ratio');
     
     try {
-      // 执行增强型交易量市值比率分析，结合API和爬虫数据
-      await runEnhancedVolumeToMarketCapAnalysis();
-      console.log('Enhanced Volume-to-Market Cap Ratio analysis completed successfully');
+      // 先尝试一步式分析
+      const { runOneStepRatioAnalysis } = await import('./oneStepRatioAnalyzer');
+      const result = await runOneStepRatioAnalysis();
+      
+      if (result.success) {
+        console.log(`Backup One-Step analysis completed: Batch #${result.batchId} with ${result.count} cryptocurrencies`);
+      } else {
+        // 如果一步式分析失败，尝试使用增强型分析器
+        console.log('One-Step analysis failed, switching to enhanced analyzer');
+        await runEnhancedVolumeToMarketCapAnalysis();
+        console.log('Backup Enhanced analysis completed successfully');
+      }
     } catch (error) {
-      console.error('Enhanced Volume-to-Market Cap Ratio analysis task error:', error);
+      console.error('Backup Volume-to-Market Cap Ratio analysis task error:', error);
     }
   });
   
