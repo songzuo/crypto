@@ -89,6 +89,8 @@ export class MemStorage implements IStorage {
   private aiInsights: Map<number, AiInsight>;
   private cryptoNews: Map<number, CryptoNews>;
   private crawlerStatus: CrawlerStatus | undefined;
+  private volumeToMarketCapRatios: Map<number, VolumeToMarketCapRatio>;
+  private volumeToMarketCapBatches: Map<number, VolumeToMarketCapBatch>;
   
   userCurrentId: number;
   cryptoCurrentId: number;
@@ -96,6 +98,8 @@ export class MemStorage implements IStorage {
   metricCurrentId: number;
   insightCurrentId: number;
   newsCurrentId: number;
+  ratioCurrentId: number;
+  batchCurrentId: number;
   
   constructor() {
     this.users = new Map();
@@ -104,6 +108,8 @@ export class MemStorage implements IStorage {
     this.metrics = new Map();
     this.aiInsights = new Map();
     this.cryptoNews = new Map();
+    this.volumeToMarketCapRatios = new Map();
+    this.volumeToMarketCapBatches = new Map();
     
     this.userCurrentId = 1;
     this.cryptoCurrentId = 1;
@@ -111,6 +117,8 @@ export class MemStorage implements IStorage {
     this.metricCurrentId = 1;
     this.insightCurrentId = 1;
     this.newsCurrentId = 1;
+    this.ratioCurrentId = 1;
+    this.batchCurrentId = 1;
     
     // Initialize crawler status
     this.crawlerStatus = {
@@ -613,6 +621,85 @@ export class MemStorage implements IStorage {
   // Missing method required by IStorage
   async deleteCryptocurrency(id: number): Promise<boolean> {
     return this.cryptocurrencies.delete(id);
+  }
+  
+  // 交易量市值比率相关方法
+  async getVolumeToMarketCapRatios(page: number, limit: number): Promise<{ data: VolumeToMarketCapRatio[], total: number }> {
+    const offset = (page - 1) * limit;
+    const allRatios = Array.from(this.volumeToMarketCapRatios.values())
+      .sort((a, b) => a.rank - b.rank);
+    
+    return {
+      data: allRatios.slice(offset, offset + limit),
+      total: allRatios.length
+    };
+  }
+
+  async getVolumeToMarketCapRatiosByBatchId(batchId: number): Promise<VolumeToMarketCapRatio[]> {
+    return Array.from(this.volumeToMarketCapRatios.values())
+      .filter(ratio => ratio.batchId === batchId)
+      .sort((a, b) => a.rank - b.rank);
+  }
+
+  async createVolumeToMarketCapRatio(insertRatio: InsertVolumeToMarketCapRatio): Promise<VolumeToMarketCapRatio> {
+    const id = this.ratioCurrentId++;
+    const createdAt = new Date();
+    
+    const ratio: VolumeToMarketCapRatio = {
+      id,
+      cryptocurrencyId: insertRatio.cryptocurrencyId,
+      name: insertRatio.name,
+      symbol: insertRatio.symbol,
+      volume7d: insertRatio.volume7d,
+      marketCap: insertRatio.marketCap,
+      volumeToMarketCapRatio: insertRatio.volumeToMarketCapRatio,
+      includesFutures: insertRatio.includesFutures,
+      rank: insertRatio.rank,
+      batchId: insertRatio.batchId,
+      createdAt
+    };
+    
+    this.volumeToMarketCapRatios.set(id, ratio);
+    return ratio;
+  }
+  
+  // 交易量市值比率批次相关方法
+  async getVolumeToMarketCapBatches(page: number, limit: number): Promise<{ data: VolumeToMarketCapBatch[], total: number }> {
+    const offset = (page - 1) * limit;
+    const allBatches = Array.from(this.volumeToMarketCapBatches.values())
+      .sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0));
+    
+    return {
+      data: allBatches.slice(offset, offset + limit),
+      total: allBatches.length
+    };
+  }
+
+  async getLatestVolumeToMarketCapBatch(): Promise<VolumeToMarketCapBatch | undefined> {
+    const allBatches = Array.from(this.volumeToMarketCapBatches.values())
+      .sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0));
+    
+    return allBatches.length > 0 ? allBatches[0] : undefined;
+  }
+
+  async getVolumeToMarketCapBatch(id: number): Promise<VolumeToMarketCapBatch | undefined> {
+    return this.volumeToMarketCapBatches.get(id);
+  }
+
+  async createVolumeToMarketCapBatch(insertBatch: InsertVolumeToMarketCapBatch): Promise<VolumeToMarketCapBatch> {
+    const id = this.batchCurrentId++;
+    const createdAt = new Date();
+    
+    const batch: VolumeToMarketCapBatch = {
+      id,
+      entriesCount: insertBatch.entriesCount,
+      hasChanges: insertBatch.hasChanges,
+      previousBatchId: insertBatch.previousBatchId,
+      createdAt
+    };
+    
+    this.volumeToMarketCapBatches.set(id, batch);
+    return batch;
   }
 }
 
