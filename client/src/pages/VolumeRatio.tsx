@@ -20,7 +20,7 @@ interface VolumeToMarketCapRatio {
   cryptocurrencySymbol: string | null;
   volume7d: number;
   marketCap: number;
-  ratio: number;
+  volumeToMarketCapRatio: number;
   createdAt: string;
 }
 
@@ -139,7 +139,7 @@ const VolumeRatio = () => {
   const prepareChartData = (ratios: VolumeToMarketCapRatio[]) => {
     return ratios.slice(0, 15).map(ratio => ({
       name: ratio.cryptocurrencySymbol || `Crypto #${ratio.cryptocurrencyId}`,
-      ratio: parseFloat((ratio.ratio * 100).toFixed(2))
+      ratio: parseFloat((ratio.volumeToMarketCapRatio * 100).toFixed(2))
     })).sort((a, b) => a.ratio - b.ratio);
   };
   
@@ -288,7 +288,7 @@ const VolumeRatio = () => {
                             <Badge variant="outline" className="mr-2">{index + 1}</Badge>
                             <span>{ratio.cryptocurrencySymbol || 'Unknown'}</span>
                           </div>
-                          <div className="font-medium">{(ratio.ratio * 100).toFixed(2)}%</div>
+                          <div className="font-medium">{(ratio.volumeToMarketCapRatio * 100).toFixed(2)}%</div>
                         </div>
                       ))}
                     </div>
