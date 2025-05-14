@@ -1334,6 +1334,131 @@ export class DatabaseStorage implements IStorage {
       return 0;
     }
   }
+  
+  // 交易量市值比率相关方法
+  async getVolumeToMarketCapRatios(page: number, limit: number): Promise<{ data: VolumeToMarketCapRatio[], total: number }> {
+    try {
+      const offset = (page - 1) * limit;
+      
+      const ratiosQuery = await db
+        .select()
+        .from(volumeToMarketCapRatios)
+        .orderBy(asc(volumeToMarketCapRatios.rank))
+        .limit(limit)
+        .offset(offset);
+      
+      const countQuery = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(volumeToMarketCapRatios);
+      
+      return {
+        data: ratiosQuery,
+        total: countQuery[0].count
+      };
+    } catch (error) {
+      console.error('Error fetching volume to market cap ratios:', error);
+      return { data: [], total: 0 };
+    }
+  }
+
+  async getVolumeToMarketCapRatiosByBatchId(batchId: number): Promise<VolumeToMarketCapRatio[]> {
+    try {
+      const ratiosQuery = await db
+        .select()
+        .from(volumeToMarketCapRatios)
+        .where(eq(volumeToMarketCapRatios.batchId, batchId))
+        .orderBy(asc(volumeToMarketCapRatios.rank));
+      
+      return ratiosQuery;
+    } catch (error) {
+      console.error('Error fetching volume to market cap ratios by batch ID:', error);
+      return [];
+    }
+  }
+
+  async createVolumeToMarketCapRatio(insertRatio: InsertVolumeToMarketCapRatio): Promise<VolumeToMarketCapRatio> {
+    try {
+      const [ratio] = await db
+        .insert(volumeToMarketCapRatios)
+        .values(insertRatio)
+        .returning();
+        
+      return ratio;
+    } catch (error) {
+      console.error('Error creating volume to market cap ratio:', error);
+      throw error;
+    }
+  }
+  
+  // 交易量市值比率批次相关方法
+  async getVolumeToMarketCapBatches(page: number, limit: number): Promise<{ data: VolumeToMarketCapBatch[], total: number }> {
+    try {
+      const offset = (page - 1) * limit;
+      
+      const batchesQuery = await db
+        .select()
+        .from(volumeToMarketCapBatches)
+        .orderBy(desc(volumeToMarketCapBatches.createdAt))
+        .limit(limit)
+        .offset(offset);
+      
+      const countQuery = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(volumeToMarketCapBatches);
+      
+      return {
+        data: batchesQuery,
+        total: countQuery[0].count
+      };
+    } catch (error) {
+      console.error('Error fetching volume to market cap batches:', error);
+      return { data: [], total: 0 };
+    }
+  }
+
+  async getLatestVolumeToMarketCapBatch(): Promise<VolumeToMarketCapBatch | undefined> {
+    try {
+      const [batch] = await db
+        .select()
+        .from(volumeToMarketCapBatches)
+        .orderBy(desc(volumeToMarketCapBatches.createdAt))
+        .limit(1);
+      
+      return batch;
+    } catch (error) {
+      console.error('Error fetching latest volume to market cap batch:', error);
+      return undefined;
+    }
+  }
+
+  async getVolumeToMarketCapBatch(id: number): Promise<VolumeToMarketCapBatch | undefined> {
+    try {
+      const [batch] = await db
+        .select()
+        .from(volumeToMarketCapBatches)
+        .where(eq(volumeToMarketCapBatches.id, id))
+        .limit(1);
+      
+      return batch;
+    } catch (error) {
+      console.error('Error fetching volume to market cap batch by ID:', error);
+      return undefined;
+    }
+  }
+
+  async createVolumeToMarketCapBatch(insertBatch: InsertVolumeToMarketCapBatch): Promise<VolumeToMarketCapBatch> {
+    try {
+      const [batch] = await db
+        .insert(volumeToMarketCapBatches)
+        .values(insertBatch)
+        .returning();
+        
+      return batch;
+    } catch (error) {
+      console.error('Error creating volume to market cap batch:', error);
+      throw error;
+    }
+  }
 }
 
 // Import necessary functions after defining Database class

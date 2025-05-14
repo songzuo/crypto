@@ -8,6 +8,7 @@ import { scrapeAdvancedMarketData } from './advancedMarketDataScraper';
 import { startWatchdog, updateActivityTime } from './watchdog';
 import { scrapeCryptoNews } from './cryptoNewsScraper';
 import { analyzeNewsWordTrends } from './wordTrendAnalyzer';
+import { analyzeVolumeToMarketCapRatios } from './volumeMarketRatioScraper';
 import { 
   updateLastTrendAnalysisTime, 
   getLastTrendAnalysisTime,

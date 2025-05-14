@@ -48,7 +48,7 @@ async function makeHttpRequest(url: string, retries = 3): Promise<string> {
       });
       
       return response.data;
-    } catch (error) {
+    } catch (error: any) {
       attempt++;
       log(`请求失败 (${attempt}/${retries}): ${url} - ${error.message}`, 'volume-ratio');
       
@@ -116,13 +116,13 @@ async function scrapeCoinMarketCap(): Promise<{
             ratio
           });
         }
-      } catch (err) {
+      } catch (err: any) {
         log(`解析行数据时出错: ${err.message}`, 'volume-ratio');
       }
     });
     
     return results;
-  } catch (error) {
+  } catch (error: any) {
     log(`从CoinMarketCap抓取数据失败: ${error.message}`, 'volume-ratio');
     return [];
   }
