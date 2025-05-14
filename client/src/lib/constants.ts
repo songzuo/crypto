@@ -34,6 +34,11 @@ export const navItems = [
     label: "Trends",
     path: "/trends",
     icon: "ri-trending-up-line"
+  },
+  {
+    label: "Volume Ratio",
+    path: "/volume-ratio",
+    icon: "ri-scales-3-line"
   }
 ];
 
