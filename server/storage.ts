@@ -1338,18 +1338,34 @@ export class DatabaseStorage implements IStorage {
   // 交易量市值比率相关方法
   async getVolumeToMarketCapRatios(page: number, limit: number): Promise<{ data: VolumeToMarketCapRatio[], total: number }> {
     try {
+      // 获取最新批次ID
+      const batches = await db
+        .select()
+        .from(volumeToMarketCapBatches)
+        .orderBy(desc(volumeToMarketCapBatches.createdAt))
+        .limit(1);
+      
+      const latestBatchId = batches.length > 0 ? batches[0].id : null;
+      if (!latestBatchId) {
+        return { data: [], total: 0 };
+      }
+      
       const offset = (page - 1) * limit;
       
+      // 选择最新批次中的数据，按交易量市值比率降序排序
       const ratiosQuery = await db
         .select()
         .from(volumeToMarketCapRatios)
-        .orderBy(asc(volumeToMarketCapRatios.rank))
+        .where(eq(volumeToMarketCapRatios.batchId, latestBatchId))
+        .orderBy(desc(volumeToMarketCapRatios.volumeToMarketCapRatio))
         .limit(limit)
         .offset(offset);
       
+      // 计算最新批次中的总记录数
       const countQuery = await db
         .select({ count: sql<number>`count(*)` })
-        .from(volumeToMarketCapRatios);
+        .from(volumeToMarketCapRatios)
+        .where(eq(volumeToMarketCapRatios.batchId, latestBatchId));
       
       return {
         data: ratiosQuery,
@@ -1367,7 +1383,7 @@ export class DatabaseStorage implements IStorage {
         .select()
         .from(volumeToMarketCapRatios)
         .where(eq(volumeToMarketCapRatios.batchId, batchId))
-        .orderBy(asc(volumeToMarketCapRatios.rank));
+        .orderBy(desc(volumeToMarketCapRatios.volumeToMarketCapRatio));
       
       return ratiosQuery;
     } catch (error) {
