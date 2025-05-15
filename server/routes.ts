@@ -12,9 +12,15 @@ import { analyzeNewsWordTrends } from "./services/wordTrendAnalyzer";
 import { getCachedTrendAnalysisResult } from "./services/cacheStore";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Health check endpoint for deployments
-  app.get("/", (_req, res) => {
+  // 后端健康检查API
+  app.get("/api/health", (_req, res) => {
     res.status(200).json({ status: "ok" });
+  });
+  
+  // 为根路径('/')创建一个重定向路由，显示app首页而不是JSON响应
+  app.get("/", (_req, res) => {
+    // 由于我们不能修改vite.ts，这里我们直接重定向到dashboard路径
+    res.redirect('/dashboard');
   });
 
   // Get all cryptocurrencies
