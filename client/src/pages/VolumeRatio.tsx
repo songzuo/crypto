@@ -21,7 +21,7 @@ interface VolumeToMarketCapRatio {
   volume7d: number;
   marketCap: number;
   volumeToMarketCapRatio: number;
-  timestamp: string;          // API中是timestamp而不是createdAt
+  timestamp: string | null;   // 根据API真实返回格式
 }
 
 interface VolumeToMarketCapBatch {
@@ -53,7 +53,22 @@ const VolumeRatio = () => {
       if (!response.ok) {
         throw new Error('Failed to fetch latest volume-to-market-cap ratios');
       }
-      return response.json();
+      const data = await response.json();
+      
+      // 处理响应，确保我们有标准格式的数据
+      if (data.status === 'ok') {
+        // 如果后端返回的是状态信息，提供空数据数组
+        console.warn('API返回了状态信息而不是数据:', data);
+        return { data: [], total: 0 };
+      }
+      
+      // 检查我们是否有预期的数据格式
+      if (!data.data && Array.isArray(data)) {
+        // 如果后端直接返回数组，进行格式化
+        return { data: data, total: data.length };
+      }
+      
+      return data;
     }
   });
   
@@ -69,7 +84,22 @@ const VolumeRatio = () => {
       if (!response.ok) {
         throw new Error('Failed to fetch volume-to-market-cap batches');
       }
-      return response.json();
+      const data = await response.json();
+      
+      // 处理响应，确保我们有标准格式的数据
+      if (data.status === 'ok') {
+        // 如果后端返回的是状态信息，提供空数据数组
+        console.warn('批次API返回了状态信息而不是数据:', data);
+        return { data: [], total: 0 };
+      }
+      
+      // 检查我们是否有预期的数据格式
+      if (!data.data && Array.isArray(data)) {
+        // 如果后端直接返回数组，进行格式化
+        return { data: data, total: data.length };
+      }
+      
+      return data;
     }
   });
   
@@ -86,7 +116,16 @@ const VolumeRatio = () => {
       if (!response.ok) {
         throw new Error(`Failed to fetch batch ${selectedBatchId}`);
       }
-      return response.json();
+      const data = await response.json();
+      
+      // 处理响应，确保我们有标准格式的数据
+      if (data.status === 'ok') {
+        // 如果后端返回的是状态信息，提供空数据对象
+        console.warn('批次详情API返回了状态信息而不是数据:', data);
+        return { batch: { id: selectedBatchId, createdAt: new Date().toISOString(), count: 0 }, ratios: [] };
+      }
+      
+      return data;
     },
     enabled: !!selectedBatchId
   });
