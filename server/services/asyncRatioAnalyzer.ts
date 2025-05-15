@@ -263,16 +263,31 @@ class CoinCapAPI {
       const coins = response.data.data;
       log(`从CoinCap获取到${coins.length}个币种`, 'async-ratio');
       
-      const filteredCoins = coins.filter(coin => 
-        !STABLECOIN_SYMBOLS.includes(coin.symbol) &&
-        parseFloat(coin.marketCapUsd) > MIN_MARKET_CAP_USD
-      );
+      const filteredCoins = coins.filter(coin => {
+        // 检查是否是稳定币(通过符号)
+        const isStablecoinBySymbol = STABLECOIN_SYMBOLS.includes(coin.symbol);
+        
+        // 检查是否是稳定币(通过名称)
+        const isStablecoinByName = STABLECOIN_NAMES.some(name => 
+          coin.name.toLowerCase().includes(name.toLowerCase())
+        );
+        
+        // 检查市值
+        const hasValidMarketCap = parseFloat(coin.marketCapUsd) > MIN_MARKET_CAP_USD;
+        
+        // 只保留非稳定币且市值足够的币种
+        return !isStablecoinBySymbol && !isStablecoinByName && hasValidMarketCap;
+      });
       
       // 转换为标准格式
       const results = filteredCoins.map(coin => {
         const marketCap = parseFloat(coin.marketCapUsd);
         const volume24h = parseFloat(coin.volumeUsd24Hr);
-        const ratio = volume24h / marketCap;
+        
+        // 计算正确的7天交易量和比率
+        const volume7d = volume24h * 7; // 7天总交易量
+        const averageVolume = volume24h; // 日均交易量就是24小时交易量
+        const correctedRatio = averageVolume / marketCap; // 使用正确的比率
         
         return {
           name: coin.name,
@@ -280,8 +295,8 @@ class CoinCapAPI {
           price: parseFloat(coin.priceUsd),
           marketCap,
           volume24h,
-          volume7d: volume24h * 7, // 简单估算7天交易量
-          ratio,
+          volume7d, // 7天总交易量
+          ratio: correctedRatio, // 使用正确的比率
           rank: 0 // 将在排序后更新
         };
       });
@@ -325,13 +340,27 @@ class CryptoCompareAPI {
         if (!rawData) continue;
         
         const symbol = coin.CoinInfo.Name;
-        if (STABLECOIN_SYMBOLS.includes(symbol)) continue;
+        const coinName = coin.CoinInfo.FullName;
+        
+        // 检查是否是稳定币(通过符号)
+        const isStablecoinBySymbol = STABLECOIN_SYMBOLS.includes(symbol);
+        
+        // 检查是否是稳定币(通过名称)
+        const isStablecoinByName = STABLECOIN_NAMES.some(name => 
+          coinName.toLowerCase().includes(name.toLowerCase())
+        );
+        
+        // 如果是稳定币，跳过
+        if (isStablecoinBySymbol || isStablecoinByName) continue;
         
         const marketCap = rawData.MKTCAP;
         if (marketCap < MIN_MARKET_CAP_USD) continue;
         
         const volume24h = rawData.VOLUME24HOUR;
-        const ratio = volume24h / marketCap;
+        // 计算正确的7天交易量和比率
+        const volume7d = volume24h * 7; // 7天总交易量
+        const averageVolume = volume24h; // 使用24小时交易量作为平均值
+        const correctedRatio = averageVolume / marketCap; // 使用正确比率
         
         results.push({
           name: coin.CoinInfo.FullName,
@@ -339,8 +368,8 @@ class CryptoCompareAPI {
           price: rawData.PRICE,
           marketCap,
           volume24h,
-          volume7d: volume24h * 7, // 估算
-          ratio,
+          volume7d, // 7天总交易量
+          ratio: correctedRatio, // 使用正确比率
           rank: 0
         });
       }
@@ -432,14 +461,19 @@ class CoinMarketCapAPI {
         const volume24h = coin.quote.USD.volume_24h;
         const ratio = volume24h / marketCap;
         
+        // 计算正确的7天比率 - 使用7天平均值而非总和
+        const volume7d = volume24h * 7; // 7天总交易量
+        const averageVolume = volume24h; // 7天平均就是24小时交易量
+        const correctedRatio = averageVolume / marketCap; // 使用平均值计算比率
+        
         return {
           name: coin.name,
           symbol: coin.symbol,
           price: coin.quote.USD.price,
           marketCap,
           volume24h,
-          volume7d: volume24h * 7, // 估算
-          ratio,
+          volume7d, // 7天总交易量 
+          ratio: correctedRatio, // 使用正确的比率
           rank: 0
         };
       });
