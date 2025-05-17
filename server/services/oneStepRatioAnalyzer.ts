@@ -231,10 +231,13 @@ export async function runOneStepRatioAnalysis(): Promise<{ success: boolean, bat
     
     log(`排除稳定币后剩余${nonStablecoins.length}个币种数据`, 'ratio-analyzer');
     
-    // 计算交易量市值比率
+    // 计算交易量市值比率 - 使用日均交易量而非7天总量
     const cryptosWithRatio = nonStablecoins.map(crypto => {
       const volume7d = crypto.volume7d || crypto.volume24h * 7;
-      const ratio = volume7d / crypto.marketCap;
+      // 计算日均交易量（取7日平均或24小时量）
+      const dailyAvgVolume = crypto.volume24h || (volume7d / 7);
+      // 使用日均交易量除以市值计算正确的比率
+      const ratio = dailyAvgVolume / crypto.marketCap;
       
       return {
         ...crypto,
