@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Award, BarChart4, ChevronDown, TrendingDown, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -44,7 +45,6 @@ function formatRelativeTime(date: Date | string): string {
     return String(date);
   }
 }
-import { useToast } from '@/hooks/use-toast';
 
 // 技术分析页面组件
 export default function TechnicalAnalysis() {
