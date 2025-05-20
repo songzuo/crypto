@@ -210,5 +210,82 @@ export const volumeToMarketCapBatchesRelations = relations(volumeToMarketCapBatc
   previousBatch: one(volumeToMarketCapBatches, {
     fields: [volumeToMarketCapBatches.previousBatchId],
     references: [volumeToMarketCapBatches.id]
+  }),
+  technicalAnalyses: many(technicalAnalysisBatches)
+}));
+
+// 技术分析批次表 - 记录每次技术分析的元数据
+export const technicalAnalysisBatches = pgTable("technical_analysis_batches", {
+  id: serial("id").primaryKey(),
+  createdAt: timestamp("created_at").defaultNow(), // 批次创建时间
+  entriesCount: integer("entries_count").notNull(), // 此批次包含的记录数
+  timeframe: text("timeframe").notNull(), // 时间周期，例如 "1h", "4h", "1d"
+  description: text("description"), // 此批次的说明
+  volumeRatioBatchId: integer("volume_ratio_batch_id"), // 关联的交易量市值比率批次ID
+});
+
+export const insertTechnicalAnalysisBatchSchema = createInsertSchema(technicalAnalysisBatches).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertTechnicalAnalysisBatch = z.infer<typeof insertTechnicalAnalysisBatchSchema>;
+export type TechnicalAnalysisBatch = typeof technicalAnalysisBatches.$inferSelect;
+
+// 技术分析记录表 - 记录每个加密货币的技术分析结果
+export const technicalAnalysisEntries = pgTable("technical_analysis_entries", {
+  id: serial("id").primaryKey(),
+  batchId: integer("batch_id").notNull(), // 关联的批次ID
+  cryptocurrencyId: integer("cryptocurrency_id").notNull(), // 加密货币ID
+  name: text("name").notNull(), // 加密货币名称
+  symbol: text("symbol").notNull(), // 加密货币符号
+  // 交易量市值比率分析
+  volumeToMarketCapRatio: real("volume_to_market_cap_ratio"), // 交易量市值比率
+  volumeRatioSignal: text("volume_ratio_signal"), // 交易量比率信号: "buy", "sell", "neutral"
+  // RSI 分析
+  rsiValue: real("rsi_value"), // RSI值
+  rsiSignal: text("rsi_signal"), // RSI信号: "buy", "sell", "neutral"
+  // MACD 分析
+  macdLine: real("macd_line"), // MACD快线
+  signalLine: real("signal_line"), // MACD慢线
+  histogram: real("histogram"), // MACD柱状图
+  macdSignal: text("macd_signal"), // MACD信号: "buy", "sell", "neutral"
+  // 均线分析
+  shortEma: real("short_ema"), // 短期EMA
+  longEma: real("long_ema"), // 长期EMA
+  emaSignal: text("ema_signal"), // 均线信号: "buy", "sell", "neutral"
+  // 综合信号
+  combinedSignal: text("combined_signal").notNull(), // 综合信号: "strong_buy", "buy", "neutral", "sell", "strong_sell" 
+  signalStrength: integer("signal_strength"), // 信号强度: 1-5
+  recommendationType: text("recommendation_type"), // 推荐类型: "day_trade", "swing_trade", "position"
+  analysisTime: timestamp("analysis_time").defaultNow(), // 分析时间
+});
+
+export const insertTechnicalAnalysisEntrySchema = createInsertSchema(technicalAnalysisEntries).omit({
+  id: true,
+  analysisTime: true,
+});
+
+export type InsertTechnicalAnalysisEntry = z.infer<typeof insertTechnicalAnalysisEntrySchema>;
+export type TechnicalAnalysisEntry = typeof technicalAnalysisEntries.$inferSelect;
+
+// 技术分析批次关系
+export const technicalAnalysisBatchesRelations = relations(technicalAnalysisBatches, ({ many, one }) => ({
+  entries: many(technicalAnalysisEntries),
+  volumeRatioBatch: one(volumeToMarketCapBatches, {
+    fields: [technicalAnalysisBatches.volumeRatioBatchId],
+    references: [volumeToMarketCapBatches.id]
+  })
+}));
+
+// 技术分析记录关系
+export const technicalAnalysisEntriesRelations = relations(technicalAnalysisEntries, ({ one }) => ({
+  batch: one(technicalAnalysisBatches, {
+    fields: [technicalAnalysisEntries.batchId],
+    references: [technicalAnalysisBatches.id]
+  }),
+  cryptocurrency: one(cryptocurrencies, {
+    fields: [technicalAnalysisEntries.cryptocurrencyId],
+    references: [cryptocurrencies.id]
   })
 }));
