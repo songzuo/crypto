@@ -47,6 +47,7 @@ export default function TechnicalAnalysis() {
   const { data: batchesData, isLoading: isBatchesLoading, error: batchesError } = useQuery({
     queryKey: ['/api/technical-analysis/batches'],
     refetchOnWindowFocus: false,
+    select: (data: any) => data || { data: [], total: 0 }
   });
 
   // 获取技术分析结果
@@ -61,6 +62,7 @@ export default function TechnicalAnalysis() {
       return response.json();
     },
     refetchOnWindowFocus: false,
+    select: (data: any) => data || { batch: null, entries: [] }
   });
 
   const getSignalBadgeColor = (signal: string) => {
@@ -134,7 +136,7 @@ export default function TechnicalAnalysis() {
                 无法加载技术分析批次数据。请稍后再试。
               </AlertDescription>
             </Alert>
-          ) : batchesData?.data?.length > 0 ? (
+          ) : batchesData?.data && batchesData.data.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>

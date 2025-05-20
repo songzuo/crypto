@@ -717,7 +717,7 @@ export class MemStorage implements IStorage {
 }
 
 import { db } from "./db";
-import { eq, and, like, desc, asc } from "drizzle-orm";
+import { eq, and, like, desc, asc, sql } from "drizzle-orm";
 
 // Database Storage implementation
 export class DatabaseStorage implements IStorage {
@@ -733,13 +733,14 @@ export class DatabaseStorage implements IStorage {
         .limit(limit)
         .offset(offset);
       
-      const result = await db
+      // 获取批次总数
+      const countResult = await db
         .select({
-          count: count(technicalAnalysisBatches.id)
+          value: sql`count(${technicalAnalysisBatches.id})`
         })
         .from(technicalAnalysisBatches);
         
-      const total = result[0] ? Number(result[0].count) || 0 : 0;
+      const total = countResult[0] ? Number(countResult[0].value) || 0 : 0;
         
       return {
         data: batches,
