@@ -72,11 +72,13 @@ export default function TechnicalAnalysis() {
 
   const getSignalBadgeColor = (signal: string) => {
     switch (signal.toLowerCase()) {
+      case 'strong_buy':
       case 'buy':
         return 'bg-green-100 text-green-800 border-green-200';
+      case 'strong_sell':
       case 'sell':
         return 'bg-red-100 text-red-800 border-red-200';
-      case 'hold':
+      case 'neutral':
         return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       default:
         return 'bg-gray-100 text-gray-800 border-gray-200';
@@ -85,11 +87,13 @@ export default function TechnicalAnalysis() {
 
   const getSignalIcon = (signal: string) => {
     switch (signal.toLowerCase()) {
+      case 'strong_buy':
       case 'buy':
         return <TrendingUpIcon className="h-4 w-4 text-green-600" />;
+      case 'strong_sell':
       case 'sell':
         return <TrendingDownIcon className="h-4 w-4 text-red-600" />;
-      case 'hold':
+      case 'neutral':
         return <InfoIcon className="h-4 w-4 text-yellow-600" />;
       default:
         return <AlertCircleIcon className="h-4 w-4 text-gray-600" />;
@@ -202,9 +206,9 @@ export default function TechnicalAnalysis() {
           >
             <TabsList>
               <TabsTrigger value="all">全部信号</TabsTrigger>
-              <TabsTrigger value="buy">买入信号</TabsTrigger>
-              <TabsTrigger value="sell">卖出信号</TabsTrigger>
-              <TabsTrigger value="hold">持有信号</TabsTrigger>
+              <TabsTrigger value="any_buy">买入信号</TabsTrigger>
+              <TabsTrigger value="any_sell">卖出信号</TabsTrigger>
+              <TabsTrigger value="neutral">持有信号</TabsTrigger>
             </TabsList>
           </Tabs>
         </CardHeader>
@@ -243,26 +247,35 @@ export default function TechnicalAnalysis() {
                 {resultsData.entries.map((entry: TechnicalAnalysisEntry) => (
                   <TableRow key={entry.id}>
                     <TableCell className="font-medium">
-                      {entry.cryptocurrencySymbol} ({entry.cryptocurrencyName})
-                    </TableCell>
-                    <TableCell>${entry.price.toLocaleString()}</TableCell>
-                    <TableCell>{(entry.volumeMarketCapRatio * 100).toFixed(2)}%</TableCell>
-                    <TableCell>{entry.rsiValue.toFixed(2)}</TableCell>
-                    <TableCell>
-                      {entry.macdValue.toFixed(4)} / {entry.macdSignal.toFixed(4)}
+                      {entry.symbol} ({entry.name})
                     </TableCell>
                     <TableCell>
-                      {entry.emaShort.toFixed(2)} / {entry.emaLong.toFixed(2)}
+                      {/* Price data not available in the current schema */}
+                      -
+                    </TableCell>
+                    <TableCell>
+                      {entry.volumeToMarketCapRatio ? (entry.volumeToMarketCapRatio * 100).toFixed(2) + '%' : '-'}
+                    </TableCell>
+                    <TableCell>
+                      {entry.rsiValue ? entry.rsiValue.toFixed(2) : '-'}
+                    </TableCell>
+                    <TableCell>
+                      {entry.macdLine ? entry.macdLine.toFixed(4) : '-'} / {entry.signalLine ? entry.signalLine.toFixed(4) : '-'}
+                    </TableCell>
+                    <TableCell>
+                      {entry.shortEma ? entry.shortEma.toFixed(2) : '-'} / {entry.longEma ? entry.longEma.toFixed(2) : '-'}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        {getSignalIcon(entry.signal)}
-                        <Badge className={getSignalBadgeColor(entry.signal)}>
-                          {entry.signal.toUpperCase()}
+                        {getSignalIcon(entry.combinedSignal)}
+                        <Badge className={getSignalBadgeColor(entry.combinedSignal)}>
+                          {entry.combinedSignal.toUpperCase()}
                         </Badge>
                       </div>
                     </TableCell>
-                    <TableCell>{(entry.confidence * 100).toFixed(0)}%</TableCell>
+                    <TableCell>
+                      {entry.signalStrength ? `${entry.signalStrength * 20}%` : '-'}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
