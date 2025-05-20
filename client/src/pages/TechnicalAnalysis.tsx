@@ -370,7 +370,7 @@ export default function TechnicalAnalysis() {
                   <SelectItem value="any_sell">所有卖出信号</SelectItem>
                   <SelectItem value="strong_sell">强烈卖出信号</SelectItem>
                   <SelectItem value="sell">卖出信号</SelectItem>
-                  <SelectItem value="">所有信号</SelectItem>
+                  <SelectItem value="all">所有信号</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -432,7 +432,7 @@ export default function TechnicalAnalysis() {
                       </SelectItem>
                     ))
                   ) : (
-                    <SelectItem value="" disabled>无可用批次数据</SelectItem>
+                    <SelectItem value="no-data" disabled>无可用批次数据</SelectItem>
                   )}
                 </SelectContent>
               </Select>

@@ -733,15 +733,17 @@ export class DatabaseStorage implements IStorage {
         .limit(limit)
         .offset(offset);
       
-      const [{ count }] = await db
+      const result = await db
         .select({
           count: count(technicalAnalysisBatches.id)
         })
         .from(technicalAnalysisBatches);
         
+      const total = result[0] ? Number(result[0].count) || 0 : 0;
+        
       return {
         data: batches,
-        total: Number(count) || 0
+        total
       };
     } catch (error) {
       console.error("获取技术分析批次列表时出错:", error);
