@@ -444,14 +444,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // 手动触发技术分析
-  // 技术分析现在通过scheduler每24小时自动运行，不再需要手动触发
+  // 除了自动24小时执行外，也支持手动触发，特别是首次使用时
   app.post("/api/technical-analysis/analyze", async (req, res) => {
     try {
-      res.status(403).json({ 
-        success: false, 
-        message: '技术分析现在每24小时自动运行，不再支持手动触发'
-      });
+      console.log('手动触发技术分析...');
+      const result = await manualRunTechnicalAnalysis();
+      
+      if (result.success) {
+        console.log(`技术分析成功，创建批次 #${result.batchId}，处理了${result.entriesCount}个加密货币`);
+        res.json({ 
+          success: true, 
+          message: `技术分析完成，处理了${result.entriesCount}个加密货币`,
+          batchId: result.batchId,
+          entriesCount: result.entriesCount
+        });
+      } else {
+        console.error('技术分析执行失败:', result.error);
+        res.status(500).json({ 
+          success: false, 
+          message: '技术分析执行失败',
+          error: result.error
+        });
+      }
     } catch (error) {
+      console.error('手动触发技术分析出错:', error);
       res.status(500).json({ error: (error as Error).message });
     }
   });

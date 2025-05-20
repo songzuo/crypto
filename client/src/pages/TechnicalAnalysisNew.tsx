@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { InfoIcon, TrendingUpIcon, TrendingDownIcon, AlertCircleIcon } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { InfoIcon, TrendingUpIcon, TrendingDownIcon, AlertCircleIcon, RefreshCw } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 interface TechnicalAnalysisBatch {
   id: number;
