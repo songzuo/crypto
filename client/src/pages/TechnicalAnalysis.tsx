@@ -377,15 +377,7 @@ export default function TechnicalAnalysis() {
           </div>
         </CardContent>
         <CardFooter className="pt-0">
-          <Button 
-            onClick={() => runAnalysisMutation.mutate()}
-            disabled={runAnalysisMutation.isPending}
-            variant="outline"
-            className="ml-auto"
-          >
-            <RefreshCw className={`w-4 h-4 mr-2 ${runAnalysisMutation.isPending ? 'animate-spin' : ''}`} />
-            运行新的分析
-          </Button>
+          <p className="text-sm text-gray-500 ml-auto">每24小时自动更新一次</p>
         </CardFooter>
       </Card>
     );
@@ -397,13 +389,9 @@ export default function TechnicalAnalysis() {
         <div>
           <h1 className="text-3xl font-bold">技术分析</h1>
           <p className="text-gray-500 mt-1">
-            基于交易量市值比率、RSI、MACD和EMA的综合技术分析
+            基于交易量市值比率、RSI、MACD和EMA的综合技术分析（每24小时自动更新）
           </p>
         </div>
-        <Button onClick={() => runAnalysisMutation.mutate()} disabled={runAnalysisMutation.isPending}>
-          <RefreshCw className={`w-4 h-4 mr-2 ${runAnalysisMutation.isPending ? 'animate-spin' : ''}`} />
-          运行分析
-        </Button>
       </div>
 
       <Tabs value={selectedTab} onValueChange={setSelectedTab} className="w-full">
