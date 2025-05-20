@@ -136,84 +136,381 @@ function calculateMACD(prices: number[], fastPeriod: number = MACD_FAST_PERIOD, 
   };
 }
 
-// 从CryptoCompare获取历史价格数据
+// 从多个数据源获取历史价格数据
 async function fetchHistoricalPrices(symbol: string, timeframe: string = '1h', limit: number = 100): Promise<PriceData[]> {
-  try {
-    // 尝试从CryptoCompare获取OHLCV数据
-    const response = await axios.get(`https://min-api.cryptocompare.com/data/v2/histo${timeframe.endsWith('d') ? 'day' : timeframe}`, {
-      params: {
-        fsym: symbol,
-        tsym: 'USD',
-        limit, // 获取最近的N个数据点
-        api_key: process.env.CRYPTOCOMPARE_API_KEY || ''
-      }
-    });
-
-    if (response.data && response.data.Response === 'Success' && response.data.Data && response.data.Data.Data) {
-      return response.data.Data.Data.map((d: any) => ({
-        timestamp: d.time * 1000, // 转换为毫秒
-        close: d.close,
-        high: d.high,
-        low: d.low,
-        open: d.open,
-        volume: d.volumefrom
-      }));
-    }
-    
-    throw new Error('Invalid data format from CryptoCompare');
-  } catch (error) {
-    console.error(`获取${symbol}历史价格失败:`, error);
-    // 尝试备用API
+  // 添加随机延迟，防止所有请求同时发出
+  const addRandomDelay = async () => {
+    const delay = Math.floor(Math.random() * 500) + 100; // 100-600ms的随机延迟
+    return new Promise(resolve => setTimeout(resolve, delay));
+  };
+  
+  // 设置重试参数
+  const maxRetries = 3;
+  const retryDelay = 1000; // 初始重试延迟1秒
+  
+  // 从CryptoCompare获取数据的函数
+  const fetchFromCryptoCompare = async (retryCount = 0): Promise<PriceData[]> => {
     try {
-      // 尝试从CoinGecko获取价格历史
+      await addRandomDelay();
+      console.log(`尝试从CryptoCompare获取${symbol}的价格数据 (尝试 ${retryCount + 1}/${maxRetries})`);
+      
+      const response = await axios.get(`https://min-api.cryptocompare.com/data/v2/histo${timeframe.endsWith('d') ? 'day' : timeframe}`, {
+        params: {
+          fsym: symbol,
+          tsym: 'USD',
+          limit, // 获取最近的N个数据点
+          api_key: process.env.CRYPTOCOMPARE_API_KEY || ''
+        },
+        timeout: 5000 // 5秒超时
+      });
+
+      if (response.data && response.data.Response === 'Success' && response.data.Data && response.data.Data.Data) {
+        console.log(`成功从CryptoCompare获取${symbol}的价格数据`);
+        return response.data.Data.Data.map((d: any) => ({
+          timestamp: d.time * 1000, // 转换为毫秒
+          close: d.close,
+          high: d.high,
+          low: d.low,
+          open: d.open,
+          volume: d.volumefrom
+        }));
+      }
+      
+      throw new Error('Invalid data format from CryptoCompare');
+    } catch (error) {
+      if (retryCount < maxRetries - 1) {
+        const nextDelay = retryDelay * Math.pow(2, retryCount); // 指数退避
+        console.log(`CryptoCompare获取失败，${nextDelay}ms后重试...`);
+        await new Promise(resolve => setTimeout(resolve, nextDelay));
+        return fetchFromCryptoCompare(retryCount + 1);
+      }
+      console.error(`CryptoCompare API获取${symbol}价格历史失败:`, error);
+      throw error;
+    }
+  };
+  
+  // 从Alpha Vantage获取数据的函数
+  const fetchFromAlphaVantage = async (retryCount = 0): Promise<PriceData[]> => {
+    try {
+      await addRandomDelay();
+      console.log(`尝试从Alpha Vantage获取${symbol}的价格数据 (尝试 ${retryCount + 1}/${maxRetries})`);
+      
+      // 根据时间框架确定函数和间隔
+      const interval = timeframe === '1d' ? 'DIGITAL_CURRENCY_DAILY' : 
+                      timeframe === '4h' ? 'DIGITAL_CURRENCY_INTRADAY' : 'DIGITAL_CURRENCY_INTRADAY';
+      const outputsize = 'full'; // 或 'compact'
+      
+      const response = await axios.get('https://www.alphavantage.co/query', {
+        params: {
+          function: interval,
+          symbol,
+          market: 'USD',
+          apikey: process.env.ALPHA_VANTAGE_API_KEY,
+          outputsize,
+          interval: timeframe === '1d' ? 'daily' : '60min' // Alpha Vantage支持的最小间隔是60分钟
+        },
+        timeout: 5000
+      });
+      
+      // 解析Alpha Vantage响应
+      if (response.data) {
+        const timeSeriesKey = timeframe === '1d' ? 'Time Series (Digital Currency Daily)' : 
+                              'Time Series (Digital Currency Intraday)';
+        
+        const timeSeries = response.data[timeSeriesKey];
+        if (!timeSeries) {
+          throw new Error('No time series data found in Alpha Vantage response');
+        }
+        
+        // 将对象转换为数组并按时间排序
+        const result: PriceData[] = [];
+        for (const [dateStr, values] of Object.entries(timeSeries)) {
+          // Alpha Vantage的时间戳格式不同，需要转换
+          const timestamp = new Date(dateStr).getTime();
+          result.push({
+            timestamp,
+            close: parseFloat(values['4a. close (USD)']),
+            high: parseFloat(values['2a. high (USD)']),
+            low: parseFloat(values['3a. low (USD)']),
+            open: parseFloat(values['1a. open (USD)']),
+            volume: parseFloat(values['5. volume'])
+          });
+        }
+        
+        // 按时间戳降序排序
+        result.sort((a, b) => b.timestamp - a.timestamp);
+        
+        // 只取前limit个
+        const limitedResult = result.slice(0, limit);
+        console.log(`成功从Alpha Vantage获取${symbol}的价格数据，找到${limitedResult.length}个数据点`);
+        return limitedResult;
+      }
+      
+      throw new Error('Invalid data format from Alpha Vantage');
+    } catch (error) {
+      if (retryCount < maxRetries - 1) {
+        const nextDelay = retryDelay * Math.pow(2, retryCount);
+        console.log(`Alpha Vantage获取失败，${nextDelay}ms后重试...`);
+        await new Promise(resolve => setTimeout(resolve, nextDelay));
+        return fetchFromAlphaVantage(retryCount + 1);
+      }
+      console.error(`Alpha Vantage API获取${symbol}价格历史失败:`, error);
+      throw error;
+    }
+  };
+  
+  // 从Tiingo获取数据
+  const fetchFromTiingo = async (retryCount = 0): Promise<PriceData[]> => {
+    try {
+      await addRandomDelay();
+      console.log(`尝试从Tiingo获取${symbol}的价格数据 (尝试 ${retryCount + 1}/${maxRetries})`);
+      
+      // 计算起始日期（根据时间框架和限制）
+      const endDate = new Date();
+      let startDate = new Date();
+      if (timeframe === '1d') {
+        startDate.setDate(startDate.getDate() - limit);
+      } else if (timeframe === '4h') {
+        startDate.setHours(startDate.getHours() - (limit * 4));
+      } else {
+        startDate.setHours(startDate.getHours() - limit);
+      }
+      
+      // 格式化日期为ISO字符串
+      const startDateStr = startDate.toISOString().split('T')[0];
+      const endDateStr = endDate.toISOString().split('T')[0];
+      
+      // Tiingo API使用ticker格式，可能需要转换symbol
+      // 例如，转换BTC到bitcoin等
+      const ticker = symbol.toLowerCase();
+      
+      const response = await axios.get(`https://api.tiingo.com/tiingo/crypto/prices`, {
+        params: {
+          tickers: ticker,
+          startDate: startDateStr,
+          endDate: endDateStr,
+          resampleFreq: timeframe === '1d' ? '1day' : 
+                        timeframe === '4h' ? '4hour' : '1hour',
+          token: process.env.TIINGO_API_KEY
+        },
+        timeout: 5000
+      });
+      
+      if (response.data && Array.isArray(response.data) && response.data.length > 0) {
+        // Tiingo返回的是数组，每个项目包含priceData
+        const priceData = response.data[0].priceData;
+        if (priceData && priceData.length > 0) {
+          const result = priceData.map((item: any) => ({
+            timestamp: new Date(item.date).getTime(),
+            close: item.close,
+            high: item.high,
+            low: item.low,
+            open: item.open,
+            volume: item.volume || 0
+          }));
+          
+          console.log(`成功从Tiingo获取${symbol}的价格数据，找到${result.length}个数据点`);
+          return result.slice(0, limit);
+        }
+      }
+      
+      throw new Error('Invalid data format from Tiingo');
+    } catch (error) {
+      if (retryCount < maxRetries - 1) {
+        const nextDelay = retryDelay * Math.pow(2, retryCount);
+        console.log(`Tiingo获取失败，${nextDelay}ms后重试...`);
+        await new Promise(resolve => setTimeout(resolve, nextDelay));
+        return fetchFromTiingo(retryCount + 1);
+      }
+      console.error(`Tiingo API获取${symbol}价格历史失败:`, error);
+      throw error;
+    }
+  };
+  
+  // 从Finnhub获取数据
+  const fetchFromFinnhub = async (retryCount = 0): Promise<PriceData[]> => {
+    try {
+      await addRandomDelay();
+      console.log(`尝试从Finnhub获取${symbol}的价格数据 (尝试 ${retryCount + 1}/${maxRetries})`);
+      
+      // 计算起始和结束时间（Unix时间戳，秒）
+      const endTime = Math.floor(Date.now() / 1000);
+      let startTime;
+      
+      if (timeframe === '1d') {
+        startTime = endTime - (limit * 24 * 60 * 60);
+      } else if (timeframe === '4h') {
+        startTime = endTime - (limit * 4 * 60 * 60);
+      } else {
+        startTime = endTime - (limit * 60 * 60);
+      }
+      
+      // Finnhub API使用的resolution参数
+      const resolution = timeframe === '1d' ? 'D' : 
+                        timeframe === '4h' ? '240' : '60';
+      
+      // 对于加密货币，Finnhub使用特殊格式的符号，如BINANCE:BTCUSDT
+      // 这里假设输入的symbol已经是币种名称，需要添加交易所前缀
+      const ticker = `BINANCE:${symbol.toUpperCase()}USDT`;
+      
+      const response = await axios.get('https://finnhub.io/api/v1/crypto/candle', {
+        params: {
+          symbol: ticker,
+          resolution,
+          from: startTime,
+          to: endTime,
+          token: process.env.FINNHUB_API_KEY
+        },
+        timeout: 5000
+      });
+      
+      if (response.data && response.data.s === 'ok' && Array.isArray(response.data.t)) {
+        // Finnhub返回的是分开的数组
+        const { t, o, h, l, c, v } = response.data;
+        const result: PriceData[] = [];
+        
+        for (let i = 0; i < t.length; i++) {
+          result.push({
+            timestamp: t[i] * 1000, // 转换为毫秒
+            open: o[i],
+            high: h[i],
+            low: l[i],
+            close: c[i],
+            volume: v[i]
+          });
+        }
+        
+        console.log(`成功从Finnhub获取${symbol}的价格数据，找到${result.length}个数据点`);
+        return result;
+      }
+      
+      throw new Error('Invalid data format from Finnhub');
+    } catch (error) {
+      if (retryCount < maxRetries - 1) {
+        const nextDelay = retryDelay * Math.pow(2, retryCount);
+        console.log(`Finnhub获取失败，${nextDelay}ms后重试...`);
+        await new Promise(resolve => setTimeout(resolve, nextDelay));
+        return fetchFromFinnhub(retryCount + 1);
+      }
+      console.error(`Finnhub API获取${symbol}价格历史失败:`, error);
+      throw error;
+    }
+  };
+  
+  // 从CoinGecko获取数据
+  const fetchFromCoinGecko = async (retryCount = 0): Promise<PriceData[]> => {
+    try {
+      await addRandomDelay();
+      console.log(`尝试从CoinGecko获取${symbol}的价格数据 (尝试 ${retryCount + 1}/${maxRetries})`);
+      
       const days = timeframe === '1d' ? 100 : timeframe === '4h' ? 25 : 5;
       const response = await axios.get(`https://api.coingecko.com/api/v3/coins/${symbol.toLowerCase()}/market_chart`, {
         params: {
           vs_currency: 'usd',
           days,
           interval: timeframe === '1d' ? 'daily' : null
-        }
+        },
+        timeout: 5000
       });
 
       if (response.data && response.data.prices) {
-        return response.data.prices.map((p: [number, number]) => ({
+        const result = response.data.prices.map((p: [number, number]) => ({
           timestamp: p[0], // 毫秒时间戳
           close: p[1]
         }));
+        console.log(`成功从CoinGecko获取${symbol}的价格数据，找到${result.length}个数据点`);
+        return result;
       }
       
       throw new Error('Invalid data format from CoinGecko');
-    } catch (geckoError) {
-      console.error(`CoinGecko备用API失败:`, geckoError);
-      // 最后尝试CoinCap API
-      try {
-        const interval = timeframe === '1d' ? 'd1' : timeframe === '4h' ? 'h4' : 'h1';
-        const response = await axios.get(`https://api.coincap.io/v2/assets/${symbol.toLowerCase()}/history`, {
-          params: {
-            interval,
-            start: Date.now() - (limit * (
-              timeframe === '1d' ? 86400000 : 
-              timeframe === '4h' ? 14400000 : 
-              3600000
-            )),
-            end: Date.now()
-          }
-        });
+    } catch (error) {
+      if (retryCount < maxRetries - 1) {
+        const nextDelay = retryDelay * Math.pow(2, retryCount);
+        console.log(`CoinGecko获取失败，${nextDelay}ms后重试...`);
+        await new Promise(resolve => setTimeout(resolve, nextDelay));
+        return fetchFromCoinGecko(retryCount + 1);
+      }
+      console.error(`CoinGecko API获取${symbol}价格历史失败:`, error);
+      throw error;
+    }
+  };
+  
+  // 从CoinCap获取数据
+  const fetchFromCoinCap = async (retryCount = 0): Promise<PriceData[]> => {
+    try {
+      await addRandomDelay();
+      console.log(`尝试从CoinCap获取${symbol}的价格数据 (尝试 ${retryCount + 1}/${maxRetries})`);
+      
+      const interval = timeframe === '1d' ? 'd1' : timeframe === '4h' ? 'h4' : 'h1';
+      const response = await axios.get(`https://api.coincap.io/v2/assets/${symbol.toLowerCase()}/history`, {
+        params: {
+          interval,
+          start: Date.now() - (limit * (
+            timeframe === '1d' ? 86400000 : 
+            timeframe === '4h' ? 14400000 : 
+            3600000
+          )),
+          end: Date.now()
+        },
+        timeout: 5000
+      });
 
-        if (response.data && response.data.data) {
-          return response.data.data.map((d: any) => ({
-            timestamp: new Date(d.time).getTime(),
-            close: parseFloat(d.priceUsd)
-          }));
+      if (response.data && response.data.data) {
+        const result = response.data.data.map((d: any) => ({
+          timestamp: new Date(d.time).getTime(),
+          close: parseFloat(d.priceUsd)
+        }));
+        console.log(`成功从CoinCap获取${symbol}的价格数据，找到${result.length}个数据点`);
+        return result;
+      }
+      
+      throw new Error('Invalid data format from CoinCap');
+    } catch (error) {
+      if (retryCount < maxRetries - 1) {
+        const nextDelay = retryDelay * Math.pow(2, retryCount);
+        console.log(`CoinCap获取失败，${nextDelay}ms后重试...`);
+        await new Promise(resolve => setTimeout(resolve, nextDelay));
+        return fetchFromCoinCap(retryCount + 1);
+      }
+      console.error(`CoinCap API获取${symbol}价格历史失败:`, error);
+      throw error;
+    }
+  };
+  
+  // 主函数：依次尝试所有数据源
+  async function tryAllDataSources(): Promise<PriceData[]> {
+    const dataSources = [
+      { name: 'Alpha Vantage', fetchFn: fetchFromAlphaVantage },
+      { name: 'Tiingo', fetchFn: fetchFromTiingo },
+      { name: 'Finnhub', fetchFn: fetchFromFinnhub },
+      { name: 'CryptoCompare', fetchFn: fetchFromCryptoCompare },
+      { name: 'CoinGecko', fetchFn: fetchFromCoinGecko },
+      { name: 'CoinCap', fetchFn: fetchFromCoinCap }
+    ];
+    
+    // 依次尝试每个数据源
+    for (const source of dataSources) {
+      try {
+        console.log(`尝试从${source.name}获取${symbol}的价格数据...`);
+        const data = await source.fetchFn();
+        if (data && data.length > 0) {
+          console.log(`成功从${source.name}获取${symbol}的价格数据，共${data.length}个数据点`);
+          return data;
         }
-        
-        throw new Error('Invalid data format from CoinCap');
-      } catch (coincapError) {
-        console.error(`所有API获取价格历史失败:`, coincapError);
-        return []; // 所有API都失败，返回空数组
+        console.log(`从${source.name}获取的数据为空，尝试下一个数据源`);
+      } catch (error) {
+        console.error(`从${source.name}获取${symbol}价格数据失败:`, error);
+        // 继续尝试下一个数据源
       }
     }
+    
+    // 如果所有数据源都失败，返回空数组
+    console.error(`所有数据源获取${symbol}价格数据都失败`);
+    return [];
   }
+  
+  // 执行主函数
+  return tryAllDataSources();
 }
 
 // 计算所有技术指标
@@ -471,55 +768,98 @@ export async function runTechnicalAnalysis(timeframe: string = '1h'): Promise<{ 
 
     // 分析每个加密货币并存储结果
     const entries = [];
-    const limit = 30; // 限制分析的币种数量，以避免API限制
+    const limit = 100; // 增加分析币种的数量以获得更全面的结果
     
-    for (let i = 0; i < Math.min(ratios.length, limit); i++) {
-      const ratio = ratios[i];
+    // 添加对已处理加密货币的计数
+    let successCount = 0;
+    let errorCount = 0;
+    
+    console.log(`5:${new Date().getMinutes()}:${new Date().getSeconds()} AM [technical-analysis] 开始处理最多 ${limit} 个加密货币`);
+    
+    // 为数据收集添加并发限制，避免一次性发送太多请求
+    const chunkSize = 5; // 每批处理的币种数量
+    for (let i = 0; i < Math.min(ratios.length, limit); i += chunkSize) {
+      const currentChunk = ratios.slice(i, i + chunkSize);
       
-      // 获取加密货币详情
-      const [crypto] = await db.select()
-        .from(cryptocurrencies)
-        .where(eq(cryptocurrencies.id, ratio.cryptocurrencyId));
-
-      if (!crypto) continue;
-
-      console.log(`5:${new Date().getMinutes()}:${new Date().getSeconds()} AM [technical-analysis] 分析 ${crypto.symbol} (${crypto.name})`);
-
-      // 计算技术指标
-      const technicalData = await calculateTechnicalIndicators(crypto.symbol, timeframe);
+      // 使用Promise.all并发处理一小批加密货币，但仍保持批次较小以避免API限制
+      const chunkPromises = currentChunk.map(async (ratio) => {
+        try {
+          // 获取加密货币详情
+          const [crypto] = await db.select()
+            .from(cryptocurrencies)
+            .where(eq(cryptocurrencies.id, ratio.cryptocurrencyId));
+    
+          if (!crypto) return null;
+    
+          console.log(`5:${new Date().getMinutes()}:${new Date().getSeconds()} AM [technical-analysis] 分析 ${crypto.symbol} (${crypto.name})`);
+    
+          // 计算技术指标
+          const technicalData = await calculateTechnicalIndicators(crypto.symbol, timeframe);
+          
+          // 检查是否成功获取了技术指标数据
+          if (!technicalData || (
+              !technicalData.rsi && 
+              (!technicalData.macd || !technicalData.macd.macdLine) && 
+              !technicalData.shortEma
+          )) {
+            console.log(`技术分析: ${crypto.symbol} 没有足够的技术指标数据，跳过`);
+            errorCount++;
+            return null;
+          }
+          
+          // 获取综合信号
+          const signalData = getCombinedSignal(ratio.volumeToMarketCapRatio, technicalData);
+          
+          // 创建新的技术分析记录
+          const entry = {
+            batchId: newBatch.id,
+            cryptocurrencyId: crypto.id,
+            name: crypto.name,
+            symbol: crypto.symbol,
+            // 交易量市值比率相关
+            volumeToMarketCapRatio: ratio.volumeToMarketCapRatio,
+            volumeRatioSignal: signalData.volumeRatioSignal,
+            // RSI相关
+            rsiValue: technicalData.rsi,
+            rsiSignal: signalData.rsiSignal,
+            // MACD相关
+            macdLine: technicalData.macd?.macdLine,
+            signalLine: technicalData.macd?.signalLine,
+            histogram: technicalData.macd?.histogram,
+            macdSignal: signalData.macdSignal,
+            // EMA相关
+            shortEma: technicalData.shortEma,
+            longEma: technicalData.longEma,
+            emaSignal: signalData.emaSignal,
+            // 综合分析
+            combinedSignal: signalData.combinedSignal,
+            signalStrength: signalData.signalStrength,
+            recommendationType: signalData.recommendationType
+          };
+          
+          successCount++;
+          return entry;
+        } catch (error) {
+          console.error(`技术分析处理 ${ratio.cryptocurrencyId} 时出错:`, error);
+          errorCount++;
+          return null;
+        }
+      });
       
-      // 获取综合信号
-      const signalData = getCombinedSignal(ratio.volumeToMarketCapRatio, technicalData);
+      // 等待当前批次处理完成
+      const chunkResults = await Promise.all(chunkPromises);
       
-      // 创建新的技术分析记录
-      const entry = {
-        batchId: newBatch.id,
-        cryptocurrencyId: crypto.id,
-        name: crypto.name,
-        symbol: crypto.symbol,
-        // 交易量市值比率相关
-        volumeToMarketCapRatio: ratio.volumeToMarketCapRatio,
-        volumeRatioSignal: signalData.volumeRatioSignal,
-        // RSI相关
-        rsiValue: technicalData.rsi,
-        rsiSignal: signalData.rsiSignal,
-        // MACD相关
-        macdLine: technicalData.macd?.macdLine,
-        signalLine: technicalData.macd?.signalLine,
-        histogram: technicalData.macd?.histogram,
-        macdSignal: signalData.macdSignal,
-        // EMA相关
-        shortEma: technicalData.shortEma,
-        longEma: technicalData.longEma,
-        emaSignal: signalData.emaSignal,
-        // 综合分析
-        combinedSignal: signalData.combinedSignal,
-        signalStrength: signalData.signalStrength,
-        recommendationType: signalData.recommendationType
-      };
+      // 过滤掉null结果并添加到结果集
+      entries.push(...chunkResults.filter(entry => entry !== null));
       
-      entries.push(entry);
+      // 在批次之间添加短暂延迟以减轻API压力
+      if (i + chunkSize < Math.min(ratios.length, limit)) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
     }
+    
+    console.log(`5:${new Date().getMinutes()}:${new Date().getSeconds()} AM [technical-analysis] 处理完成。成功: ${successCount}, 失败: ${errorCount}, 总有效条目: ${entries.length}`);
+    
     
     // 批量插入分析结果
     if (entries.length > 0) {
