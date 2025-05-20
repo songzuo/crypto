@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Award, BarChart4, ChevronDown, TrendingDown, TrendingUp } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -157,10 +158,9 @@ export default function TechnicalAnalysis() {
           <AlertTriangle className="w-12 h-12 text-yellow-500 mb-4" />
           <h3 className="text-xl font-semibold mb-2">无技术分析数据</h3>
           <p className="text-gray-500 mb-4">当前没有符合选定条件的技术分析结果</p>
-          <Button onClick={() => runAnalysisMutation.mutate()} disabled={runAnalysisMutation.isPending}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${runAnalysisMutation.isPending ? 'animate-spin' : ''}`} />
-            运行技术分析
-          </Button>
+          <p className="text-sm text-gray-500">
+            技术分析每24小时自动更新一次
+          </p>
         </div>
       );
     }

@@ -497,21 +497,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // 手动触发技术分析
+  // 技术分析现在通过scheduler每24小时自动运行，不再需要手动触发
   app.post("/api/technical-analysis/analyze", async (req, res) => {
     try {
-      console.log('手动触发技术分析...');
-      
-      // 执行分析
-      const result = await manualRunTechnicalAnalysis();
-      
-      res.json({ 
-        success: true, 
-        message: '技术分析已成功执行', 
-        batchId: result.batchId,
-        entriesCount: result.entriesCount
+      res.status(403).json({ 
+        success: false, 
+        message: '技术分析现在每24小时自动运行，不再支持手动触发'
       });
     } catch (error) {
-      console.error('手动触发技术分析失败:', error);
       res.status(500).json({ error: (error as Error).message });
     }
   });
