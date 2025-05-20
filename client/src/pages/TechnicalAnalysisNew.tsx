@@ -45,7 +45,7 @@ interface AnalysisResult {
   entries: TechnicalAnalysisEntry[];
 }
 
-export default function TechnicalAnalysis() {
+export default function TechnicalAnalysisNew() {
   const [selectedSignal, setSelectedSignal] = useState<string>('all');
 
   // 获取技术分析批次
