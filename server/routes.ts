@@ -471,6 +471,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // 获取技术分析结果（用于前端显示）
+  app.get("/api/technical-analysis/results", async (req, res) => {
+    try {
+      const signal = req.query.signal as string || '';
+      const result = await storage.getTechnicalAnalysisResults(signal);
+      res.json(result);
+    } catch (error) {
+      console.error('获取技术分析结果出错:', error);
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
   // 获取特定技术分析批次结果
   app.get("/api/technical-analysis/batches/:id", async (req, res) => {
     try {
