@@ -269,7 +269,10 @@ export default function TechnicalAnalysisNew() {
                       <div className="flex items-center gap-1">
                         {getSignalIcon(entry.combinedSignal)}
                         <Badge className={getSignalBadgeColor(entry.combinedSignal)}>
-                          {entry.combinedSignal.toUpperCase()}
+                          {entry.combinedSignal === 'strong_buy' ? '强烈买入' : 
+                        entry.combinedSignal === 'buy' ? '买入' : 
+                        entry.combinedSignal === 'strong_sell' ? '强烈卖出' : 
+                        entry.combinedSignal === 'sell' ? '卖出' : '持有'}
                         </Badge>
                       </div>
                     </TableCell>
@@ -285,8 +288,9 @@ export default function TechnicalAnalysisNew() {
               <InfoIcon className="h-4 w-4" />
               <AlertTitle>暂无分析结果</AlertTitle>
               <AlertDescription>
-                当前没有符合条件的技术分析信号。技术分析使用严格的条件组合（交易量市值比率 + RSI + MACD + EMA指标），
-                可能当前市场状况没有符合我们设定的买入/卖出信号组合的加密货币。
+                当前没有符合条件的技术分析信号。系统需要从多个数据源收集价格数据来计算技术指标（RSI、MACD、EMA），
+                目前由于API限流或连接问题，无法获取足够的历史价格数据来生成有效的技术分析结果。
+                系统会持续尝试获取数据并在下一个批次中生成分析结果。
               </AlertDescription>
             </Alert>
           )}
