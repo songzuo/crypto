@@ -48,7 +48,7 @@ function formatRelativeTime(date: Date | string): string {
 import { useToast } from '@/hooks/use-toast';
 
 // 技术分析页面组件
-export default function TechnicalAnalysisPage() {
+export default function TechnicalAnalysis() {
   const [selectedTab, setSelectedTab] = useState('latest');
   const [selectedSignal, setSelectedSignal] = useState('any_buy');
   const [selectedBatchId, setSelectedBatchId] = useState<number | null>(null);
