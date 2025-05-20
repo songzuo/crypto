@@ -120,6 +120,19 @@ export async function setupScheduler() {
     console.error('初始基本交易量市值比率分析失败:', error);
   }
   
+  // 立即执行技术分析
+  console.log('启动时执行初始技术分析...');
+  try {
+    const analysisResult = await runTechnicalAnalysis();
+    if (analysisResult && analysisResult.batchId) {
+      console.log(`初始技术分析完成，已创建批次#${analysisResult.batchId}，共${analysisResult.entriesCount}个信号`);
+    } else {
+      console.error('初始技术分析失败: 无法创建分析批次');
+    }
+  } catch (error) {
+    console.error('初始技术分析失败:', error);
+  }
+  
   // 立即执行异步交易量市值比率分析
   console.log('启动时执行异步交易量市值比率分析...');
   try {
@@ -362,6 +375,26 @@ export async function setupScheduler() {
       }
     } catch (error) {
       console.error('加密货币新闻爬取任务出错:', error);
+    }
+  });
+  
+  // 技术分析任务 - 每天凌晨2点运行一次
+  // 结合交易量市值比率、RSI、MACD和移动平均线进行综合分析
+  cron.schedule('0 2 * * *', async () => {
+    console.log('运行计划任务: 每日技术分析');
+    
+    try {
+      // 执行技术分析
+      console.log('开始执行每日技术分析...');
+      const analysisResult = await runTechnicalAnalysis();
+      
+      if (analysisResult && analysisResult.batchId) {
+        console.log(`每日技术分析完成，已创建批次#${analysisResult.batchId}，发现${analysisResult.entriesCount}个交易信号`);
+      } else {
+        console.error('每日技术分析失败: 无法创建分析批次');
+      }
+    } catch (error) {
+      console.error('每日技术分析任务出错:', error);
     }
   });
   
