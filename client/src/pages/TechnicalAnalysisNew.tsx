@@ -49,6 +49,10 @@ interface AnalysisResult {
 
 export default function TechnicalAnalysisNew() {
   const [selectedSignal, setSelectedSignal] = useState<string>('all');
+  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+  const [isFirstVisit, setIsFirstVisit] = useState<boolean>(true);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   // 获取技术分析批次
   const { data: batchesData, isLoading: isBatchesLoading, error: batchesError } = useQuery({
@@ -71,6 +75,70 @@ export default function TechnicalAnalysisNew() {
     refetchOnWindowFocus: false,
     select: (data: any) => data || { batch: null, entries: [] }
   });
+  
+  // 首次访问页面时，检查是否有历史数据
+  useEffect(() => {
+    const checkAndTriggerAnalysis = async () => {
+      // 只在首次访问时执行
+      if (isFirstVisit && !isResultsLoading && !isAnalyzing) {
+        // 检查是否有历史数据
+        if (!resultsData?.batch || !resultsData?.entries || resultsData.entries.length === 0) {
+          // 没有历史数据，自动触发分析
+          console.log('首次访问技术分析页面，触发自动分析...');
+          setIsFirstVisit(false);
+          await runTechnicalAnalysis();
+        } else {
+          // 有历史数据，标记为非首次访问
+          setIsFirstVisit(false);
+          console.log('已有历史技术分析数据，不触发自动分析');
+        }
+      }
+    };
+    
+    checkAndTriggerAnalysis();
+  }, [isFirstVisit, resultsData, isResultsLoading, isAnalyzing]);
+  
+  // 手动触发技术分析
+  const runTechnicalAnalysis = async () => {
+    try {
+      setIsAnalyzing(true);
+      const response = await fetch('/api/technical-analysis/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        toast({
+          title: "分析完成",
+          description: `成功分析了${result.entriesCount}个加密货币的技术指标`,
+          variant: "default",
+        });
+        
+        // 刷新数据
+        queryClient.invalidateQueries({ queryKey: ['/api/technical-analysis/batches'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/technical-analysis/results'] });
+      } else {
+        toast({
+          title: "分析失败",
+          description: result.error || "无法完成技术分析，请稍后重试",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "分析出错",
+        description: "执行技术分析时出现错误，请稍后重试",
+        variant: "destructive",
+      });
+      console.error("技术分析执行错误:", error);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
   const getSignalBadgeColor = (signal: string) => {
     switch (signal.toLowerCase()) {
@@ -122,6 +190,23 @@ export default function TechnicalAnalysisNew() {
             基于交易量市值比率、RSI、MACD和EMA的综合技术分析（每24小时自动更新）
           </p>
         </div>
+        <Button 
+          onClick={runTechnicalAnalysis} 
+          disabled={isAnalyzing}
+          className="flex items-center gap-2"
+        >
+          {isAnalyzing ? (
+            <>
+              <RefreshCw className="h-4 w-4 animate-spin" />
+              <span>分析中...</span>
+            </>
+          ) : (
+            <>
+              <RefreshCw className="h-4 w-4" />
+              <span>立即分析</span>
+            </>
+          )}
+        </Button>
       </div>
 
       {/* 批次信息卡片 */}

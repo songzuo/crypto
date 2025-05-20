@@ -875,6 +875,8 @@ function getCombinedSignal(volumeRatio: number, technicalData: TechnicalData): S
   };
 }
 
+// 这里移除了重复的函数定义
+
 // 运行技术分析
 export async function runTechnicalAnalysis(timeframe: string = '1h'): Promise<{ batchId: number, entriesCount: number }> {
   console.log(`开始技术分析，时间框架: ${timeframe}`);
