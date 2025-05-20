@@ -931,13 +931,13 @@ export async function runTechnicalAnalysis(timeframe: string = '1h'): Promise<{ 
           continue;
         }
         
-        console.log(`分析 ${crypto.symbol} (${crypto.name})，交易量市值比率: ${ratio.ratio}`);
+        console.log(`分析 ${crypto.symbol} (${crypto.name})，交易量市值比率: ${ratio.volumeToMarketCapRatio}`);
         
         // 计算技术指标
         const technicalData = await calculateTechnicalIndicators(crypto.symbol, timeframe);
         
         // 获取综合信号
-        const signalData = getCombinedSignal(ratio.ratio, technicalData);
+        const signalData = getCombinedSignal(ratio.volumeToMarketCapRatio, technicalData);
         
         // 存储分析结果
         await db.insert(technicalAnalysisEntries).values({
@@ -945,7 +945,7 @@ export async function runTechnicalAnalysis(timeframe: string = '1h'): Promise<{ 
           cryptocurrencyId: crypto.id,
           symbol: crypto.symbol,
           name: crypto.name,
-          volumeToMarketCapRatio: ratio.ratio,
+          volumeToMarketCapRatio: ratio.volumeToMarketCapRatio,
           rsi: technicalData.rsi || null,
           macdLine: technicalData.macd?.macdLine || null,
           macdSignal: technicalData.macd?.signalLine || null,
