@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { queryClient } from '@/lib/queryClient';
-import { AlertTriangle, Award, BarChart4, ChevronDown, RefreshCw, TrendingDown, TrendingUp } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useQuery } from '@tanstack/react-query';
+import { AlertTriangle, Award, BarChart4, ChevronDown, TrendingDown, TrendingUp } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -95,36 +93,7 @@ export default function TechnicalAnalysis() {
     refetchOnWindowFocus: false
   });
 
-  // 手动触发技术分析的mutation
-  const runAnalysisMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch('/api/technical-analysis/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || res.statusText);
-      }
-      return res.json();
-    },
-    onSuccess: (data: any) => {
-      toast({
-        title: '技术分析已启动',
-        description: `成功分析了${data?.entriesCount || 0}个加密货币`,
-      });
-      // 刷新数据
-      queryClient.invalidateQueries({ queryKey: ['/api/technical-analysis'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/technical-analysis/batches'] });
-    },
-    onError: (error: any) => {
-      toast({
-        title: '技术分析失败',
-        description: `错误：${error.message}`,
-        variant: 'destructive'
-      });
-    }
-  });
+  // 技术分析每24小时自动运行一次，与交易量市值比率分析同步
 
   // 当选择不同批次时更新状态
   const handleBatchChange = (batchId: string) => {
