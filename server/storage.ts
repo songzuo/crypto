@@ -721,6 +721,154 @@ import { eq, and, like, desc, asc } from "drizzle-orm";
 
 // Database Storage implementation
 export class DatabaseStorage implements IStorage {
+  // 技术分析批次相关方法
+  async getTechnicalAnalysisBatches(page: number, limit: number): Promise<{ data: TechnicalAnalysisBatch[], total: number }> {
+    try {
+      const offset = (page - 1) * limit;
+      
+      const batches = await db
+        .select()
+        .from(technicalAnalysisBatches)
+        .orderBy(desc(technicalAnalysisBatches.createdAt))
+        .limit(limit)
+        .offset(offset);
+      
+      const [{ count }] = await db
+        .select({
+          count: count(technicalAnalysisBatches.id)
+        })
+        .from(technicalAnalysisBatches);
+        
+      return {
+        data: batches,
+        total: Number(count) || 0
+      };
+    } catch (error) {
+      console.error("获取技术分析批次列表时出错:", error);
+      return { data: [], total: 0 };
+    }
+  }
+  
+  // 获取最新的技术分析批次
+  async getLatestTechnicalAnalysisBatch(): Promise<TechnicalAnalysisBatch | undefined> {
+    try {
+      const [batch] = await db
+        .select()
+        .from(technicalAnalysisBatches)
+        .orderBy(desc(technicalAnalysisBatches.createdAt))
+        .limit(1);
+      
+      return batch;
+    } catch (error) {
+      console.error("获取最新技术分析批次时出错:", error);
+      return undefined;
+    }
+  }
+  
+  // 获取指定ID的技术分析批次
+  async getTechnicalAnalysisBatch(id: number): Promise<TechnicalAnalysisBatch | undefined> {
+    try {
+      const [batch] = await db
+        .select()
+        .from(technicalAnalysisBatches)
+        .where(eq(technicalAnalysisBatches.id, id));
+      
+      return batch;
+    } catch (error) {
+      console.error(`获取技术分析批次${id}时出错:`, error);
+      return undefined;
+    }
+  }
+  
+  // 创建技术分析批次
+  async createTechnicalAnalysisBatch(insertBatch: InsertTechnicalAnalysisBatch): Promise<TechnicalAnalysisBatch> {
+    try {
+      const [batch] = await db
+        .insert(technicalAnalysisBatches)
+        .values(insertBatch)
+        .returning();
+      
+      return batch;
+    } catch (error) {
+      console.error("创建技术分析批次时出错:", error);
+      throw error;
+    }
+  }
+  
+  // 技术分析结果相关方法
+  // 获取最新的技术分析结果
+  async getTechnicalAnalysisResults(signal?: string): Promise<{ batch: TechnicalAnalysisBatch, entries: TechnicalAnalysisEntry[] }> {
+    try {
+      // 获取最新批次
+      const batch = await this.getLatestTechnicalAnalysisBatch();
+      
+      if (!batch) {
+        return { batch: {} as TechnicalAnalysisBatch, entries: [] };
+      }
+      
+      // 获取该批次的分析结果
+      return this.getTechnicalAnalysisResultsByBatchId(batch.id, signal);
+    } catch (error) {
+      console.error("获取最新技术分析结果时出错:", error);
+      return { batch: {} as TechnicalAnalysisBatch, entries: [] };
+    }
+  }
+  
+  // 获取指定批次的技术分析结果
+  async getTechnicalAnalysisResultsByBatchId(batchId: number, signal?: string): Promise<{ batch: TechnicalAnalysisBatch, entries: TechnicalAnalysisEntry[] }> {
+    try {
+      // 获取批次信息
+      const batch = await this.getTechnicalAnalysisBatch(batchId);
+      
+      if (!batch) {
+        return { batch: {} as TechnicalAnalysisBatch, entries: [] };
+      }
+      
+      // 构建查询条件
+      let query = db
+        .select()
+        .from(technicalAnalysisEntries)
+        .where(eq(technicalAnalysisEntries.batchId, batchId));
+      
+      // 如果指定了信号类型，添加过滤条件
+      if (signal) {
+        if (signal === 'any_buy') {
+          query = query.where(
+            sql`${technicalAnalysisEntries.combinedSignal} IN ('buy', 'strong_buy')`
+          );
+        } else if (signal === 'any_sell') {
+          query = query.where(
+            sql`${technicalAnalysisEntries.combinedSignal} IN ('sell', 'strong_sell')`
+          );
+        } else if (signal) {
+          query = query.where(eq(technicalAnalysisEntries.combinedSignal, signal));
+        }
+      }
+      
+      // 按信号强度排序
+      const entries = await query.orderBy(desc(technicalAnalysisEntries.signalStrength));
+      
+      return { batch, entries };
+    } catch (error) {
+      console.error(`获取批次${batchId}的技术分析结果时出错:`, error);
+      return { batch: {} as TechnicalAnalysisBatch, entries: [] };
+    }
+  }
+  
+  // 创建技术分析结果条目
+  async createTechnicalAnalysisEntry(entry: InsertTechnicalAnalysisEntry): Promise<TechnicalAnalysisEntry> {
+    try {
+      const [result] = await db
+        .insert(technicalAnalysisEntries)
+        .values(entry)
+        .returning();
+      
+      return result;
+    } catch (error) {
+      console.error("创建技术分析结果条目时出错:", error);
+      throw error;
+    }
+  }
   async deleteCryptocurrency(id: number): Promise<boolean> {
     try {
       // 1. 先删除相关的区块链浏览器记录
