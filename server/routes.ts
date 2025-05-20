@@ -10,6 +10,7 @@ import { cryptocurrencies } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
 import { analyzeNewsWordTrends } from "./services/wordTrendAnalyzer";
 import { getCachedTrendAnalysisResult } from "./services/cacheStore";
+import { getLatestTechnicalAnalysis, getTechnicalAnalysisBatches, getTechnicalAnalysisByBatchId, manualRunTechnicalAnalysis } from "./services/technicalAnalysis";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // 后端健康检查API
@@ -370,6 +371,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error('获取特定交易量市值比率批次数据出错:', error);
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // 技术分析 API 路由
+
+  // 获取最新技术分析结果
+  app.get("/api/technical-analysis", async (req, res) => {
+    try {
+      const signal = req.query.signal as string;
+      const limit = parseInt(req.query.limit as string) || 30;
+      
+      const result = await getLatestTechnicalAnalysis(signal, limit);
+      res.json(result);
+    } catch (error) {
+      console.error('获取最新技术分析结果出错:', error);
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // 获取所有技术分析批次
+  app.get("/api/technical-analysis/batches", async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 10;
+      
+      const batches = await getTechnicalAnalysisBatches(limit);
+      res.json(batches);
+    } catch (error) {
+      console.error('获取技术分析批次列表出错:', error);
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // 获取特定技术分析批次结果
+  app.get("/api/technical-analysis/batches/:id", async (req, res) => {
+    try {
+      const batchId = parseInt(req.params.id);
+      
+      if (isNaN(batchId)) {
+        return res.status(400).json({ error: "Invalid batch ID" });
+      }
+      
+      const signal = req.query.signal as string;
+      const limit = parseInt(req.query.limit as string) || 50;
+      
+      const result = await getTechnicalAnalysisByBatchId(batchId, signal, limit);
+      
+      if (!result.batch) {
+        return res.status(404).json({ error: "Batch not found" });
+      }
+      
+      res.json(result);
+    } catch (error) {
+      console.error('获取技术分析批次详情出错:', error);
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // 手动触发技术分析
+  app.post("/api/technical-analysis/analyze", async (req, res) => {
+    try {
+      console.log('手动触发技术分析...');
+      
+      // 执行分析
+      const result = await manualRunTechnicalAnalysis();
+      
+      res.json({ 
+        success: true, 
+        message: '技术分析已成功执行', 
+        batchId: result.batchId,
+        entriesCount: result.entriesCount
+      });
+    } catch (error) {
+      console.error('手动触发技术分析失败:', error);
       res.status(500).json({ error: (error as Error).message });
     }
   });
