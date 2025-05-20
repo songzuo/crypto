@@ -183,30 +183,11 @@ export default function TechnicalAnalysisNew() {
 
   return (
     <div className="container mx-auto py-8">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-3xl font-bold">技术分析</h1>
-          <p className="text-gray-500 mt-1">
-            基于交易量市值比率、RSI、MACD和EMA的综合技术分析（每24小时自动更新）
-          </p>
-        </div>
-        <Button 
-          onClick={runTechnicalAnalysis} 
-          disabled={isAnalyzing}
-          className="flex items-center gap-2"
-        >
-          {isAnalyzing ? (
-            <>
-              <RefreshCw className="h-4 w-4 animate-spin" />
-              <span>分析中...</span>
-            </>
-          ) : (
-            <>
-              <RefreshCw className="h-4 w-4" />
-              <span>立即分析</span>
-            </>
-          )}
-        </Button>
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold">技术分析</h1>
+        <p className="text-gray-500 mt-1">
+          基于交易量市值比率、RSI、MACD和EMA的综合技术分析（每24小时自动更新）
+        </p>
       </div>
 
       {/* 批次信息卡片 */}
