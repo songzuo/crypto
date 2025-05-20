@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { apiRequest, queryClient } from '@/lib/queryClient';
+import { queryClient } from '@/lib/queryClient';
 import { AlertTriangle, Award, BarChart4, ChevronDown, RefreshCw, TrendingDown, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -97,7 +97,17 @@ export default function TechnicalAnalysisPage() {
 
   // 手动触发技术分析的mutation
   const runAnalysisMutation = useMutation({
-    mutationFn: () => apiRequest('/api/technical-analysis/analyze', 'POST'),
+    mutationFn: async () => {
+      const res = await fetch('/api/technical-analysis/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || res.statusText);
+      }
+      return res.json();
+    },
     onSuccess: (data: any) => {
       toast({
         title: '技术分析已启动',

@@ -264,35 +264,97 @@ function getVolumeRatioSignal(ratio: number): 'buy' | 'sell' | 'neutral' {
 
 // 从RSI获取信号
 function getRSISignal(rsi: number, previousRSI?: number): 'buy' | 'sell' | 'neutral' {
-  if (rsi < RSI_OVERSOLD) {
+  // 买入信号：RSI跌至30以下并回升
+  if (previousRSI && rsi <= RSI_OVERSOLD && rsi > previousRSI) {
+    return 'buy'; // RSI在超卖区间并回升，强烈买入信号
+  } 
+  // 卖出信号：RSI升至70以上并回落
+  else if (previousRSI && rsi >= RSI_OVERBOUGHT && rsi < previousRSI) {
+    return 'sell'; // RSI在超买区间并回落，强烈卖出信号
+  }
+  // 备用信号判断（当没有前一个周期数据时）
+  else if (rsi < RSI_OVERSOLD) {
     return 'buy'; // RSI低于30，超卖信号
   } else if (rsi > RSI_OVERBOUGHT) {
     return 'sell'; // RSI高于70，超买信号
-  } else if (previousRSI && previousRSI < RSI_OVERSOLD && rsi >= RSI_OVERSOLD) {
-    return 'buy'; // RSI从超卖区间回升，买入信号
-  } else if (previousRSI && previousRSI > RSI_OVERBOUGHT && rsi <= RSI_OVERBOUGHT) {
-    return 'sell'; // RSI从超买区间回落，卖出信号
   }
   return 'neutral';
 }
 
 // 从MACD获取信号
-function getMACDSignal(macd: { macdLine: number, signalLine: number, histogram: number }): 'buy' | 'sell' | 'neutral' {
-  if (macd.histogram > 0 && macd.macdLine > macd.signalLine) {
-    return 'buy'; // MACD快线上穿慢线且柱状图为正，买入信号
-  } else if (macd.histogram < 0 && macd.macdLine < macd.signalLine) {
-    return 'sell'; // MACD快线下穿慢线且柱状图为负，卖出信号
+function getMACDSignal(
+  macd: { macdLine: number, signalLine: number, histogram: number }, 
+  previousMacd?: { macdLine: number, signalLine: number, histogram: number }
+): 'buy' | 'sell' | 'neutral' {
+  
+  // 有之前数据时的精确金叉/死叉判断
+  if (previousMacd) {
+    // 买入信号：MACD快线(DIF)自下向上穿越慢线(DEA)，柱状图转正
+    const currentCrossUp = macd.macdLine > macd.signalLine;
+    const previousCrossDown = previousMacd.macdLine <= previousMacd.signalLine;
+    const histogramTurningPositive = macd.histogram > 0 && previousMacd.histogram <= 0;
+    
+    if ((currentCrossUp && previousCrossDown) || histogramTurningPositive) {
+      return 'buy'; // 金叉信号
+    }
+    
+    // 卖出信号：MACD快线自上向下跌破慢线，柱状图转负
+    const currentCrossDown = macd.macdLine < macd.signalLine;
+    const previousCrossUp = previousMacd.macdLine >= previousMacd.signalLine;
+    const histogramTurningNegative = macd.histogram < 0 && previousMacd.histogram >= 0;
+    
+    if ((currentCrossDown && previousCrossUp) || histogramTurningNegative) {
+      return 'sell'; // 死叉信号
+    }
+  } 
+  // 没有前一周期数据时的简单判断
+  else {
+    // 简单判断当前快线与慢线的关系和柱状图状态
+    if (macd.histogram > 0 && macd.macdLine > macd.signalLine) {
+      return 'buy'; // 可能是金叉之后
+    } else if (macd.histogram < 0 && macd.macdLine < macd.signalLine) {
+      return 'sell'; // 可能是死叉之后
+    }
   }
+  
   return 'neutral';
 }
 
-// 从EMA获取信号
-function getEMASignal(shortEma: number, longEma: number): 'buy' | 'sell' | 'neutral' {
-  if (shortEma > longEma) {
-    return 'buy'; // 短期EMA上穿长期EMA，形成金叉，买入信号
-  } else if (shortEma < longEma) {
-    return 'sell'; // 短期EMA下穿长期EMA，形成死叉，卖出信号
+// 从EMA获取信号 - 判断金叉死叉
+function getEMASignal(
+  shortEma: number, 
+  longEma: number, 
+  previousShortEma?: number, 
+  previousLongEma?: number
+): 'buy' | 'sell' | 'neutral' {
+  
+  // 有前期数据时的精确金叉/死叉判断
+  if (previousShortEma !== undefined && previousLongEma !== undefined) {
+    // 短期均线上穿长期均线，金叉
+    const currentCrossUp = shortEma > longEma;
+    const previousCrossDown = previousShortEma <= previousLongEma;
+    
+    if (currentCrossUp && previousCrossDown) {
+      return 'buy'; // 金叉信号
+    }
+    
+    // 短期均线下穿长期均线，死叉
+    const currentCrossDown = shortEma < longEma;
+    const previousCrossUp = previousShortEma >= previousLongEma;
+    
+    if (currentCrossDown && previousCrossUp) {
+      return 'sell'; // 死叉信号
+    }
+  } 
+  // 没有前期数据时的简单位置判断
+  else {
+    if (shortEma > longEma) {
+      return 'buy'; // 短期EMA在长期EMA上方
+    } else if (shortEma < longEma) {
+      return 'sell'; // 短期EMA在长期EMA下方
+    }
   }
+  
   return 'neutral';
 }
 
@@ -547,6 +609,8 @@ export async function getTechnicalAnalysisBatches(limit: number = 10) {
     throw error;
   }
 }
+
+// 此函数已在下方重新定义，删除此处重复声明
 
 // 获取指定批次的技术分析结果
 export async function getTechnicalAnalysisByBatchId(batchId: number, signal?: string, limit: number = 50) {
