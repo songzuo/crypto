@@ -828,25 +828,24 @@ export class DatabaseStorage implements IStorage {
       }
       
       // 构建查询条件
-      let query = db
-        .select()
-        .from(technicalAnalysisEntries)
-        .where(eq(technicalAnalysisEntries.batchId, batchId));
+      let conditions = [eq(technicalAnalysisEntries.batchId, batchId)];
       
       // 如果指定了信号类型，添加过滤条件
       if (signal) {
         if (signal === 'any_buy') {
-          query = query.where(
-            sql`${technicalAnalysisEntries.combinedSignal} IN ('buy', 'strong_buy')`
-          );
+          conditions.push(sql`${technicalAnalysisEntries.combinedSignal} IN ('buy', 'strong_buy')`);
         } else if (signal === 'any_sell') {
-          query = query.where(
-            sql`${technicalAnalysisEntries.combinedSignal} IN ('sell', 'strong_sell')`
-          );
-        } else if (signal) {
-          query = query.where(eq(technicalAnalysisEntries.combinedSignal, signal));
+          conditions.push(sql`${technicalAnalysisEntries.combinedSignal} IN ('sell', 'strong_sell')`);
+        } else if (signal !== 'all') {
+          conditions.push(eq(technicalAnalysisEntries.combinedSignal, signal));
         }
       }
+      
+      // 使用and组合所有条件
+      let query = db
+        .select()
+        .from(technicalAnalysisEntries)
+        .where(and(...conditions));
       
       // 按信号强度排序
       const entries = await query.orderBy(desc(technicalAnalysisEntries.signalStrength));

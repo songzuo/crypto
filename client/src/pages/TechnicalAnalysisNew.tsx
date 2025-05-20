@@ -21,17 +21,22 @@ interface TechnicalAnalysisEntry {
   id: number;
   batchId: number;
   cryptocurrencyId: number;
-  cryptocurrencyName: string;
-  cryptocurrencySymbol: string;
-  price: number;
-  signal: string;
-  rsiValue: number;
-  macdValue: number;
-  macdSignal: number;
-  emaShort: number;
-  emaLong: number;
-  volumeMarketCapRatio: number;
-  confidence: number;
+  name: string; // Actual field in DB schema
+  symbol: string; // Actual field in DB schema
+  volumeToMarketCapRatio: number | null;
+  volumeRatioSignal: string | null;
+  rsiValue: number | null;
+  rsiSignal: string | null;
+  macdLine: number | null;
+  signalLine: number | null;
+  histogram: number | null;
+  macdSignal: string | null;
+  shortEma: number | null;
+  longEma: number | null;
+  emaSignal: string | null;
+  combinedSignal: string;
+  signalStrength: number | null;
+  recommendationType: string | null;
   analysisTime: string;
 }
 
