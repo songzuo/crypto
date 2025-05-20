@@ -906,7 +906,7 @@ export async function runTechnicalAnalysis(timeframe: string = '1h'): Promise<{ 
     // 获取前100个加密货币的交易量市值比率数据
     const ratios = await db.query.volumeToMarketCapRatios.findMany({
       where: eq(volumeToMarketCapRatios.batchId, latestVmcBatch.id),
-      orderBy: desc(volumeToMarketCapRatios.ratio),
+      orderBy: desc(volumeToMarketCapRatios.volumeToMarketCapRatio),
       limit: 100
     });
     
