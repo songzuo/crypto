@@ -76,27 +76,14 @@ export default function TechnicalAnalysisNew() {
     select: (data: any) => data || { batch: null, entries: [] }
   });
   
-  // 首次访问页面时，检查是否有历史数据
+  // 页面加载时设置首次访问状态为false，不再自动触发分析
   useEffect(() => {
-    const checkAndTriggerAnalysis = async () => {
-      // 只在首次访问时执行
-      if (isFirstVisit && !isResultsLoading && !isAnalyzing) {
-        // 检查是否有历史数据
-        if (!resultsData?.batch || !resultsData?.entries || resultsData.entries.length === 0) {
-          // 没有历史数据，自动触发分析
-          console.log('首次访问技术分析页面，触发自动分析...');
-          setIsFirstVisit(false);
-          await runTechnicalAnalysis();
-        } else {
-          // 有历史数据，标记为非首次访问
-          setIsFirstVisit(false);
-          console.log('已有历史技术分析数据，不触发自动分析');
-        }
-      }
-    };
-    
-    checkAndTriggerAnalysis();
-  }, [isFirstVisit, resultsData, isResultsLoading, isAnalyzing]);
+    // 仅标记为非首次访问，技术分析将通过系统定时任务每24小时自动执行一次
+    if (isFirstVisit) {
+      setIsFirstVisit(false);
+      console.log('技术分析页面加载，显示历史数据');
+    }
+  }, [isFirstVisit]);
   
   // 手动触发技术分析
   const runTechnicalAnalysis = async () => {
