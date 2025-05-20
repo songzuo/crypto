@@ -53,28 +53,44 @@ export default function TechnicalAnalysisPage() {
   const [selectedSignal, setSelectedSignal] = useState('any_buy');
   const [selectedBatchId, setSelectedBatchId] = useState<number | null>(null);
   const { toast } = useToast();
-  const queryClient = useQueryClient();
+  // 使用导入的queryClient实例
 
   // 获取最新的技术分析结果
   const { data: latestAnalysis, isLoading: isLoadingLatest } = useQuery({
     queryKey: ['/api/technical-analysis', selectedSignal],
-    queryFn: () => apiRequest(`/api/technical-analysis?signal=${selectedSignal}`),
+    queryFn: async () => {
+      const res = await fetch(`/api/technical-analysis?signal=${selectedSignal}`);
+      if (!res.ok) throw new Error(`Error fetching data: ${res.status}`);
+      return res.json();
+    },
     refetchOnWindowFocus: false
   });
 
   // 获取所有技术分析批次
   const { data: batches, isLoading: isLoadingBatches } = useQuery({
     queryKey: ['/api/technical-analysis/batches'],
-    queryFn: () => apiRequest('/api/technical-analysis/batches'),
+    queryFn: async () => {
+      try {
+        const res = await fetch('/api/technical-analysis/batches');
+        if (!res.ok) throw new Error(`Error fetching batches: ${res.status}`);
+        return await res.json();
+      } catch (error) {
+        console.error("Error fetching batches:", error);
+        return []; // 返回空数组以避免map等方法出错
+      }
+    },
     refetchOnWindowFocus: false
   });
 
   // 获取特定批次的技术分析结果
   const { data: batchAnalysis, isLoading: isLoadingBatch } = useQuery({
     queryKey: ['/api/technical-analysis/batches', selectedBatchId, selectedSignal],
-    queryFn: () => selectedBatchId 
-      ? apiRequest(`/api/technical-analysis/batches/${selectedBatchId}?signal=${selectedSignal}`) 
-      : Promise.resolve(null),
+    queryFn: async () => {
+      if (!selectedBatchId) return null;
+      const res = await fetch(`/api/technical-analysis/batches/${selectedBatchId}?signal=${selectedSignal}`);
+      if (!res.ok) throw new Error(`Error fetching batch: ${res.status}`);
+      return res.json();
+    },
     enabled: !!selectedBatchId,
     refetchOnWindowFocus: false
   });
@@ -399,11 +415,15 @@ export default function TechnicalAnalysisPage() {
                   <SelectValue placeholder="选择批次" />
                 </SelectTrigger>
                 <SelectContent>
-                  {batches && batches.map((batch: any) => (
-                    <SelectItem key={batch.id} value={batch.id.toString()}>
-                      批次 #{batch.id} ({new Date(batch.createdAt).toLocaleDateString()})
-                    </SelectItem>
-                  ))}
+                  {Array.isArray(batches) && batches.length > 0 ? (
+                    batches.map((batch: any) => (
+                      <SelectItem key={batch.id} value={batch.id.toString()}>
+                        批次 #{batch.id} ({new Date(batch.createdAt).toLocaleDateString()})
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="" disabled>无可用批次数据</SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>

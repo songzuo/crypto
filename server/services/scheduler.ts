@@ -10,6 +10,7 @@ import { scrapeCryptoNews } from './cryptoNewsScraper';
 import { analyzeNewsWordTrends } from './wordTrendAnalyzer';
 import { analyzeVolumeToMarketCapRatios } from './ratioAnalyzer';
 import { runEnhancedVolumeToMarketCapAnalysis } from './enhancedRatioAnalyzer';
+import { runTechnicalAnalysis } from './technicalAnalysis';
 import { 
   updateLastTrendAnalysisTime, 
   getLastTrendAnalysisTime,

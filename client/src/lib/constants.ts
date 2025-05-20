@@ -39,6 +39,11 @@ export const navItems = [
     label: "Volume Ratio",
     path: "/volume-ratio",
     icon: "ri-scales-3-line"
+  },
+  {
+    label: "Technical Analysis",
+    path: "/technical-analysis",
+    icon: "ri-bar-chart-line"
   }
 ];
 
