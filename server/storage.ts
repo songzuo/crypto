@@ -7,7 +7,9 @@ import {
   crawlerStatus, type CrawlerStatus, type InsertCrawlerStatus,
   cryptoNews, type CryptoNews, type InsertCryptoNews,
   volumeToMarketCapRatios, type VolumeToMarketCapRatio, type InsertVolumeToMarketCapRatio,
-  volumeToMarketCapBatches, type VolumeToMarketCapBatch, type InsertVolumeToMarketCapBatch
+  volumeToMarketCapBatches, type VolumeToMarketCapBatch, type InsertVolumeToMarketCapBatch,
+  technicalAnalysisBatches, type TechnicalAnalysisBatch, type InsertTechnicalAnalysisBatch,
+  technicalAnalysisEntries, type TechnicalAnalysisEntry, type InsertTechnicalAnalysisEntry
 } from "@shared/schema";
 
 export interface IStorage {
@@ -79,6 +81,17 @@ export interface IStorage {
   getLatestVolumeToMarketCapBatch(): Promise<VolumeToMarketCapBatch | undefined>;
   getVolumeToMarketCapBatch(id: number): Promise<VolumeToMarketCapBatch | undefined>;
   createVolumeToMarketCapBatch(batch: InsertVolumeToMarketCapBatch): Promise<VolumeToMarketCapBatch>;
+  
+  // 技术分析批次相关方法
+  getTechnicalAnalysisBatches(page: number, limit: number): Promise<{ data: TechnicalAnalysisBatch[], total: number }>;
+  getLatestTechnicalAnalysisBatch(): Promise<TechnicalAnalysisBatch | undefined>;
+  getTechnicalAnalysisBatch(id: number): Promise<TechnicalAnalysisBatch | undefined>;
+  createTechnicalAnalysisBatch(batch: InsertTechnicalAnalysisBatch): Promise<TechnicalAnalysisBatch>;
+  
+  // 技术分析条目相关方法
+  getTechnicalAnalysisResults(signal?: string): Promise<{ batch: TechnicalAnalysisBatch, entries: TechnicalAnalysisEntry[] }>;
+  getTechnicalAnalysisResultsByBatchId(batchId: number, signal?: string): Promise<{ batch: TechnicalAnalysisBatch, entries: TechnicalAnalysisEntry[] }>;
+  createTechnicalAnalysisEntry(entry: InsertTechnicalAnalysisEntry): Promise<TechnicalAnalysisEntry>;
 }
 
 export class MemStorage implements IStorage {

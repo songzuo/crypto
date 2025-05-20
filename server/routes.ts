@@ -145,6 +145,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: (error as Error).message });
     }
   });
+  
+  // 技术分析API路由
+  // 获取最新的技术分析结果
+  app.get("/api/technical-analysis", async (req, res) => {
+    try {
+      const signal = req.query.signal as string || '';
+      
+      // 从storage获取最新的技术分析结果
+      const result = await storage.getTechnicalAnalysisResults(signal);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+  
+  // 获取所有技术分析批次
+  app.get("/api/technical-analysis/batches", async (req, res) => {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 20;
+      
+      const result = await storage.getTechnicalAnalysisBatches(page, limit);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+  
+  // 获取特定批次的技术分析结果
+  app.get("/api/technical-analysis/batches/:id", async (req, res) => {
+    try {
+      const batchId = parseInt(req.params.id);
+      const signal = req.query.signal as string || '';
+      
+      if (isNaN(batchId)) {
+        return res.status(400).json({ error: "Invalid batch ID" });
+      }
+      
+      const result = await storage.getTechnicalAnalysisResultsByBatchId(batchId, signal);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+  
+  // 手动运行技术分析
+  app.post("/api/technical-analysis/analyze", async (req, res) => {
+    try {
+      // 引入技术分析服务
+      const { runTechnicalAnalysis } = require('./services/technicalAnalysis');
+      
+      // 启动技术分析（异步运行，不等待完成）
+      const analysisPromise = runTechnicalAnalysis();
+      
+      // 立即返回响应，表示分析已启动
+      res.json({ 
+        success: true, 
+        message: "技术分析已启动，将在后台运行",
+        entriesCount: 0 // 前端期望这个字段
+      });
+      
+      // 不需要await，让它在后台运行
+    } catch (error) {
+      console.error("启动技术分析时出错:", error);
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
 
   // Get recently added blockchain explorers
   app.get("/api/recent-explorers", async (req, res) => {
