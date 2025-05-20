@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiRequest } from '@/lib/queryClient';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { apiRequest, queryClient } from '@/lib/queryClient';
 import { AlertTriangle, Award, BarChart4, ChevronDown, RefreshCw, TrendingDown, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,7 +11,40 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { formatRelativeTime } from '@/lib/utils';
+
+// Helper function to format relative time
+function formatRelativeTime(date: Date | string): string {
+  if (!date) return '';
+  
+  try {
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    const now = new Date();
+    const diff = now.getTime() - dateObj.getTime();
+    const seconds = Math.floor(diff / 1000);
+    
+    if (seconds < 60) return 'just now';
+    if (seconds < 3600) {
+      const minutes = Math.floor(seconds / 60);
+      return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'} ago`;
+    }
+    if (seconds < 86400) {
+      const hours = Math.floor(seconds / 3600);
+      return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
+    }
+    if (seconds < 604800) {
+      const days = Math.floor(seconds / 86400);
+      return `${days} ${days === 1 ? 'day' : 'days'} ago`;
+    }
+    if (seconds < 2592000) {
+      const weeks = Math.floor(seconds / 604800);
+      return `${weeks} ${weeks === 1 ? 'week' : 'weeks'} ago`;
+    }
+    
+    return dateObj.toLocaleDateString();
+  } catch (error) {
+    return String(date);
+  }
+}
 import { useToast } from '@/hooks/use-toast';
 
 // 技术分析页面组件
@@ -48,17 +81,17 @@ export default function TechnicalAnalysisPage() {
 
   // 手动触发技术分析的mutation
   const runAnalysisMutation = useMutation({
-    mutationFn: () => apiRequest('/api/technical-analysis/analyze', { method: 'POST' }),
-    onSuccess: (data) => {
+    mutationFn: () => apiRequest('/api/technical-analysis/analyze', 'POST'),
+    onSuccess: (data: any) => {
       toast({
         title: '技术分析已启动',
-        description: `成功分析了${data.entriesCount}个加密货币`,
+        description: `成功分析了${data?.entriesCount || 0}个加密货币`,
       });
       // 刷新数据
       queryClient.invalidateQueries({ queryKey: ['/api/technical-analysis'] });
       queryClient.invalidateQueries({ queryKey: ['/api/technical-analysis/batches'] });
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({
         title: '技术分析失败',
         description: `错误：${error.message}`,

@@ -42,6 +42,69 @@ export function formatNumber(num: number, maximumFractionDigits: number = 2): st
  * @param options Formatting options
  * @returns Formatted date string
  */
+/**
+ * Format a date as a relative time string (e.g., "2 days ago")
+ * @param date The date to format
+ * @returns Formatted relative time string
+ */
+export function formatRelativeTime(date: Date | string): string {
+  if (!date) return '';
+  
+  try {
+    // Handle string dates
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    const now = new Date();
+    
+    // Calculate time difference in milliseconds
+    const diff = now.getTime() - dateObj.getTime();
+    
+    // Convert to seconds
+    const seconds = Math.floor(diff / 1000);
+    
+    // Less than a minute
+    if (seconds < 60) {
+      return 'just now';
+    }
+    
+    // Less than an hour
+    if (seconds < 3600) {
+      const minutes = Math.floor(seconds / 60);
+      return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'} ago`;
+    }
+    
+    // Less than a day
+    if (seconds < 86400) {
+      const hours = Math.floor(seconds / 3600);
+      return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
+    }
+    
+    // Less than a week
+    if (seconds < 604800) {
+      const days = Math.floor(seconds / 86400);
+      return `${days} ${days === 1 ? 'day' : 'days'} ago`;
+    }
+    
+    // Less than a month (approximated as 30 days)
+    if (seconds < 2592000) {
+      const weeks = Math.floor(seconds / 604800);
+      return `${weeks} ${weeks === 1 ? 'week' : 'weeks'} ago`;
+    }
+    
+    // Less than a year
+    if (seconds < 31536000) {
+      const months = Math.floor(seconds / 2592000);
+      return `${months} ${months === 1 ? 'month' : 'months'} ago`;
+    }
+    
+    // More than a year
+    const years = Math.floor(seconds / 31536000);
+    return `${years} ${years === 1 ? 'year' : 'years'} ago`;
+  } catch (error) {
+    console.error('Error formatting relative time:', error);
+    return String(date);
+  }
+}
+
 export function formatDate(date: Date, options?: { 
   includeTime?: boolean,
   includeSeconds?: boolean,

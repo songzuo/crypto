@@ -14,6 +14,7 @@ import AiInsights from "./pages/AiInsights";
 import News from "./pages/News";
 import Trends from "./pages/Trends";
 import VolumeRatio from "./pages/VolumeRatio";
+import TechnicalAnalysis from "./pages/TechnicalAnalysis";
 
 function Router() {
   return (
@@ -28,6 +29,7 @@ function Router() {
         <Route path="/news" component={News} />
         <Route path="/trends" component={Trends} />
         <Route path="/volume-ratio" component={VolumeRatio} />
+        <Route path="/technical-analysis" component={TechnicalAnalysis} />
         <Route component={NotFound} />
       </Switch>
     </Layout>
