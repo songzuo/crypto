@@ -14,7 +14,7 @@ import AiInsights from "./pages/AiInsights";
 import News from "./pages/News";
 import Trends from "./pages/Trends";
 import VolumeRatio from "./pages/VolumeRatio";
-import TechnicalAnalysis from "./pages/TechnicalAnalysis";
+import TechnicalAnalysis from "./pages/TechnicalAnalysisNew";
 
 function Router() {
   return (
