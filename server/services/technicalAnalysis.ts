@@ -1137,10 +1137,10 @@ export async function runTechnicalAnalysis(timeframe: string = '1h', specificVmc
           symbol: crypto.symbol,
           name: crypto.name,
           volumeToMarketCapRatio: ratio.volumeToMarketCapRatio,
-          rsi: technicalData.rsi || null,
+          rsiValue: technicalData.rsi || null,
           macdLine: technicalData.macd?.macdLine || null,
-          macdSignal: technicalData.macd?.signalLine || null,
-          macdHistogram: technicalData.macd?.histogram || null,
+          signalLine: technicalData.macd?.signalLine || null,
+          histogram: technicalData.macd?.histogram || null,
           shortEma: technicalData.shortEma || null,
           longEma: technicalData.longEma || null,
           volumeRatioSignal: signalData.volumeRatioSignal,
@@ -1150,7 +1150,7 @@ export async function runTechnicalAnalysis(timeframe: string = '1h', specificVmc
           combinedSignal: signalData.combinedSignal,
           signalStrength: signalData.signalStrength,
           recommendationType: signalData.recommendationType,
-          timestamp: new Date()
+          analysisTime: new Date()
         });
         
         analysisCount++;
