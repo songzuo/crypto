@@ -978,17 +978,56 @@ function getCombinedSignal(volumeRatio: number, technicalData: TechnicalData): S
   
   // 如果没有足够的技术指标数据，仅使用交易量市值比率
   if (!technicalData.rsi || !technicalData.macd || !technicalData.shortEma || !technicalData.longEma) {
-    const signal = volumeRatioSignal === 'buy' ? 'strong_buy' : 
-                 volumeRatioSignal === 'sell' ? 'sell' : 'neutral';
+    // 增强基于交易量市值比率的分析逻辑
+    let combinedSignal: 'strong_buy' | 'buy' | 'neutral' | 'sell' | 'strong_sell';
+    let signalStrength: number;
+    let recommendationType: 'day_trade' | 'swing_trade' | 'position' = 'day_trade';
+    
+    // 基于交易量市值比率的更细致判断
+    if (volumeToMarketCapRatio > 50) {
+      // 极高的交易量市值比率，强烈买入信号
+      combinedSignal = 'strong_buy';
+      signalStrength = 5;
+      recommendationType = 'day_trade'; // 适合短线
+    } else if (volumeToMarketCapRatio > 20) {
+      // 高交易量市值比率，买入信号
+      combinedSignal = 'buy';
+      signalStrength = 4;
+      recommendationType = 'day_trade';
+    } else if (volumeToMarketCapRatio > 10) {
+      // 中高交易量市值比率
+      combinedSignal = volumeRatioSignal === 'buy' ? 'buy' : 'neutral';
+      signalStrength = 3;
+      recommendationType = 'swing_trade';
+    } else if (volumeToMarketCapRatio > 5) {
+      // 中等交易量市值比率
+      combinedSignal = volumeRatioSignal === 'buy' ? 'buy' : 
+                     volumeRatioSignal === 'sell' ? 'sell' : 'neutral';
+      signalStrength = volumeRatioSignal === 'buy' ? 3 : 
+                     volumeRatioSignal === 'sell' ? 2 : 3;
+      recommendationType = 'swing_trade';
+    } else if (volumeToMarketCapRatio < 1) {
+      // 交易量极低
+      combinedSignal = 'sell';
+      signalStrength = 2;
+      recommendationType = 'position';
+    } else {
+      // 默认情况
+      combinedSignal = volumeRatioSignal === 'buy' ? 'buy' : 
+                     volumeRatioSignal === 'sell' ? 'sell' : 'neutral';
+      signalStrength = volumeRatioSignal === 'buy' ? 3 : 
+                     volumeRatioSignal === 'sell' ? 2 : 3;
+      recommendationType = 'position';
+    }
     
     return {
       volumeRatioSignal,
       rsiSignal: 'neutral',
       macdSignal: 'neutral',
       emaSignal: 'neutral',
-      combinedSignal: signal,
-      signalStrength: signal === 'strong_buy' ? 5 : signal === 'sell' ? 2 : 3,
-      recommendationType: 'day_trade'
+      combinedSignal,
+      signalStrength,
+      recommendationType
     };
   }
 
