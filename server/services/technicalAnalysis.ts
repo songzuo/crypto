@@ -984,29 +984,29 @@ function getCombinedSignal(volumeRatio: number, technicalData: TechnicalData): S
     let recommendationType: 'day_trade' | 'swing_trade' | 'position' = 'day_trade';
     
     // 基于交易量市值比率的更细致判断
-    if (volumeToMarketCapRatio > 50) {
+    if (volumeRatio > 50) {
       // 极高的交易量市值比率，强烈买入信号
       combinedSignal = 'strong_buy';
       signalStrength = 5;
       recommendationType = 'day_trade'; // 适合短线
-    } else if (volumeToMarketCapRatio > 20) {
+    } else if (volumeRatio > 20) {
       // 高交易量市值比率，买入信号
       combinedSignal = 'buy';
       signalStrength = 4;
       recommendationType = 'day_trade';
-    } else if (volumeToMarketCapRatio > 10) {
+    } else if (volumeRatio > 10) {
       // 中高交易量市值比率
       combinedSignal = volumeRatioSignal === 'buy' ? 'buy' : 'neutral';
       signalStrength = 3;
       recommendationType = 'swing_trade';
-    } else if (volumeToMarketCapRatio > 5) {
+    } else if (volumeRatio > 5) {
       // 中等交易量市值比率
       combinedSignal = volumeRatioSignal === 'buy' ? 'buy' : 
                      volumeRatioSignal === 'sell' ? 'sell' : 'neutral';
       signalStrength = volumeRatioSignal === 'buy' ? 3 : 
                      volumeRatioSignal === 'sell' ? 2 : 3;
       recommendationType = 'swing_trade';
-    } else if (volumeToMarketCapRatio < 1) {
+    } else if (volumeRatio < 1) {
       // 交易量极低
       combinedSignal = 'sell';
       signalStrength = 2;
