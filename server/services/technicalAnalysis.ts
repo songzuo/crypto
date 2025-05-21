@@ -29,6 +29,7 @@ interface PriceData {
 interface TechnicalData {
   volumeToMarketCapRatio?: number;
   rsi?: number;
+  previousRSI?: number; // 添加前一个周期的RSI值
   macd?: {
     macdLine: number;
     signalLine: number;
@@ -1498,11 +1499,33 @@ function getCombinedSignal(volumeRatio: number, technicalData: TechnicalData): S
     };
   }
 
-  const rsiSignal = technicalData.rsi ? getRSISignal(technicalData.rsi) : 'neutral';
-  const macdSignal = technicalData.macd ? getMACDSignal(technicalData.macd) : 'neutral';
-  const emaSignal = (technicalData.shortEma && technicalData.longEma) ? 
-                    getEMASignal(technicalData.shortEma, technicalData.longEma) : 
-                    'neutral';
+  // 使用带有前一周期数据的信号生成
+  let rsiSignal: 'buy' | 'sell' | 'neutral' = 'neutral';
+  if (technicalData.rsi !== undefined) {
+    // 如果有前一周期的RSI数据用于趋势变化判断
+    const previousRSI = technicalData.previousRSI;
+    rsiSignal = getRSISignal(technicalData.rsi, previousRSI);
+    console.log(`RSI(${technicalData.rsi.toFixed(2)})信号: ${rsiSignal}`);
+  }
+  
+  let macdSignal: 'buy' | 'sell' | 'neutral' = 'neutral';
+  if (technicalData.macd) {
+    // 如果有前一周期MACD数据，用它判断金叉/死叉
+    macdSignal = getMACDSignal(technicalData.macd, technicalData.previousMacd);
+    console.log(`MACD信号(${technicalData.macd.macdLine.toFixed(4)}, ${technicalData.macd.signalLine.toFixed(4)}): ${macdSignal}`);
+  }
+  
+  let emaSignal: 'buy' | 'sell' | 'neutral' = 'neutral';
+  if (technicalData.shortEma !== undefined && technicalData.longEma !== undefined) {
+    // 如果有前一周期的EMA数据，用它判断金叉/死叉
+    emaSignal = getEMASignal(
+      technicalData.shortEma, 
+      technicalData.longEma,
+      technicalData.previousShortEma,
+      technicalData.previousLongEma
+    );
+    console.log(`EMA信号(短期:${technicalData.shortEma.toFixed(2)}, 长期:${technicalData.longEma.toFixed(2)}): ${emaSignal}`);
+  }
 
   // 计算买入和卖出信号数量
   let buySignals = 0;
