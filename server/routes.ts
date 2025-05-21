@@ -10,7 +10,7 @@ import { cryptocurrencies } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
 import { analyzeNewsWordTrends } from "./services/wordTrendAnalyzer";
 import { getCachedTrendAnalysisResult } from "./services/cacheStore";
-import { getLatestTechnicalAnalysis, getTechnicalAnalysisBatches, getTechnicalAnalysisByBatchId, manualRunTechnicalAnalysis } from "./services/technicalAnalysis";
+import { getLatestTechnicalAnalysis, getTechnicalAnalysisBatches, getTechnicalAnalysisByBatchId, manualRunTechnicalAnalysis, runTechnicalAnalysis } from "./services/technicalAnalysis";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // 后端健康检查API
@@ -484,8 +484,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`使用交易量市值比率批次 #${vmcBatchId} 进行技术分析...`);
       
       const timeframe = req.body.timeframe || '1h';
-      // 导入runTechnicalAnalysis函数
-      const { runTechnicalAnalysis } = await import('./services/technicalAnalysis');
+      // 使用已导入的runTechnicalAnalysis函数
       const { batchId, entriesCount } = await runTechnicalAnalysis(timeframe, vmcBatchId);
       
       console.log(`基于交易量市值比率批次 #${vmcBatchId} 的技术分析成功完成，创建了技术分析批次 #${batchId}，分析了${entriesCount}个加密货币`);
