@@ -1052,12 +1052,13 @@ function getCombinedSignal(volumeRatio: number, technicalData: TechnicalData): S
 // 这里移除了重复的函数定义
 
 // 运行技术分析
-export async function runTechnicalAnalysis(timeframe: string = '1h'): Promise<{ batchId: number, entriesCount: number }> {
-  console.log(`开始技术分析，时间框架: ${timeframe}`);
+export async function runTechnicalAnalysis(timeframe: string = '1h', specificVmcBatchId?: number): Promise<{ batchId: number, entriesCount: number }> {
+  console.log(`开始技术分析，时间框架: ${timeframe}${specificVmcBatchId ? `, 使用指定的交易量市值批次 #${specificVmcBatchId}` : ''}`);
   
   try {
     // 创建一个新的分析批次
     const [batchResult] = await db.insert(technicalAnalysisBatches).values({
+      entriesCount: 0, // 初始化为0，后面会更新
       createdAt: new Date(),
       timeframe
     }).returning();
@@ -1065,17 +1066,28 @@ export async function runTechnicalAnalysis(timeframe: string = '1h'): Promise<{ 
     const batchId = batchResult.id;
     console.log(`已创建技术分析批次 #${batchId}`);
     
-    // 获取最新的交易量市值比率数据
-    const latestVmcBatch = await db.query.volumeToMarketCapBatches.findFirst({
-      orderBy: desc(volumeToMarketCapBatches.createdAt)
-    });
+    // 获取交易量市值比率数据 - 如果指定了批次ID，则使用指定的批次，否则使用最新的批次
+    let vmcBatch;
+    if (specificVmcBatchId) {
+      vmcBatch = await db.query.volumeToMarketCapBatches.findFirst({
+        where: eq(volumeToMarketCapBatches.id, specificVmcBatchId)
+      });
+      if (!vmcBatch) {
+        console.error(`找不到指定的交易量市值比率批次 #${specificVmcBatchId}`);
+        return { batchId, entriesCount: 0 };
+      }
+    } else {
+      vmcBatch = await db.query.volumeToMarketCapBatches.findFirst({
+        orderBy: desc(volumeToMarketCapBatches.createdAt)
+      });
+    }
     
-    if (!latestVmcBatch) {
+    if (!vmcBatch) {
       console.error('找不到交易量市值比率数据');
       return { batchId, entriesCount: 0 };
     }
     
-    console.log(`使用交易量市值比率批次 #${latestVmcBatch.id} 从 ${latestVmcBatch.createdAt}`);
+    console.log(`使用交易量市值比率批次 #${vmcBatch.id} 从 ${vmcBatch.createdAt}`);
     
     // 获取前100个加密货币的交易量市值比率数据
     const ratios = await db.query.volumeToMarketCapRatios.findMany({
