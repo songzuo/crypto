@@ -643,14 +643,22 @@ async function fetchHistoricalPrices(symbol: string, timeframe: string = '1h', l
 }
 
 // 计算技术指标
-async function calculateTechnicalIndicators(symbol: string, timeframe: string = '1h'): Promise<TechnicalData> {
+async function calculateTechnicalIndicators(symbol: string, timeframe: string = '1h', volumeToMarketCapRatio?: number): Promise<TechnicalData> {
+  // 初始化结果对象，如果有交易量市值比率，就先添加它
+  const result: TechnicalData = {};
+  if (volumeToMarketCapRatio !== undefined) {
+    result.volumeToMarketCapRatio = volumeToMarketCapRatio;
+    console.log(`${symbol}：使用交易量市值比率 ${volumeToMarketCapRatio} 作为分析基础`);
+  }
+  
   try {
     // 获取历史价格数据
+    console.log(`${symbol}：尝试获取历史价格数据计算技术指标...`);
     const historicalPrices = await fetchHistoricalPrices(symbol, timeframe);
     
     if (historicalPrices.length < 30) {
-      console.error(`${symbol}：没有足够的历史价格数据来计算技术指标，只有${historicalPrices.length}个数据点`);
-      return {};
+      console.warn(`${symbol}：没有足够的历史价格数据来计算技术指标，只有${historicalPrices.length}个数据点，将使用基本交易量市值比率`);
+      return result; // 返回可能包含交易量市值比率的结果
     }
 
     console.log(`${symbol}：成功获取${historicalPrices.length}个历史价格数据点`);
@@ -662,8 +670,8 @@ async function calculateTechnicalIndicators(symbol: string, timeframe: string = 
     }
     
     if (validPrices.length < 30) {
-      console.error(`${symbol}：过滤后剩余${validPrices.length}个数据点，不足以计算技术指标`);
-      return {};
+      console.warn(`${symbol}：过滤后剩余${validPrices.length}个数据点，不足以计算技术指标，将使用基本交易量市值比率`);
+      return result; // 返回可能包含交易量市值比率的结果
     }
     
     // 确保按时间排序（新的在前）
@@ -677,31 +685,28 @@ async function calculateTechnicalIndicators(symbol: string, timeframe: string = 
       // 计算RSI
       const rsi = calculateRSI(prices);
       console.log(`${symbol}：RSI = ${rsi}`);
+      result.rsi = rsi;
       
       // 计算MACD
       const macd = calculateMACD(prices);
       console.log(`${symbol}：MACD线 = ${macd.macdLine}, 信号线 = ${macd.signalLine}, 直方图 = ${macd.histogram}`);
+      result.macd = macd;
       
       // 计算EMA
       const shortEma = calculateEMA(prices, SHORT_EMA_PERIOD);
       const longEma = calculateEMA(prices, LONG_EMA_PERIOD);
       console.log(`${symbol}：短期EMA(${SHORT_EMA_PERIOD}) = ${shortEma}, 长期EMA(${LONG_EMA_PERIOD}) = ${longEma}`);
-      
-      const result: TechnicalData = {
-        rsi,
-        macd,
-        shortEma,
-        longEma
-      };
+      result.shortEma = shortEma;
+      result.longEma = longEma;
       
       return result;
     } catch (e) {
       console.error(`${symbol}：计算技术指标时出错:`, e);
-      return {};
+      return result; // 返回可能包含交易量市值比率的结果
     }
   } catch (error) {
     console.error(`${symbol}：计算技术指标过程中出错:`, error);
-    return {};
+    return result; // 返回可能包含交易量市值比率的结果
   }
 }
 
