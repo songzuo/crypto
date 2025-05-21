@@ -471,6 +471,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: (error as Error).message });
     }
   });
+  
+  // 使用特定的交易量市值比率批次（如批次#83）进行技术分析
+  app.post("/api/technical-analysis/analyze-with-batch/:batchId", async (req, res) => {
+    try {
+      const vmcBatchId = parseInt(req.params.batchId);
+      
+      if (isNaN(vmcBatchId)) {
+        return res.status(400).json({ error: "Invalid batch ID" });
+      }
+      
+      console.log(`使用交易量市值比率批次 #${vmcBatchId} 进行技术分析...`);
+      
+      const timeframe = req.body.timeframe || '1h';
+      const { batchId, entriesCount } = await runTechnicalAnalysis(timeframe, vmcBatchId);
+      
+      console.log(`基于交易量市值比率批次 #${vmcBatchId} 的技术分析成功完成，创建了技术分析批次 #${batchId}，分析了${entriesCount}个加密货币`);
+      
+      res.json({
+        success: true,
+        batchId,
+        entriesCount,
+        volumeRatioBatchId: vmcBatchId,
+        message: `成功基于交易量市值比率批次 #${vmcBatchId} 创建技术分析批次 #${batchId}，分析了 ${entriesCount} 个加密货币`
+      });
+    } catch (error) {
+      console.error(`使用交易量市值比率批次进行技术分析时出错:`, error);
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
 
   // Setup the crawler scheduler
   setupScheduler();

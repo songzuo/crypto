@@ -1056,11 +1056,16 @@ export async function runTechnicalAnalysis(timeframe: string = '1h', specificVmc
   console.log(`开始技术分析，时间框架: ${timeframe}${specificVmcBatchId ? `, 使用指定的交易量市值批次 #${specificVmcBatchId}` : ''}`);
   
   try {
+    // 查看当前技术分析批次表结构，确保正确创建
+    const schema = await db.query.technicalAnalysisBatches.findFirst();
+    console.log('技术分析批次表结构:', Object.keys(schema || {}));
+    
     // 创建一个新的分析批次
     const [batchResult] = await db.insert(technicalAnalysisBatches).values({
       entriesCount: 0, // 初始化为0，后面会更新
+      timeframe, // 时间框架
+      description: specificVmcBatchId ? `基于交易量市值比率批次 #${specificVmcBatchId}的分析` : '常规分析',
       createdAt: new Date(),
-      timeframe
     }).returning();
     
     const batchId = batchResult.id;
@@ -1091,7 +1096,7 @@ export async function runTechnicalAnalysis(timeframe: string = '1h', specificVmc
     
     // 获取前100个加密货币的交易量市值比率数据
     const ratios = await db.query.volumeToMarketCapRatios.findMany({
-      where: eq(volumeToMarketCapRatios.batchId, latestVmcBatch.id),
+      where: eq(volumeToMarketCapRatios.batchId, vmcBatch.id),
       orderBy: desc(volumeToMarketCapRatios.volumeToMarketCapRatio),
       limit: 100
     });
@@ -1156,6 +1161,12 @@ export async function runTechnicalAnalysis(timeframe: string = '1h', specificVmc
     }
     
     console.log(`技术分析批次 #${batchId} 完成，分析了 ${analysisCount} 个加密货币`);
+    
+    // 更新批次中的条目计数
+    await db.update(technicalAnalysisBatches)
+      .set({ entriesCount: analysisCount })
+      .where(eq(technicalAnalysisBatches.id, batchId));
+    
     return { batchId, entriesCount: analysisCount };
   } catch (error) {
     console.error('执行技术分析时出错:', error);
