@@ -1151,13 +1151,30 @@ export async function runTechnicalAnalysis(timeframe: string = '1h', specificVmc
     let analysisCount = 0;
     for (const ratio of ratios) {
       try {
-        // 获取货币信息
-        const crypto = await db.query.cryptocurrencies.findFirst({
-          where: eq(cryptocurrencies.id, ratio.cryptocurrencyId)
-        });
+        // 获取货币信息 - 优先使用ID，如果ID为0则使用symbol进行匹配
+        let crypto;
+        if (ratio.cryptocurrencyId !== 0) {
+          crypto = await db.query.cryptocurrencies.findFirst({
+            where: eq(cryptocurrencies.id, ratio.cryptocurrencyId)
+          });
+        } else {
+          // 使用symbol尝试匹配
+          console.log(`尝试使用symbol '${ratio.symbol}' 查找加密货币...`);
+          crypto = await db.query.cryptocurrencies.findFirst({
+            where: eq(cryptocurrencies.symbol, ratio.symbol)
+          });
+          
+          // 如果仍未找到，尝试使用name匹配
+          if (!crypto && ratio.name) {
+            console.log(`尝试使用name '${ratio.name}' 查找加密货币...`);
+            crypto = await db.query.cryptocurrencies.findFirst({
+              where: eq(cryptocurrencies.name, ratio.name)
+            });
+          }
+        }
         
         if (!crypto) {
-          console.warn(`找不到ID为${ratio.cryptocurrencyId}的加密货币`);
+          console.warn(`无法找到加密货币: ID=${ratio.cryptocurrencyId}, Symbol=${ratio.symbol}, Name=${ratio.name}`);
           continue;
         }
         
