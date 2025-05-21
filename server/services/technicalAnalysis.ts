@@ -173,8 +173,34 @@ async function fetchHistoricalPrices(symbol: string, timeframe: string = '1h', l
     await new Promise(resolve => setTimeout(resolve, delay));
   };
 
-  // 使用所有可用的数据源尝试获取价格
+  // 使用所有可用的数据源尝试获取价格或直接获取技术指标
   async function tryAllDataSources(): Promise<PriceData[]> {
+    // 尝试直接从Alpha Vantage获取技术指标
+    try {
+      console.log(`尝试直接从Alpha Vantage获取${symbol}的技术指标...`);
+      const indicators = await fetchIndicatorsDirectly(symbol, timeframe);
+      if (indicators && indicators.length > 0) {
+        console.log(`成功直接获取${symbol}的技术指标，为了保持一致性将转换为价格数据格式`);
+        // 如果成功获取了指标，转换为PriceData格式
+        return indicators.map(indicator => ({
+          timestamp: indicator.timestamp,
+          close: indicator.close || 0,
+          // 为保持一致性添加其他必要字段
+          high: indicator.close || 0,
+          low: indicator.close || 0,
+          open: indicator.close || 0,
+          // 附加技术指标字段，这些将在后续处理中被利用
+          rsi: indicator.rsi,
+          macd: indicator.macd,
+          ema: indicator.ema
+        }));
+      }
+    } catch (e) {
+      console.warn(`直接获取${symbol}技术指标失败:`, e);
+      // 如果直接获取指标失败，继续尝试获取价格数据
+    }
+    
+    // 传统方法：先获取价格，再计算指标
     const dataSources = [
       fetchFromAlphaVantage,
       fetchFromTiingo,
@@ -202,6 +228,149 @@ async function fetchHistoricalPrices(symbol: string, timeframe: string = '1h', l
     }
     
     throw new Error(`无法从所有数据源获取${symbol}的价格历史数据`);
+  }
+  
+  // 新增: 直接从Alpha Vantage获取技术指标
+  interface TechnicalIndicator {
+    timestamp: number;
+    close?: number;
+    rsi?: number;
+    macd?: { 
+      macdLine: number; 
+      signalLine: number; 
+      histogram: number;
+    };
+    ema?: number;
+  }
+  
+  async function fetchIndicatorsDirectly(symbol: string, timeframe: string): Promise<TechnicalIndicator[]> {
+    if (!ALPHA_VANTAGE_KEY) {
+      throw new Error('Alpha Vantage API key is not configured');
+    }
+    
+    // 格式化符号，移除"-USD"后缀，如"BTC-USD" -> "BTC"
+    const formattedSymbol = symbol.replace('-USD', '');
+    
+    // 设置时间间隔参数
+    const interval = timeframe === '1d' ? 'daily' : 
+                    timeframe === '1h' ? '60min' : 
+                    timeframe === '30m' ? '30min' : 
+                    timeframe === '15m' ? '15min' : 
+                    timeframe === '5m' ? '5min' : '60min';
+                    
+    // 使用RSI、MACD和EMA三个不同的调用
+    const results: TechnicalIndicator[] = [];
+    
+    try {
+      // 获取RSI
+      const rsiUrl = `https://www.alphavantage.co/query?function=RSI&symbol=${formattedSymbol}&interval=${interval}&time_period=14&series_type=close&apikey=${ALPHA_VANTAGE_KEY}`;
+      const rsiResponse = await axios.get(rsiUrl, { timeout: 5000 });
+      
+      if (rsiResponse.data && rsiResponse.data['Technical Analysis: RSI']) {
+        const rsiData = rsiResponse.data['Technical Analysis: RSI'];
+        
+        for (const [dateStr, values] of Object.entries(rsiData)) {
+          const timestamp = new Date(dateStr).getTime();
+          const existingEntry = results.find(r => r.timestamp === timestamp);
+          
+          if (existingEntry) {
+            existingEntry.rsi = parseFloat((values as any).RSI);
+          } else {
+            results.push({
+              timestamp,
+              rsi: parseFloat((values as any).RSI)
+            });
+          }
+        }
+      }
+      
+      // 获取MACD
+      const macdUrl = `https://www.alphavantage.co/query?function=MACD&symbol=${formattedSymbol}&interval=${interval}&series_type=close&apikey=${ALPHA_VANTAGE_KEY}`;
+      const macdResponse = await axios.get(macdUrl, { timeout: 5000 });
+      
+      if (macdResponse.data && macdResponse.data['Technical Analysis: MACD']) {
+        const macdData = macdResponse.data['Technical Analysis: MACD'];
+        
+        for (const [dateStr, values] of Object.entries(macdData)) {
+          const timestamp = new Date(dateStr).getTime();
+          const existingEntry = results.find(r => r.timestamp === timestamp);
+          
+          if (existingEntry) {
+            existingEntry.macd = {
+              macdLine: parseFloat((values as any).MACD),
+              signalLine: parseFloat((values as any).MACD_Signal),
+              histogram: parseFloat((values as any).MACD_Hist)
+            };
+          } else {
+            results.push({
+              timestamp,
+              macd: {
+                macdLine: parseFloat((values as any).MACD),
+                signalLine: parseFloat((values as any).MACD_Signal),
+                histogram: parseFloat((values as any).MACD_Hist)
+              }
+            });
+          }
+        }
+      }
+      
+      // 获取EMA
+      const emaUrl = `https://www.alphavantage.co/query?function=EMA&symbol=${formattedSymbol}&interval=${interval}&time_period=9&series_type=close&apikey=${ALPHA_VANTAGE_KEY}`;
+      const emaResponse = await axios.get(emaUrl, { timeout: 5000 });
+      
+      if (emaResponse.data && emaResponse.data['Technical Analysis: EMA']) {
+        const emaData = emaResponse.data['Technical Analysis: EMA'];
+        
+        for (const [dateStr, values] of Object.entries(emaData)) {
+          const timestamp = new Date(dateStr).getTime();
+          const existingEntry = results.find(r => r.timestamp === timestamp);
+          
+          if (existingEntry) {
+            existingEntry.ema = parseFloat((values as any).EMA);
+          } else {
+            results.push({
+              timestamp,
+              ema: parseFloat((values as any).EMA)
+            });
+          }
+        }
+      }
+      
+      // 获取价格数据以附加到指标上
+      try {
+        const priceUrl = `https://www.alphavantage.co/query?function=CRYPTO_INTRADAY&symbol=${formattedSymbol}&market=USD&interval=${interval}&apikey=${ALPHA_VANTAGE_KEY}`;
+        const priceResponse = await axios.get(priceUrl, { timeout: 5000 });
+        
+        if (priceResponse.data && priceResponse.data['Time Series Crypto (60min)']) {
+          const priceData = priceResponse.data['Time Series Crypto (60min)'];
+          
+          for (const [dateStr, values] of Object.entries(priceData)) {
+            const timestamp = new Date(dateStr).getTime();
+            const existingEntry = results.find(r => r.timestamp === timestamp);
+            
+            if (existingEntry) {
+              existingEntry.close = parseFloat((values as any)['4. close']);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn(`获取价格数据失败:`, e);
+        // 价格数据不是必须的，所以继续处理
+      }
+      
+      // 仅返回同时具有rsi、macd和ema的条目
+      const completeResults = results.filter(r => r.rsi && r.macd && r.ema);
+      
+      if (completeResults.length > 0) {
+        console.log(`成功直接获取${completeResults.length}个完整的技术指标数据点`);
+        return completeResults;
+      } else {
+        throw new Error('无法获取足够的完整技术指标数据点');
+      }
+    } catch (e) {
+      console.error(`直接获取技术指标失败:`, e);
+      throw e;
+    }
   }
   
   // 从Alpha Vantage获取价格数据

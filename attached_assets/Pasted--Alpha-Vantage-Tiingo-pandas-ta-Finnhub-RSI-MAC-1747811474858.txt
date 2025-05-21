@@ -1,0 +1,146 @@
+以下示例演示了如何分别使用 **Alpha Vantage**、**Tiingo**（配合 `pandas_ta` 计算）和 **Finnhub** 的免费接口，获取并计算 **RSI**、**MACD** 和 **EMA** 指标。请替换示例代码中的 `YOUR_API_KEY`/`YOUR_TIINGO_TOKEN`/`YOUR_FINNHUB_TOKEN` 为你各自平台的密钥。
+
+---
+
+## 1. Alpha Vantage（内置指标 API）
+
+Alpha Vantage 为常用技术指标提供了专门端点，无需本地计算。
+
+```python
+import requests
+
+API_KEY = "YOUR_API_KEY"
+SYMBOL  = "BTCUSD"       # 支持股票、加密等
+INTERVAL = "60min"       # 1min,5min,15min,30min,60min
+TIME_PERIOD = "14"       # 常用 RSI/EMA 计算周期
+
+base = "https://www.alphavantage.co/query"
+
+# 1. RSI
+rsi_resp = requests.get(base, params={
+    "function":    "RSI",
+    "symbol":      SYMBOL,
+    "interval":    INTERVAL,
+    "time_period": TIME_PERIOD,
+    "series_type": "close",
+    "apikey":      API_KEY
+})
+rsi_data = rsi_resp.json()["Technical Analysis: RSI"]
+
+# 2. MACD
+macd_resp = requests.get(base, params={
+    "function":    "MACD",
+    "symbol":      SYMBOL,
+    "interval":    INTERVAL,
+    "series_type": "close",
+    "apikey":      API_KEY
+})
+macd_data = macd_resp.json()["Technical Analysis: MACD"]
+
+# 3. EMA
+ema_resp = requests.get(base, params={
+    "function":    "EMA",
+    "symbol":      SYMBOL,
+    "interval":    INTERVAL,
+    "time_period": TIME_PERIOD,
+    "series_type": "close",
+    "apikey":      API_KEY
+})
+ema_data = ema_resp.json()["Technical Analysis: EMA"]
+```
+
+* **RSI/MACD/EMA** 端点文档 ([Postman API Platform][1])
+* Alpha Vantage 概览 ([Alpha Vantage][2])
+
+---
+
+## 2. Tiingo + `pandas_ta`（自行计算）
+
+Tiingo 自身不提供技术指标端点，但可免费拉取 OHLCV 数据，再借助 `pandas_ta` 计算指标。
+
+```python
+import requests
+import pandas as pd
+import pandas_ta as ta
+
+TOKEN   = "YOUR_TIINGO_TOKEN"
+SYMBOL  = "btcusd"    # Tiingo 加密时用小写，如 “btcusd”
+START   = "2025-01-01"
+END     = "2025-05-20"
+
+# 1. 获取日线 OHLCV
+url = f"https://api.tiingo.com/tiingo/crypto/prices"
+resp = requests.get(url, params={
+    "tickers": SYMBOL,
+    "startDate": START,
+    "endDate": END,
+    "resampleFreq": "1day",
+}, headers={"Content-Type":"application/json", "Authorization": f"Token {TOKEN}"})
+df = pd.DataFrame(resp.json())[["date","open","high","low","close","volume"]]
+df.set_index(pd.to_datetime(df["date"]), inplace=True)
+
+# 2. 计算 RSI, MACD, EMA
+df["RSI_14"]  = ta.rsi(df["close"], length=14)
+macd = ta.macd(df["close"], fast=12, slow=26, signal=9)
+df = df.join(macd)  # adds MACD_12_26_9, MACDh_12_26_9, MACDs_12_26_9
+df["EMA_14"]  = ta.ema(df["close"], length=14)
+```
+
+* Tiingo API 文档 ([tiingo.com][3])
+* `pandas_ta` 指标教程 ([tiingo.com][4])
+
+---
+
+## 3. Finnhub（聚合指标端点）
+
+Finnhub 提供了**聚合技术指标**端点，一次请求即可返回多个指标：
+
+```python
+import requests
+
+FINNHUB_KEY = "YOUR_FINNHUB_TOKEN"
+SYMBOL      = "AAPL"     # 支持股票、外汇、加密
+RESOLUTION  = "60"       # 1,5,15,30,60,D,W,M
+
+url = "https://finnhub.io/api/v1/indicator"
+params = {
+    "symbol":     SYMBOL,
+    "resolution": RESOLUTION,
+    "from":       1684108800,  # 时间戳, e.g. 2025-05-15 UTC
+    "to":         1684597200,  # 时间戳, e.g. 2025-05-20 UTC
+    "indicator":  "macd",      # macd, rsi, ema, sma...
+    "timeperiod": 14,
+    "token":      FINNHUB_KEY
+}
+# 获取 MACD
+macd_resp = requests.get(url, params={**params, **{"indicator":"macd"}})
+macd_data = macd_resp.json()
+
+# 获取 RSI
+rsi_resp = requests.get(url, params={**params, **{"indicator":"rsi"}})
+rsi_data = rsi_resp.json()
+
+# 获取 EMA
+ema_resp = requests.get(url, params={**params, **{"indicator":"ema"}})
+ema_data = ema_resp.json()
+```
+
+* Finnhub 技术指标文档 ([Finnhub][5])
+* 聚合指标示例 ([Finnhub][6])
+
+---
+
+## 小结
+
+1. **Alpha Vantage**：内置指标端点，一次请求直达 RSI/MACD/EMA。
+2. **Tiingo**：拉取 OHLCV，再用 `pandas_ta` 或其他库本地计算。
+3. **Finnhub**：聚合指标 API，可一次获取单个或多个指标。
+
+以上三种方法均可免费使用，数据覆盖股票、加密、外汇等多品类，并满足“今日入场—明日出场”或更高频策略的需求。
+
+[1]: https://www.postman.com/api-evangelist/blockchain/documentation/j4n0jl2/alpha-vantage?entity=request-35240-51a9c3f6-11af-4f0f-b3de-7b78541cf68f&utm_source=chatgpt.com "Alpha Vantage | Documentation | Postman API Network"
+[2]: https://www.alphavantage.co/?utm_source=chatgpt.com "Alpha Vantage: Free Stock APIs in JSON & Excel"
+[3]: https://www.tiingo.com/?utm_source=chatgpt.com "Tiingo Stock & Financial Markets API | Tiingo"
+[4]: https://www.tiingo.com/blog/technical-indicators/?utm_source=chatgpt.com "Technical Indicators: What Are They, and How Do They Work? - Tiingo"
+[5]: https://finnhub.io/docs/api/technical-indicator?utm_source=chatgpt.com "Technical Indicators API for Stocks, Forex, Crypto - Finnhub"
+[6]: https://finnhub.io/docs/api?utm_source=chatgpt.com "API Documentation | Finnhub - Free APIs for realtime stock, forex ..."
