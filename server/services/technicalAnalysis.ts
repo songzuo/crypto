@@ -1219,10 +1219,9 @@ async function calculateTechnicalIndicators(symbol: string, timeframe: string = 
     console.log(`${symbol}：尝试从Alpha Vantage直接获取MACD指标...`);
     const macdData = await fetchMACDFromAlphaVantage(symbol, timeframe);
     if (macdData !== null) {
-      result.macd = macdData.current;
-      result.previousMacd = macdData.previous;
+      result.macd = macdData;
       apiSuccessCount++;
-      console.log(`${symbol}：成功获取MACD线 = ${macdData.current.macdLine}, 信号线 = ${macdData.current.signalLine}`);
+      console.log(`${symbol}：成功获取MACD线 = ${macdData.macdLine}, 信号线 = ${macdData.signalLine}`);
     }
   } catch (error) {
     console.warn(`${symbol}：从Alpha Vantage获取MACD失败:`, error);
