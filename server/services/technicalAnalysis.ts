@@ -429,8 +429,9 @@ async function fetchRSIFromAlphaVantage(symbol: string, timeframe: string): Prom
 
 // 直接从Alpha Vantage获取MACD技术指标
 async function fetchMACDFromAlphaVantage(symbol: string, timeframe: string): Promise<{
-  current: { macdLine: number, signalLine: number, histogram: number },
-  previous?: { macdLine: number, signalLine: number, histogram: number }
+  macdLine: number,
+  signalLine: number,
+  histogram: number
 } | null> {
   if (!ALPHA_VANTAGE_KEY) {
     console.warn('Alpha Vantage API key not configured');
@@ -462,18 +463,22 @@ async function fetchMACDFromAlphaVantage(symbol: string, timeframe: string): Pro
         
         console.log(`成功从Alpha Vantage获取${symbol}的MACD指标: MACD=${macdLine}, Signal=${signalLine}, Hist=${histogram}`);
         
-        // 如果有前一天的数据，用于检测金叉/死叉
-        const result: any = {
-          current: { macdLine, signalLine, histogram }
+        // 返回当前MACD值，并单独存储前一个数据点，用于金叉/死叉检测
+        const result = { 
+          macdLine, 
+          signalLine, 
+          histogram 
         };
         
+        // 如果有前一个周期数据，保存在technicalData.previousMacd中
         if (dates.length > 1) {
           const previousDate = dates[1];
           const previousMacdLine = parseFloat(macdData[previousDate]['MACD']);
           const previousSignalLine = parseFloat(macdData[previousDate]['MACD_Signal']);
           const previousHistogram = parseFloat(macdData[previousDate]['MACD_Hist']);
           
-          result.previous = {
+          // 在调用函数内部单独设置previousMacd
+          result.previousMacd = {
             macdLine: previousMacdLine,
             signalLine: previousSignalLine,
             histogram: previousHistogram
