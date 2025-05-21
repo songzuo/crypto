@@ -1209,7 +1209,52 @@ async function calculateTechnicalIndicators(symbol: string, timeframe: string = 
   // 1. 尝试获取RSI
   try {
     console.log(`${symbol}：尝试从Alpha Vantage直接获取RSI指标...`);
-    const rsiValue = await fetchRSIFromAlphaVantage(symbol, timeframe);
+    // 调用已定义的RSI函数
+    const rsiValue = await (async function() {
+      if (!ALPHA_VANTAGE_KEY) {
+        console.warn('Alpha Vantage API key not configured');
+        return null;
+      }
+      
+      try {
+        // 格式化参数
+        const formattedSymbol = symbol.replace('-USD', '');
+        const interval = timeframeToAlphaVantageInterval(timeframe);
+        
+        // 构建API URL - 使用专门的RSI端点
+        const url = `https://www.alphavantage.co/query?function=RSI&symbol=${formattedSymbol}&interval=${interval}&time_period=14&series_type=close&apikey=${ALPHA_VANTAGE_KEY}`;
+        
+        console.log(`请求Alpha Vantage RSI数据: ${formattedSymbol}`);
+        
+        const response = await axios.get(url, { timeout: 10000 });
+        const data = response.data;
+        
+        if (data && data['Technical Analysis: RSI']) {
+          const rsiData = data['Technical Analysis: RSI'];
+          const dates = Object.keys(rsiData).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+          
+          if (dates.length > 0) {
+            const latestDate = dates[0];
+            const rsiValue = parseFloat(rsiData[latestDate]['RSI']);
+            console.log(`成功从Alpha Vantage获取${symbol}的RSI指标: ${rsiValue}`);
+            return rsiValue;
+          }
+        } else if (data && data['Note'] && data['Note'].includes('call frequency')) {
+          // API频率限制处理
+          console.warn(`Alpha Vantage API频率限制: ${data['Note']}`);
+          // 随机延迟1-3秒后可以重试
+          await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
+          return null;
+        }
+        
+        console.warn(`从Alpha Vantage获取RSI数据失败:`, data);
+        return null;
+      } catch (error) {
+        console.error(`从Alpha Vantage获取RSI指标时出错:`, error);
+        return null;
+      }
+    })();
+    
     if (rsiValue !== null) {
       result.rsi = rsiValue;
       apiSuccessCount++;
@@ -1222,7 +1267,76 @@ async function calculateTechnicalIndicators(symbol: string, timeframe: string = 
   // 2. 尝试获取MACD
   try {
     console.log(`${symbol}：尝试从Alpha Vantage直接获取MACD指标...`);
-    const macdData = await fetchMACDFromAlphaVantage(symbol, timeframe);
+    const macdData = await (async function() {
+      if (!ALPHA_VANTAGE_KEY) {
+        console.warn('Alpha Vantage API key not configured');
+        return null;
+      }
+      
+      try {
+        // 格式化参数
+        const formattedSymbol = symbol.replace('-USD', '');
+        const interval = timeframeToAlphaVantageInterval(timeframe);
+        
+        // 构建API URL - 使用专门的MACD端点
+        const url = `https://www.alphavantage.co/query?function=MACD&symbol=${formattedSymbol}&interval=${interval}&series_type=close&fastperiod=12&slowperiod=26&signalperiod=9&apikey=${ALPHA_VANTAGE_KEY}`;
+        
+        console.log(`请求Alpha Vantage MACD数据: ${formattedSymbol}`);
+        
+        const response = await axios.get(url, { timeout: 10000 });
+        const data = response.data;
+        
+        if (data && data['Technical Analysis: MACD']) {
+          const macdData = data['Technical Analysis: MACD'];
+          const dates = Object.keys(macdData).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+          
+          if (dates.length > 0) {
+            const latestDate = dates[0];
+            const macdLine = parseFloat(macdData[latestDate]['MACD']);
+            const signalLine = parseFloat(macdData[latestDate]['MACD_Signal']);
+            const histogram = parseFloat(macdData[latestDate]['MACD_Hist']);
+            
+            console.log(`成功从Alpha Vantage获取${symbol}的MACD指标: MACD=${macdLine}, Signal=${signalLine}, Hist=${histogram}`);
+            
+            // 构建返回对象
+            const result = { 
+              macdLine, 
+              signalLine, 
+              histogram 
+            };
+            
+            // 如果有前一个周期数据，用于金叉/死叉检测
+            if (dates.length > 1) {
+              const previousDate = dates[1];
+              const previousMacdLine = parseFloat(macdData[previousDate]['MACD']);
+              const previousSignalLine = parseFloat(macdData[previousDate]['MACD_Signal']);
+              const previousHistogram = parseFloat(macdData[previousDate]['MACD_Hist']);
+              
+              // 保存前一周期MACD数据
+              result.previousMacd = {
+                macdLine: previousMacdLine,
+                signalLine: previousSignalLine,
+                histogram: previousHistogram
+              };
+            }
+            
+            return result;
+          }
+        } else if (data && data['Note'] && data['Note'].includes('call frequency')) {
+          // API频率限制处理
+          console.warn(`Alpha Vantage API频率限制: ${data['Note']}`);
+          await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
+          return null;
+        }
+        
+        console.warn(`从Alpha Vantage获取MACD数据失败:`, data);
+        return null;
+      } catch (error) {
+        console.error(`从Alpha Vantage获取MACD指标时出错:`, error);
+        return null;
+      }
+    })();
+    
     if (macdData !== null) {
       result.macd = macdData;
       apiSuccessCount++;
@@ -1448,8 +1562,25 @@ function getCombinedSignal(volumeRatio: number, technicalData: TechnicalData): S
   // 获取交易量市值比率信号
   const volumeRatioSignal = getVolumeRatioSignal(volumeRatio);
   
-  // 如果没有足够的技术指标数据，仅使用交易量市值比率
-  if (!technicalData.rsi || !technicalData.macd || !technicalData.shortEma || !technicalData.longEma) {
+  // 检查是否至少有一个技术指标可用（RSI、MACD或EMA）
+  const hasAtLeastOneIndicator = (technicalData.rsi !== undefined) || 
+                               (technicalData.macd !== undefined) || 
+                               (technicalData.shortEma !== undefined && technicalData.longEma !== undefined);
+  
+  // 如果没有任何技术指标数据，返回中性信号
+  // 确保真正的技术分析必须使用至少一个技术指标，不能仅依靠交易量
+  if (!hasAtLeastOneIndicator) {
+    console.log(`${symbol}：没有技术指标数据，无法生成有效的技术分析信号，返回中性信号`);
+    return {
+      volumeRatioSignal,
+      rsiSignal: 'neutral',
+      macdSignal: 'neutral',
+      emaSignal: 'neutral',
+      combinedSignal: 'neutral',
+      signalStrength: 1,
+      recommendationType: 'position'
+    };
+  } else {
     // 增强基于交易量市值比率的分析逻辑
     let combinedSignal: 'strong_buy' | 'buy' | 'neutral' | 'sell' | 'strong_sell';
     let signalStrength: number;
