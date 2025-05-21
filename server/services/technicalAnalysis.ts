@@ -933,8 +933,8 @@ export async function runTechnicalAnalysis(timeframe: string = '1h'): Promise<{ 
         
         console.log(`分析 ${crypto.symbol} (${crypto.name})，交易量市值比率: ${ratio.volumeToMarketCapRatio}`);
         
-        // 计算技术指标
-        const technicalData = await calculateTechnicalIndicators(crypto.symbol, timeframe);
+        // 计算技术指标，将交易量市值比率传入，即使无法获取历史价格数据，也能提供基本分析
+        const technicalData = await calculateTechnicalIndicators(crypto.symbol, timeframe, ratio.volumeToMarketCapRatio);
         
         // 获取综合信号
         const signalData = getCombinedSignal(ratio.volumeToMarketCapRatio, technicalData);
