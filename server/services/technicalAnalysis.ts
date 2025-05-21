@@ -373,11 +373,378 @@ async function fetchHistoricalPrices(symbol: string, timeframe: string = '1h', l
     }
   }
   
-  // 从Alpha Vantage获取价格数据
-  async function fetchFromAlphaVantage(symbol: string, timeframe: string, limit: number): Promise<PriceData[]> {
-    if (!ALPHA_VANTAGE_KEY) {
-      throw new Error('Alpha Vantage API key is not configured');
+  // 直接从Alpha Vantage获取RSI技术指标
+async function fetchRSIFromAlphaVantage(symbol: string, timeframe: string): Promise<number | null> {
+  if (!ALPHA_VANTAGE_KEY) {
+    console.warn('Alpha Vantage API key not configured');
+    return null;
+  }
+  
+  try {
+    // 格式化参数
+    const formattedSymbol = symbol.replace('-USD', '');
+    const interval = timeframeToAlphaVantageInterval(timeframe);
+    
+    // 构建API URL - 使用专门的RSI端点
+    const url = `https://www.alphavantage.co/query?function=RSI&symbol=${formattedSymbol}&interval=${interval}&time_period=14&series_type=close&apikey=${ALPHA_VANTAGE_KEY}`;
+    
+    console.log(`请求Alpha Vantage RSI数据: ${formattedSymbol}`);
+    
+    const response = await axios.get(url, { timeout: 10000 });
+    const data = response.data;
+    
+    if (data && data['Technical Analysis: RSI']) {
+      const rsiData = data['Technical Analysis: RSI'];
+      const dates = Object.keys(rsiData).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+      
+      if (dates.length > 0) {
+        const latestDate = dates[0];
+        const rsiValue = parseFloat(rsiData[latestDate]['RSI']);
+        console.log(`成功从Alpha Vantage获取${symbol}的RSI指标: ${rsiValue}`);
+        return rsiValue;
+      }
+    } else if (data && data['Note'] && data['Note'].includes('call frequency')) {
+      // API频率限制处理
+      console.warn(`Alpha Vantage API频率限制: ${data['Note']}`);
+      // 随机延迟1-3秒后可以重试
+      await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
+      return null;
     }
+    
+    console.warn(`从Alpha Vantage获取RSI数据失败:`, data);
+    return null;
+  } catch (error) {
+    console.error(`从Alpha Vantage获取RSI指标时出错:`, error);
+    return null;
+  }
+}
+
+// 直接从Alpha Vantage获取MACD技术指标
+async function fetchMACDFromAlphaVantage(symbol: string, timeframe: string): Promise<{
+  current: { macdLine: number, signalLine: number, histogram: number },
+  previous?: { macdLine: number, signalLine: number, histogram: number }
+} | null> {
+  if (!ALPHA_VANTAGE_KEY) {
+    console.warn('Alpha Vantage API key not configured');
+    return null;
+  }
+  
+  try {
+    // 格式化参数
+    const formattedSymbol = symbol.replace('-USD', '');
+    const interval = timeframeToAlphaVantageInterval(timeframe);
+    
+    // 构建API URL - 使用专门的MACD端点
+    const url = `https://www.alphavantage.co/query?function=MACD&symbol=${formattedSymbol}&interval=${interval}&series_type=close&fastperiod=12&slowperiod=26&signalperiod=9&apikey=${ALPHA_VANTAGE_KEY}`;
+    
+    console.log(`请求Alpha Vantage MACD数据: ${formattedSymbol}`);
+    
+    const response = await axios.get(url, { timeout: 10000 });
+    const data = response.data;
+    
+    if (data && data['Technical Analysis: MACD']) {
+      const macdData = data['Technical Analysis: MACD'];
+      const dates = Object.keys(macdData).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+      
+      if (dates.length > 0) {
+        const latestDate = dates[0];
+        const macdLine = parseFloat(macdData[latestDate]['MACD']);
+        const signalLine = parseFloat(macdData[latestDate]['MACD_Signal']);
+        const histogram = parseFloat(macdData[latestDate]['MACD_Hist']);
+        
+        console.log(`成功从Alpha Vantage获取${symbol}的MACD指标: MACD=${macdLine}, Signal=${signalLine}, Hist=${histogram}`);
+        
+        // 如果有前一天的数据，用于检测金叉/死叉
+        const result: any = {
+          current: { macdLine, signalLine, histogram }
+        };
+        
+        if (dates.length > 1) {
+          const previousDate = dates[1];
+          const previousMacdLine = parseFloat(macdData[previousDate]['MACD']);
+          const previousSignalLine = parseFloat(macdData[previousDate]['MACD_Signal']);
+          const previousHistogram = parseFloat(macdData[previousDate]['MACD_Hist']);
+          
+          result.previous = {
+            macdLine: previousMacdLine,
+            signalLine: previousSignalLine,
+            histogram: previousHistogram
+          };
+        }
+        
+        return result;
+      }
+    } else if (data && data['Note'] && data['Note'].includes('call frequency')) {
+      // API频率限制处理
+      console.warn(`Alpha Vantage API频率限制: ${data['Note']}`);
+      await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
+      return null;
+    }
+    
+    console.warn(`从Alpha Vantage获取MACD数据失败:`, data);
+    return null;
+  } catch (error) {
+    console.error(`从Alpha Vantage获取MACD指标时出错:`, error);
+    return null;
+  }
+}
+
+// 直接从Alpha Vantage获取EMA技术指标
+async function fetchEMAFromAlphaVantage(symbol: string, timeframe: string): Promise<{
+  shortEma: number,
+  longEma: number,
+  previousShortEma?: number,
+  previousLongEma?: number
+} | null> {
+  if (!ALPHA_VANTAGE_KEY) {
+    console.warn('Alpha Vantage API key not configured');
+    return null;
+  }
+  
+  try {
+    // 格式化参数
+    const formattedSymbol = symbol.replace('-USD', '');
+    const interval = timeframeToAlphaVantageInterval(timeframe);
+    
+    // 获取短期EMA (9)
+    const shortEmaUrl = `https://www.alphavantage.co/query?function=EMA&symbol=${formattedSymbol}&interval=${interval}&time_period=${SHORT_EMA_PERIOD}&series_type=close&apikey=${ALPHA_VANTAGE_KEY}`;
+    console.log(`请求Alpha Vantage 短期EMA数据: ${formattedSymbol}`);
+    const shortEmaResponse = await axios.get(shortEmaUrl, { timeout: 10000 });
+    
+    // 避免API频率限制
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // 获取长期EMA (21)
+    const longEmaUrl = `https://www.alphavantage.co/query?function=EMA&symbol=${formattedSymbol}&interval=${interval}&time_period=${LONG_EMA_PERIOD}&series_type=close&apikey=${ALPHA_VANTAGE_KEY}`;
+    console.log(`请求Alpha Vantage 长期EMA数据: ${formattedSymbol}`);
+    const longEmaResponse = await axios.get(longEmaUrl, { timeout: 10000 });
+    
+    const shortEmaData = shortEmaResponse.data;
+    const longEmaData = longEmaResponse.data;
+    
+    // 检查API限制
+    if ((shortEmaData && shortEmaData['Note'] && shortEmaData['Note'].includes('call frequency')) ||
+        (longEmaData && longEmaData['Note'] && longEmaData['Note'].includes('call frequency'))) {
+      console.warn(`Alpha Vantage API频率限制`);
+      await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 3000));
+      return null;
+    }
+    
+    // 处理数据
+    if (shortEmaData['Technical Analysis: EMA'] && longEmaData['Technical Analysis: EMA']) {
+      const shortEmaValues = shortEmaData['Technical Analysis: EMA'];
+      const longEmaValues = longEmaData['Technical Analysis: EMA'];
+      
+      const shortDates = Object.keys(shortEmaValues).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+      const longDates = Object.keys(longEmaValues).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+      
+      if (shortDates.length > 0 && longDates.length > 0) {
+        const latestShortDate = shortDates[0];
+        const latestLongDate = longDates[0];
+        
+        const shortEma = parseFloat(shortEmaValues[latestShortDate]['EMA']);
+        const longEma = parseFloat(longEmaValues[latestLongDate]['EMA']);
+        
+        console.log(`成功从Alpha Vantage获取${symbol}的EMA指标: 短期EMA(${SHORT_EMA_PERIOD})=${shortEma}, 长期EMA(${LONG_EMA_PERIOD})=${longEma}`);
+        
+        const result: any = {
+          shortEma,
+          longEma
+        };
+        
+        // 如果有前一天的数据，用于检测金叉/死叉
+        if (shortDates.length > 1 && longDates.length > 1) {
+          const previousShortDate = shortDates[1];
+          const previousLongDate = longDates[1];
+          
+          result.previousShortEma = parseFloat(shortEmaValues[previousShortDate]['EMA']);
+          result.previousLongEma = parseFloat(longEmaValues[previousLongDate]['EMA']);
+        }
+        
+        return result;
+      }
+    }
+    
+    console.warn(`从Alpha Vantage获取EMA数据失败:`, shortEmaData, longEmaData);
+    return null;
+  } catch (error) {
+    console.error(`从Alpha Vantage获取EMA指标时出错:`, error);
+    return null;
+  }
+}
+
+// 从Finnhub获取技术指标集合
+async function fetchTechnicalIndicatorsFromFinnhub(symbol: string, timeframe: string): Promise<TechnicalData | null> {
+  if (!FINNHUB_API_KEY) {
+    console.warn('Finnhub API key not configured');
+    return null;
+  }
+  
+  try {
+    // 格式化参数
+    const formattedSymbol = symbol.replace('-USD', '');
+    const resolution = timeframeToFinnhubResolution(timeframe);
+    
+    // 计算时间范围（30天数据）
+    const to = Math.floor(Date.now() / 1000);
+    const from = to - 30 * 24 * 60 * 60; // 30天前
+    
+    // 获取RSI
+    const rsiUrl = `https://finnhub.io/api/v1/indicator?symbol=${formattedSymbol}&resolution=${resolution}&from=${from}&to=${to}&indicator=rsi&timeperiod=14&token=${FINNHUB_API_KEY}`;
+    console.log(`请求Finnhub RSI数据: ${formattedSymbol}`);
+    const rsiResponse = await axios.get(rsiUrl, { timeout: 10000 });
+    
+    // 避免API频率限制
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // 获取MACD
+    const macdUrl = `https://finnhub.io/api/v1/indicator?symbol=${formattedSymbol}&resolution=${resolution}&from=${from}&to=${to}&indicator=macd&token=${FINNHUB_API_KEY}`;
+    console.log(`请求Finnhub MACD数据: ${formattedSymbol}`);
+    const macdResponse = await axios.get(macdUrl, { timeout: 10000 });
+    
+    // 避免API频率限制
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // 获取EMA短期
+    const shortEmaUrl = `https://finnhub.io/api/v1/indicator?symbol=${formattedSymbol}&resolution=${resolution}&from=${from}&to=${to}&indicator=ema&timeperiod=${SHORT_EMA_PERIOD}&token=${FINNHUB_API_KEY}`;
+    console.log(`请求Finnhub 短期EMA数据: ${formattedSymbol}`);
+    const shortEmaResponse = await axios.get(shortEmaUrl, { timeout: 10000 });
+    
+    // 避免API频率限制
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // 获取EMA长期
+    const longEmaUrl = `https://finnhub.io/api/v1/indicator?symbol=${formattedSymbol}&resolution=${resolution}&from=${from}&to=${to}&indicator=ema&timeperiod=${LONG_EMA_PERIOD}&token=${FINNHUB_API_KEY}`;
+    console.log(`请求Finnhub 长期EMA数据: ${formattedSymbol}`);
+    const longEmaResponse = await axios.get(longEmaUrl, { timeout: 10000 });
+    
+    // 处理RSI数据
+    const rsiData = rsiResponse.data;
+    const rsi = rsiData && rsiData.rsi && rsiData.rsi.length > 0 ? rsiData.rsi[rsiData.rsi.length - 1] : null;
+    
+    // 处理MACD数据
+    const macdData = macdResponse.data;
+    let macd = null;
+    let previousMacd = null;
+    
+    if (macdData && macdData.macd && macdData.macdSignal && macdData.macdHist) {
+      const length = macdData.macd.length;
+      if (length > 0) {
+        macd = {
+          macdLine: macdData.macd[length - 1],
+          signalLine: macdData.macdSignal[length - 1],
+          histogram: macdData.macdHist[length - 1]
+        };
+        
+        if (length > 1) {
+          previousMacd = {
+            macdLine: macdData.macd[length - 2],
+            signalLine: macdData.macdSignal[length - 2],
+            histogram: macdData.macdHist[length - 2]
+          };
+        }
+      }
+    }
+    
+    // 处理EMA数据
+    const shortEmaData = shortEmaResponse.data;
+    const longEmaData = longEmaResponse.data;
+    let shortEma = null;
+    let longEma = null;
+    let previousShortEma = null;
+    let previousLongEma = null;
+    
+    if (shortEmaData && shortEmaData.ema && longEmaData && longEmaData.ema) {
+      const shortLength = shortEmaData.ema.length;
+      const longLength = longEmaData.ema.length;
+      
+      if (shortLength > 0 && longLength > 0) {
+        shortEma = shortEmaData.ema[shortLength - 1];
+        longEma = longEmaData.ema[longLength - 1];
+        
+        if (shortLength > 1 && longLength > 1) {
+          previousShortEma = shortEmaData.ema[shortLength - 2];
+          previousLongEma = longEmaData.ema[longLength - 2];
+        }
+      }
+    }
+    
+    // 整合结果
+    const result: TechnicalData = {};
+    
+    if (rsi !== null) {
+      result.rsi = rsi;
+      console.log(`Finnhub ${symbol} RSI: ${rsi}`);
+    }
+    
+    if (macd !== null) {
+      result.macd = macd;
+      console.log(`Finnhub ${symbol} MACD: ${macd.macdLine}, Signal: ${macd.signalLine}`);
+      
+      if (previousMacd !== null) {
+        result.previousMacd = previousMacd;
+      }
+    }
+    
+    if (shortEma !== null && longEma !== null) {
+      result.shortEma = shortEma;
+      result.longEma = longEma;
+      console.log(`Finnhub ${symbol} 短期EMA: ${shortEma}, 长期EMA: ${longEma}`);
+      
+      if (previousShortEma !== null && previousLongEma !== null) {
+        result.previousShortEma = previousShortEma;
+        result.previousLongEma = previousLongEma;
+      }
+    }
+    
+    if (Object.keys(result).length > 0) {
+      return result;
+    }
+    
+    console.warn(`从Finnhub获取技术指标数据失败`);
+    return null;
+  } catch (error) {
+    console.error(`从Finnhub获取技术指标时出错:`, error);
+    return null;
+  }
+}
+
+// 辅助函数：转换timeframe到Finnhub的resolution格式
+function timeframeToFinnhubResolution(timeframe: string): string {
+  switch (timeframe) {
+    case '1m': return '1';
+    case '5m': return '5';
+    case '15m': return '15';
+    case '30m': return '30';
+    case '1h': return '60';
+    case '4h': return '240';
+    case '1d': return 'D';
+    case '1w': return 'W';
+    case '1M': return 'M';
+    default: return '60'; // 默认1小时
+  }
+}
+
+// 辅助函数：转换timeframe到Alpha Vantage的interval格式
+function timeframeToAlphaVantageInterval(timeframe: string): string {
+  switch (timeframe) {
+    case '1m': return '1min';
+    case '5m': return '5min';
+    case '15m': return '15min';
+    case '30m': return '30min';
+    case '1h': return '60min';
+    case '1d': return 'daily';
+    case '1w': return 'weekly';
+    case '1M': return 'monthly';
+    default: return '60min'; // 默认1小时
+  }
+}
+
+// 从Alpha Vantage获取价格数据
+async function fetchFromAlphaVantage(symbol: string, timeframe: string, limit: number): Promise<PriceData[]> {
+  if (!ALPHA_VANTAGE_KEY) {
+    throw new Error('Alpha Vantage API key is not configured');
+  }
     
     // 格式化符号，移除"-USD"后缀，如"BTC-USD" -> "BTC"
     const formattedSymbol = symbol.replace('-USD', '');
