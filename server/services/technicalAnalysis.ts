@@ -34,8 +34,15 @@ interface TechnicalData {
     signalLine: number;
     histogram: number;
   };
+  previousMacd?: {
+    macdLine: number;
+    signalLine: number;
+    histogram: number;
+  };
   shortEma?: number;
   longEma?: number;
+  previousShortEma?: number;
+  previousLongEma?: number;
 }
 
 interface SignalData {
@@ -1180,6 +1187,8 @@ async function fetchFromAlphaVantage(symbol: string, timeframe: string, limit: n
 
 // 计算技术指标
 async function calculateTechnicalIndicators(symbol: string, timeframe: string = '1h', volumeToMarketCapRatio?: number): Promise<TechnicalData> {
+  console.log(`开始为${symbol}收集技术指标数据...`);
+  
   // 初始化结果对象，如果有交易量市值比率，就先添加它
   const result: TechnicalData = {};
   if (volumeToMarketCapRatio !== undefined) {
@@ -1187,63 +1196,154 @@ async function calculateTechnicalIndicators(symbol: string, timeframe: string = 
     console.log(`${symbol}：使用交易量市值比率 ${volumeToMarketCapRatio} 作为分析基础`);
   }
   
+  // 尝试直接从Alpha Vantage API获取RSI和MACD等技术指标
+  let apiSuccessCount = 0;
+  const totalApiCount = 3; // RSI, MACD, EMA
+  
+  // 1. 尝试获取RSI
   try {
-    // 获取历史价格数据
-    console.log(`${symbol}：尝试获取历史价格数据计算技术指标...`);
-    const historicalPrices = await fetchHistoricalPrices(symbol, timeframe);
-    
-    if (historicalPrices.length < 30) {
-      console.warn(`${symbol}：没有足够的历史价格数据来计算技术指标，只有${historicalPrices.length}个数据点，将使用基本交易量市值比率`);
-      return result; // 返回可能包含交易量市值比率的结果
-    }
-
-    console.log(`${symbol}：成功获取${historicalPrices.length}个历史价格数据点`);
-    
-    // 验证数据完整性
-    const validPrices = historicalPrices.filter(p => p && typeof p.close === 'number' && !isNaN(p.close));
-    if (validPrices.length < historicalPrices.length) {
-      console.warn(`${symbol}：过滤掉${historicalPrices.length - validPrices.length}个无效价格数据点`);
-    }
-    
-    if (validPrices.length < 30) {
-      console.warn(`${symbol}：过滤后剩余${validPrices.length}个数据点，不足以计算技术指标，将使用基本交易量市值比率`);
-      return result; // 返回可能包含交易量市值比率的结果
-    }
-    
-    // 确保按时间排序（新的在前）
-    validPrices.sort((a, b) => b.timestamp - a.timestamp);
-    
-    // 提取价格
-    const prices = validPrices.map(p => p.close);
-    
-    // 计算技术指标
-    try {
-      // 计算RSI
-      const rsi = calculateRSI(prices);
-      console.log(`${symbol}：RSI = ${rsi}`);
-      result.rsi = rsi;
-      
-      // 计算MACD
-      const macd = calculateMACD(prices);
-      console.log(`${symbol}：MACD线 = ${macd.macdLine}, 信号线 = ${macd.signalLine}, 直方图 = ${macd.histogram}`);
-      result.macd = macd;
-      
-      // 计算EMA
-      const shortEma = calculateEMA(prices, SHORT_EMA_PERIOD);
-      const longEma = calculateEMA(prices, LONG_EMA_PERIOD);
-      console.log(`${symbol}：短期EMA(${SHORT_EMA_PERIOD}) = ${shortEma}, 长期EMA(${LONG_EMA_PERIOD}) = ${longEma}`);
-      result.shortEma = shortEma;
-      result.longEma = longEma;
-      
-      return result;
-    } catch (e) {
-      console.error(`${symbol}：计算技术指标时出错:`, e);
-      return result; // 返回可能包含交易量市值比率的结果
+    console.log(`${symbol}：尝试从Alpha Vantage直接获取RSI指标...`);
+    const rsiValue = await fetchRSIFromAlphaVantage(symbol, timeframe);
+    if (rsiValue !== null) {
+      result.rsi = rsiValue;
+      apiSuccessCount++;
+      console.log(`${symbol}：成功获取RSI = ${rsiValue}`);
     }
   } catch (error) {
-    console.error(`${symbol}：计算技术指标过程中出错:`, error);
-    return result; // 返回可能包含交易量市值比率的结果
+    console.warn(`${symbol}：从Alpha Vantage获取RSI失败:`, error);
   }
+  
+  // 2. 尝试获取MACD
+  try {
+    console.log(`${symbol}：尝试从Alpha Vantage直接获取MACD指标...`);
+    const macdData = await fetchMACDFromAlphaVantage(symbol, timeframe);
+    if (macdData !== null) {
+      result.macd = macdData.current;
+      result.previousMacd = macdData.previous;
+      apiSuccessCount++;
+      console.log(`${symbol}：成功获取MACD线 = ${macdData.current.macdLine}, 信号线 = ${macdData.current.signalLine}`);
+    }
+  } catch (error) {
+    console.warn(`${symbol}：从Alpha Vantage获取MACD失败:`, error);
+  }
+  
+  // 3. 尝试获取EMA
+  try {
+    console.log(`${symbol}：尝试从Alpha Vantage直接获取EMA指标...`);
+    const emaData = await fetchEMAFromAlphaVantage(symbol, timeframe);
+    if (emaData !== null) {
+      result.shortEma = emaData.shortEma;
+      result.longEma = emaData.longEma;
+      result.previousShortEma = emaData.previousShortEma;
+      result.previousLongEma = emaData.previousLongEma;
+      apiSuccessCount++;
+      console.log(`${symbol}：成功获取短期EMA = ${emaData.shortEma}, 长期EMA = ${emaData.longEma}`);
+    }
+  } catch (error) {
+    console.warn(`${symbol}：从Alpha Vantage获取EMA失败:`, error);
+  }
+  
+  // 如果部分Alpha Vantage API失败，尝试使用Finnhub作为备选
+  if (apiSuccessCount < totalApiCount && FINNHUB_API_KEY) {
+    try {
+      console.log(`${symbol}：部分Alpha Vantage API失败，尝试使用Finnhub API补充...`);
+      const finnhubData = await fetchTechnicalIndicatorsFromFinnhub(symbol, timeframe);
+      if (finnhubData) {
+        // 只填充缺失的指标
+        if (!result.rsi && finnhubData.rsi) result.rsi = finnhubData.rsi;
+        if (!result.macd && finnhubData.macd) result.macd = finnhubData.macd;
+        if (!result.previousMacd && finnhubData.previousMacd) result.previousMacd = finnhubData.previousMacd;
+        if (!result.shortEma && finnhubData.shortEma) result.shortEma = finnhubData.shortEma;
+        if (!result.longEma && finnhubData.longEma) result.longEma = finnhubData.longEma;
+        if (!result.previousShortEma && finnhubData.previousShortEma) result.previousShortEma = finnhubData.previousShortEma;
+        if (!result.previousLongEma && finnhubData.previousLongEma) result.previousLongEma = finnhubData.previousLongEma;
+        
+        console.log(`${symbol}：成功从Finnhub补充部分技术指标数据`);
+      }
+    } catch (error) {
+      console.warn(`${symbol}：从Finnhub获取技术指标失败:`, error);
+    }
+  }
+  
+  // 检查是否通过API获取了任何技术指标
+  const hasApiTechnicalData = result.rsi !== undefined || 
+                              (result.macd !== undefined && result.macd !== null) || 
+                              (result.shortEma !== undefined && result.longEma !== undefined);
+  
+  // 如果API都失败，尝试获取历史价格并自己计算指标
+  if (!hasApiTechnicalData) {
+    try {
+      console.log(`${symbol}：所有API获取指标失败，尝试获取历史价格数据并计算...`);
+      const historicalPrices = await fetchHistoricalPrices(symbol, timeframe);
+      
+      if (historicalPrices.length >= 30) {
+        console.log(`${symbol}：成功获取${historicalPrices.length}个历史价格数据点`);
+        
+        // 验证数据完整性
+        const validPrices = historicalPrices.filter(p => p && typeof p.close === 'number' && !isNaN(p.close));
+        if (validPrices.length >= 30) {
+          // 确保按时间排序（新的在前）
+          validPrices.sort((a, b) => b.timestamp - a.timestamp);
+          
+          // 提取价格
+          const prices = validPrices.map(p => p.close);
+          
+          // 计算技术指标
+          try {
+            // 计算RSI（如果API未获取）
+            if (result.rsi === undefined) {
+              result.rsi = calculateRSI(prices);
+              console.log(`${symbol}：已计算RSI = ${result.rsi}`);
+            }
+            
+            // 计算MACD（如果API未获取）
+            if (result.macd === undefined) {
+              result.macd = calculateMACD(prices);
+              console.log(`${symbol}：已计算MACD线 = ${result.macd.macdLine}, 信号线 = ${result.macd.signalLine}`);
+            }
+            
+            // 计算EMA（如果API未获取）
+            if (result.shortEma === undefined || result.longEma === undefined) {
+              result.shortEma = calculateEMA(prices, SHORT_EMA_PERIOD);
+              result.longEma = calculateEMA(prices, LONG_EMA_PERIOD);
+              console.log(`${symbol}：已计算短期EMA = ${result.shortEma}, 长期EMA = ${result.longEma}`);
+            }
+            
+            // 尝试计算前一个数据点的指标，用于检测金叉/死叉
+            if (validPrices.length > 30) {
+              const previousPrices = validPrices.slice(1).map(p => p.close);
+              
+              if (result.previousMacd === undefined) {
+                result.previousMacd = calculateMACD(previousPrices);
+              }
+              if (result.previousShortEma === undefined) {
+                result.previousShortEma = calculateEMA(previousPrices, SHORT_EMA_PERIOD);
+              }
+              if (result.previousLongEma === undefined) {
+                result.previousLongEma = calculateEMA(previousPrices, LONG_EMA_PERIOD);
+              }
+            }
+          } catch (error) {
+            console.error(`${symbol}：计算技术指标时出错:`, error);
+          }
+        } else {
+          console.warn(`${symbol}：过滤后剩余${validPrices.length}个有效数据点，不足以计算技术指标`);
+        }
+      } else {
+        console.warn(`${symbol}：没有足够的历史价格数据来计算技术指标，只有${historicalPrices.length}个数据点`);
+      }
+    } catch (error) {
+      console.warn(`${symbol}：获取历史价格数据失败:`, error);
+    }
+  }
+  
+  // 最终检查是否有任何技术指标数据
+  const hasTechnicalData = result.rsi !== undefined || 
+                          (result.macd !== undefined && result.macd !== null) || 
+                          (result.shortEma !== undefined && result.longEma !== undefined);
+                         
+  console.log(`${symbol}技术指标收集完成，已获取数据: ${JSON.stringify(Object.keys(result))}`);
+  return result;
 }
 
 // 判断交易量市值比率信号
