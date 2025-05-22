@@ -1467,9 +1467,9 @@ async function calculateTechnicalIndicators(symbol: string, timeframe: string = 
 
 // 判断交易量市值比率信号
 function getVolumeRatioSignal(ratio: number): 'buy' | 'sell' | 'neutral' {
-  if (ratio >= 0.20) { // 20%以上为强烈买入信号
+  if (ratio >= 0.20) { // 20%以上为买入信号倾向，但仍需技术指标确认
     return 'buy';
-  } else if (ratio >= 0.05) { // 5%-20%之间为卖出信号
+  } else if (ratio >= 0.05) { // 5%-20%之间为卖出信号倾向，但仍需技术指标确认
     return 'sell';
   } else { // 5%以下为中性信号
     return 'neutral';
@@ -1706,15 +1706,34 @@ function getCombinedSignal(volumeRatio: number, technicalData: TechnicalData): S
   const hasTechBuyConfirmation = volumeRatioSignal === 'buy' && techBuySignals > 0;
   const hasTechSellConfirmation = volumeRatioSignal === 'sell' && techSellSignals > 0;
   
-  // 如果没有技术指标确认交易量信号，则重置相应的信号计数
-  if (volumeRatioSignal === 'buy' && !hasTechBuyConfirmation) {
-    buySignals = 0; // 重置买入信号，因为没有技术指标确认
-    console.log(`${symbol}：交易量显示买入信号，但没有技术指标确认，忽略此信号`);
+  // 特殊检查GHIBLI案例：RSI在中性区域（30-70之间）不应产生信号
+  let rsiBuyIgnored = false;
+  let rsiSellIgnored = false;
+  
+  if (technicalData.rsi !== undefined && technicalData.rsi > RSI_OVERSOLD && technicalData.rsi < RSI_OVERBOUGHT) {
+    // RSI在中性区域，仅基于RSI的信号应被忽略
+    console.log(`RSI为${technicalData.rsi.toFixed(2)}，处于中性区域，不应单独产生买入或卖出信号`);
+    rsiBuyIgnored = rsiSignal === 'buy';
+    rsiSellIgnored = rsiSignal === 'sell';
   }
   
-  if (volumeRatioSignal === 'sell' && !hasTechSellConfirmation) {
-    sellSignals = 0; // 重置卖出信号，因为没有技术指标确认
-    console.log(`${symbol}：交易量显示卖出信号，但没有技术指标确认，忽略此信号`);
+  // 更严格的确认逻辑：
+  // 1. 如果交易量显示买入，但没有技术指标确认，或者唯一的技术信号是中性区域的RSI，则忽略
+  const realTechBuySignals = techBuySignals - (rsiBuyIgnored ? 1 : 0);
+  const realTechSellSignals = techSellSignals - (rsiSellIgnored ? 1 : 0);
+  
+  const isValidBuySignal = volumeRatioSignal === 'buy' && realTechBuySignals > 0;
+  const isValidSellSignal = volumeRatioSignal === 'sell' && realTechSellSignals > 0;
+  
+  // 如果没有技术指标确认交易量信号，则重置相应的信号计数
+  if (volumeRatioSignal === 'buy' && !isValidBuySignal) {
+    buySignals = 0; // 重置买入信号，因为没有有效的技术指标确认
+    console.log(`交易量显示买入信号，但没有有效的技术指标确认，忽略此信号`);
+  }
+  
+  if (volumeRatioSignal === 'sell' && !isValidSellSignal) {
+    sellSignals = 0; // 重置卖出信号，因为没有有效的技术指标确认
+    console.log(`交易量显示卖出信号，但没有有效的技术指标确认，忽略此信号`);
   }
 
   // 确定综合信号和信号强度
