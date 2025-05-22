@@ -1662,21 +1662,60 @@ function getCombinedSignal(volumeRatio: number, technicalData: TechnicalData): S
     console.log(`EMA信号(短期:${technicalData.shortEma.toFixed(2)}, 长期:${technicalData.longEma.toFixed(2)}): ${emaSignal}`);
   }
 
-  // 计算买入和卖出信号数量
+  // 计算买入和卖出信号数量，并确保至少有一个技术指标与交易量方向一致
   let buySignals = 0;
   let sellSignals = 0;
-
+  
+  // 技术指标买入信号计数
+  let techBuySignals = 0;
+  let techSellSignals = 0;
+  
+  // 交易量信号
   if (volumeRatioSignal === 'buy') buySignals++;
   if (volumeRatioSignal === 'sell') sellSignals++;
   
-  if (rsiSignal === 'buy') buySignals++;
-  if (rsiSignal === 'sell') sellSignals++;
+  // 技术指标信号
+  if (rsiSignal === 'buy') {
+    buySignals++;
+    techBuySignals++;
+  }
+  if (rsiSignal === 'sell') {
+    sellSignals++;
+    techSellSignals++;
+  }
   
-  if (macdSignal === 'buy') buySignals++;
-  if (macdSignal === 'sell') sellSignals++;
+  if (macdSignal === 'buy') {
+    buySignals++;
+    techBuySignals++;
+  }
+  if (macdSignal === 'sell') {
+    sellSignals++;
+    techSellSignals++;
+  }
   
-  if (emaSignal === 'buy') buySignals++;
-  if (emaSignal === 'sell') sellSignals++;
+  if (emaSignal === 'buy') {
+    buySignals++;
+    techBuySignals++;
+  }
+  if (emaSignal === 'sell') {
+    sellSignals++;
+    techSellSignals++;
+  }
+  
+  // 验证是否至少有一个技术指标与交易量方向一致
+  const hasTechBuyConfirmation = volumeRatioSignal === 'buy' && techBuySignals > 0;
+  const hasTechSellConfirmation = volumeRatioSignal === 'sell' && techSellSignals > 0;
+  
+  // 如果没有技术指标确认交易量信号，则重置相应的信号计数
+  if (volumeRatioSignal === 'buy' && !hasTechBuyConfirmation) {
+    buySignals = 0; // 重置买入信号，因为没有技术指标确认
+    console.log(`${symbol}：交易量显示买入信号，但没有技术指标确认，忽略此信号`);
+  }
+  
+  if (volumeRatioSignal === 'sell' && !hasTechSellConfirmation) {
+    sellSignals = 0; // 重置卖出信号，因为没有技术指标确认
+    console.log(`${symbol}：交易量显示卖出信号，但没有技术指标确认，忽略此信号`);
+  }
 
   // 确定综合信号和信号强度
   let combinedSignal: 'strong_buy' | 'buy' | 'neutral' | 'sell' | 'strong_sell';
