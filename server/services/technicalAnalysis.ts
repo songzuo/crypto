@@ -60,11 +60,11 @@ interface SignalData {
 const RSI_PERIOD = 14;
 const RSI_OVERSOLD = 30;
 const RSI_OVERBOUGHT = 70;
-const MACD_FAST_PERIOD = 12;
-const MACD_SLOW_PERIOD = 26;
+const MACD_FAST_PERIOD = 8;  // 从12减少到8，提高对价格变动的敏感度
+const MACD_SLOW_PERIOD = 17; // 从26减少到17，提高对价格变动的敏感度
 const MACD_SIGNAL_PERIOD = 9;
-const SHORT_EMA_PERIOD = 9;
-const LONG_EMA_PERIOD = 21;
+const SHORT_EMA_PERIOD = 5;  // 从9减少到5，提高对价格变动的敏感度
+const LONG_EMA_PERIOD = 13;  // 从21减少到13，提高对价格变动的敏感度
 
 // 配置各API接口密钥
 const ALPHA_VANTAGE_KEY = process.env.ALPHA_VANTAGE_API_KEY;
