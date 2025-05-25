@@ -58,8 +58,8 @@ interface SignalData {
 
 // 配置常量
 const RSI_PERIOD = 14;
-const RSI_OVERSOLD = 30;
-const RSI_OVERBOUGHT = 70;
+const RSI_OVERSOLD = 40;  // 从30调整到40，使买入信号条件更宽松
+const RSI_OVERBOUGHT = 60;  // 从70调整到60，使卖出信号条件更宽松
 const MACD_FAST_PERIOD = 8;  // 从12减少到8，提高对价格变动的敏感度
 const MACD_SLOW_PERIOD = 17; // 从26减少到17，提高对价格变动的敏感度
 const MACD_SIGNAL_PERIOD = 9;
