@@ -1728,35 +1728,41 @@ function getCombinedSignal(volumeRatio: number, technicalData: TechnicalData): S
   const realTechBuySignals = techBuySignals - (rsiBuyIgnored ? 1 : 0);
   const realTechSellSignals = techSellSignals - (rsiSellIgnored ? 1 : 0);
   
-  // 关键修复：必须有至少一个有效的技术指标支持交易量信号
-  const hasValidTechnicalData = (technicalData.rsi !== undefined && technicalData.rsi !== null) ||
-                               (technicalData.macd !== undefined) ||
-                               (technicalData.shortEma !== undefined && technicalData.longEma !== undefined);
+  // 关键修复：必须有至少一个有效的技术指标产生明确的买入/卖出信号才能支持交易量信号
+  // 仅仅有技术数据是不够的，必须有技术指标发出明确的非中性信号
+  const hasValidTechnicalBuySignal = (rsiSignal === 'buy' && !rsiBuyIgnored) || 
+                                     (macdSignal === 'buy') || 
+                                     (emaSignal === 'buy');
   
-  const isValidBuySignal = volumeRatioSignal === 'buy' && realTechBuySignals > 0 && hasValidTechnicalData;
-  const isValidSellSignal = volumeRatioSignal === 'sell' && realTechSellSignals > 0 && hasValidTechnicalData;
+  const hasValidTechnicalSellSignal = (rsiSignal === 'sell' && !rsiSellIgnored) || 
+                                      (macdSignal === 'sell') || 
+                                      (emaSignal === 'sell');
+  
+  const isValidBuySignal = volumeRatioSignal === 'buy' && hasValidTechnicalBuySignal;
+  const isValidSellSignal = volumeRatioSignal === 'sell' && hasValidTechnicalSellSignal;
   
   // 如果没有技术指标确认交易量信号，则重置相应的信号计数
   if (volumeRatioSignal === 'buy' && !isValidBuySignal) {
     buySignals = 0; // 重置买入信号，因为没有有效的技术指标确认
-    console.log(`交易量显示买入信号，但没有有效的技术指标确认（realTechBuySignals=${realTechBuySignals}, hasValidTechnicalData=${hasValidTechnicalData}），忽略此信号`);
+    console.log(`[${symbol}] 交易量显示买入信号，但没有技术指标明确支持（RSI=${rsiSignal}, MACD=${macdSignal}, EMA=${emaSignal}），强制设为中性`);
   }
   
   if (volumeRatioSignal === 'sell' && !isValidSellSignal) {
     sellSignals = 0; // 重置卖出信号，因为没有有效的技术指标确认
-    console.log(`交易量显示卖出信号，但没有有效的技术指标确认（realTechSellSignals=${realTechSellSignals}, hasValidTechnicalData=${hasValidTechnicalData}），忽略此信号`);
+    console.log(`[${symbol}] 交易量显示卖出信号，但没有技术指标明确支持（RSI=${rsiSignal}, MACD=${macdSignal}, EMA=${emaSignal}），强制设为中性`);
   }
   
-  // 特别处理：如果只有RSI在中性区域且无其他技术指标，强制设为中性
-  if (hasValidTechnicalData && 
-      technicalData.rsi !== undefined && 
-      technicalData.rsi >= RSI_OVERSOLD && 
-      technicalData.rsi <= RSI_OVERBOUGHT &&
-      !technicalData.macd && 
-      (!technicalData.shortEma || !technicalData.longEma)) {
-    console.log(`只有RSI数据(${technicalData.rsi.toFixed(2)})且在中性区域，无其他技术指标确认，强制设为中性信号`);
-    buySignals = 0;
-    sellSignals = 0;
+  // 特别处理：确保算法严格要求技术指标支持
+  // 如果所有技术指标都是中性，强制忽略交易量信号
+  if (rsiSignal === 'neutral' && macdSignal === 'neutral' && emaSignal === 'neutral') {
+    if (buySignals > 0) {
+      console.log(`[${symbol}] 所有技术指标都为中性（RSI=${technicalData.rsi?.toFixed(2)}, MACD=${macdSignal}, EMA=${emaSignal}），强制忽略交易量买入信号`);
+      buySignals = 0;
+    }
+    if (sellSignals > 0) {
+      console.log(`[${symbol}] 所有技术指标都为中性（RSI=${technicalData.rsi?.toFixed(2)}, MACD=${macdSignal}, EMA=${emaSignal}），强制忽略交易量卖出信号`);
+      sellSignals = 0;
+    }
   }
 
   // 确定综合信号和信号强度

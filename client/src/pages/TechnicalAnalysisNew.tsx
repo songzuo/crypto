@@ -29,6 +29,8 @@ interface TechnicalAnalysisEntry {
   volumeRatioSignal: string | null;
   rsiValue: number | null;
   rsiSignal: string | null;
+  rsiDataStartTime: string | null;
+  rsiDataEndTime: string | null;
   macdLine: number | null;
   signalLine: number | null;
   histogram: number | null;
