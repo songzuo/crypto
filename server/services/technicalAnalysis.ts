@@ -1740,6 +1740,22 @@ function getCombinedSignal(volumeRatio: number, technicalData: TechnicalData): S
   let combinedSignal: 'strong_buy' | 'buy' | 'neutral' | 'sell' | 'strong_sell';
   let signalStrength: number;
   
+  // 添加RSI极端值否决机制
+  if (technicalData.rsi !== undefined) {
+    // 如果RSI极度超买（>75），强制否决任何买入信号
+    if (technicalData.rsi > 75 && buySignals > 0) {
+      console.log(`RSI为${technicalData.rsi.toFixed(2)}，极度超买，否决所有买入信号`);
+      buySignals = 0;
+      sellSignals = Math.max(sellSignals, 2); // 至少给予卖出信号
+    }
+    // 如果RSI极度超卖（<25），强制否决任何卖出信号
+    else if (technicalData.rsi < 25 && sellSignals > 0) {
+      console.log(`RSI为${technicalData.rsi.toFixed(2)}，极度超卖，否决所有卖出信号`);
+      sellSignals = 0;
+      buySignals = Math.max(buySignals, 2); // 至少给予买入信号
+    }
+  }
+  
   if (buySignals >= 3) {
     combinedSignal = 'strong_buy';
     signalStrength = 5;
