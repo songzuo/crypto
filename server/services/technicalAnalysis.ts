@@ -30,6 +30,8 @@ interface TechnicalData {
   volumeToMarketCapRatio?: number;
   rsi?: number;
   previousRSI?: number; // 添加前一个周期的RSI值
+  rsiDataStartTime?: Date; // RSI数据的最早时间
+  rsiDataEndTime?: Date; // RSI数据的最晚时间
   macd?: {
     macdLine: number;
     signalLine: number;
@@ -1404,6 +1406,10 @@ async function calculateTechnicalIndicators(symbol: string, timeframe: string = 
           // 确保按时间排序（新的在前）
           validPrices.sort((a, b) => b.timestamp - a.timestamp);
           
+          // 记录RSI数据时间范围
+          result.rsiDataEndTime = new Date(validPrices[0].timestamp); // 最新时间
+          result.rsiDataStartTime = new Date(validPrices[validPrices.length - 1].timestamp); // 最早时间
+          
           // 提取价格
           const prices = validPrices.map(p => p.close);
           
@@ -1412,7 +1418,7 @@ async function calculateTechnicalIndicators(symbol: string, timeframe: string = 
             // 计算RSI（如果API未获取）
             if (result.rsi === undefined) {
               result.rsi = calculateRSI(prices);
-              console.log(`${symbol}：已计算RSI = ${result.rsi}`);
+              console.log(`${symbol}：已计算RSI = ${result.rsi}，数据时间范围: ${result.rsiDataStartTime.toISOString()} 到 ${result.rsiDataEndTime.toISOString()}`);
             }
             
             // 计算MACD（如果API未获取）
@@ -1893,6 +1899,8 @@ export async function runTechnicalAnalysis(timeframe: string = '1h', specificVmc
           name: crypto.name,
           volumeToMarketCapRatio: ratio.volumeToMarketCapRatio,
           rsiValue: technicalData.rsi || null,
+          rsiDataStartTime: technicalData.rsiDataStartTime || null,
+          rsiDataEndTime: technicalData.rsiDataEndTime || null,
           macdLine: technicalData.macd?.macdLine || null,
           signalLine: technicalData.macd?.signalLine || null,
           histogram: technicalData.macd?.histogram || null,

@@ -245,6 +245,8 @@ export const technicalAnalysisEntries = pgTable("technical_analysis_entries", {
   // RSI 分析
   rsiValue: real("rsi_value"), // RSI值
   rsiSignal: text("rsi_signal"), // RSI信号: "buy", "sell", "neutral"
+  rsiDataStartTime: timestamp("rsi_data_start_time"), // RSI数据的最早时间
+  rsiDataEndTime: timestamp("rsi_data_end_time"), // RSI数据的最晚时间
   // MACD 分析
   macdLine: real("macd_line"), // MACD快线
   signalLine: real("signal_line"), // MACD慢线
