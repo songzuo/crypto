@@ -253,6 +253,11 @@ export default function TechnicalAnalysisNew() {
             ) : (
               <>最新技术分析结果</>
             )}
+            {resultsData?.entries?.length > 0 && resultsData.entries[0].rsiDataStartTime && resultsData.entries[0].rsiDataEndTime && (
+              <div className="text-sm text-muted-foreground mt-1">
+                RSI数据时间范围: {formatDate(resultsData.entries[0].rsiDataStartTime)} - {formatDate(resultsData.entries[0].rsiDataEndTime)}
+              </div>
+            )}
           </CardDescription>
           <Tabs 
             defaultValue="all" 
