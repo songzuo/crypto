@@ -1668,88 +1668,13 @@ function getCombinedSignal(volumeRatio: number, technicalData: TechnicalData): S
     console.log(`EMA信号(短期:${technicalData.shortEma.toFixed(2)}, 长期:${technicalData.longEma.toFixed(2)}): ${emaSignal}`);
   }
 
-  // 计算买入和卖出信号数量，并确保至少有一个技术指标与交易量方向一致
+  // 核心逻辑：技术指标 AND 交易量信号 (仅4行)
   let buySignals = 0;
   let sellSignals = 0;
   
-  // 技术指标买入信号计数
-  let techBuySignals = 0;
-  let techSellSignals = 0;
-  
-  // 交易量信号暂时不计分，需要技术指标确认
-  // if (volumeRatioSignal === 'buy') buySignals++;
-  // if (volumeRatioSignal === 'sell') sellSignals++;
-  
-  // 技术指标信号
-  if (rsiSignal === 'buy') {
-    buySignals++;
-    techBuySignals++;
-  }
-  if (rsiSignal === 'sell') {
-    sellSignals++;
-    techSellSignals++;
-  }
-  
-  if (macdSignal === 'buy') {
-    buySignals++;
-    techBuySignals++;
-  }
-  if (macdSignal === 'sell') {
-    sellSignals++;
-    techSellSignals++;
-  }
-  
-  if (emaSignal === 'buy') {
-    buySignals++;
-    techBuySignals++;
-  }
-  if (emaSignal === 'sell') {
-    sellSignals++;
-    techSellSignals++;
-  }
-  
-  // 验证是否至少有一个技术指标与交易量方向一致
-  const hasTechBuyConfirmation = volumeRatioSignal === 'buy' && techBuySignals > 0;
-  const hasTechSellConfirmation = volumeRatioSignal === 'sell' && techSellSignals > 0;
-  
-  // 特殊检查GHIBLI案例：RSI在中性区域（30-70之间）不应产生信号
-  let rsiBuyIgnored = false;
-  let rsiSellIgnored = false;
-  
-  if (technicalData.rsi !== undefined && technicalData.rsi > RSI_OVERSOLD && technicalData.rsi < RSI_OVERBOUGHT) {
-    // RSI在中性区域，仅基于RSI的信号应被忽略
-    console.log(`RSI为${technicalData.rsi.toFixed(2)}，处于中性区域，不应单独产生买入或卖出信号`);
-    rsiBuyIgnored = rsiSignal === 'buy';
-    rsiSellIgnored = rsiSignal === 'sell';
-  }
-  
-  // 更严格的确认逻辑：
-  // 1. 如果交易量显示买入，但没有技术指标确认，或者唯一的技术信号是中性区域的RSI，则忽略
-  const realTechBuySignals = techBuySignals - (rsiBuyIgnored ? 1 : 0);
-  const realTechSellSignals = techSellSignals - (rsiSellIgnored ? 1 : 0);
-  
-  // 关键修复：必须有至少一个有效的技术指标产生明确的买入/卖出信号才能支持交易量信号
-  // 仅仅有技术数据是不够的，必须有技术指标发出明确的非中性信号
-  const hasValidTechnicalBuySignal = (rsiSignal === 'buy' && !rsiBuyIgnored) || 
-                                     (macdSignal === 'buy') || 
-                                     (emaSignal === 'buy');
-  
-  const hasValidTechnicalSellSignal = (rsiSignal === 'sell' && !rsiSellIgnored) || 
-                                      (macdSignal === 'sell') || 
-                                      (emaSignal === 'sell');
-  
-  const isValidBuySignal = volumeRatioSignal === 'buy' && hasValidTechnicalBuySignal;
-  const isValidSellSignal = volumeRatioSignal === 'sell' && hasValidTechnicalSellSignal;
-  
-  // 只有当技术指标确认时，才给交易量信号加分
-  if (isValidBuySignal) {
-    buySignals++; // 交易量买入信号得到技术指标确认
-  }
-  if (isValidSellSignal) {
-    sellSignals++; // 交易量卖出信号得到技术指标确认
-  }
-  
-  // 信号验证已在源头完成，无需额外处理
+  // 只有技术指标发出明确信号 且 交易量信号一致时，才产生信号
+  if ((rsiSignal === 'buy' || macdSignal === 'buy' || emaSignal === 'buy') && volumeRatioSignal === 'buy') buySignals = 2;
+  if ((rsiSignal === 'sell' || macdSignal === 'sell' || emaSignal === 'sell') && volumeRatioSignal === 'sell') sellSignals = 2;
 
   // 确定综合信号和信号强度
   let combinedSignal: 'strong_buy' | 'buy' | 'neutral' | 'sell' | 'strong_sell';
