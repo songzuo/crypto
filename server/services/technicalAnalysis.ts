@@ -1431,7 +1431,16 @@ async function calculateTechnicalIndicators(symbol: string, timeframe: string = 
             if (result.shortEma === undefined || result.longEma === undefined) {
               result.shortEma = calculateEMA(prices, SHORT_EMA_PERIOD);
               result.longEma = calculateEMA(prices, LONG_EMA_PERIOD);
-              console.log(`${symbol}：已计算短期EMA = ${result.shortEma}, 长期EMA = ${result.longEma}`);
+              
+              // 诊断EMA计算结果
+              const priceDiff = Math.max(...prices) - Math.min(...prices);
+              const emaDiff = Math.abs(result.shortEma - result.longEma);
+              console.log(`${symbol}：价格范围 ${Math.min(...prices).toFixed(4)}-${Math.max(...prices).toFixed(4)} (差异:${priceDiff.toFixed(4)}), 短期EMA=${result.shortEma}, 长期EMA=${result.longEma} (差异:${emaDiff.toFixed(4)})`);
+              
+              // 如果价格变化太小，两条EMA会非常接近，这是正常的
+              if (priceDiff < 0.01) {
+                console.log(`${symbol}：价格变化极小，EMA差异小属于正常现象`);
+              }
             }
             
             // 尝试计算前一个数据点的指标，用于检测金叉/死叉
