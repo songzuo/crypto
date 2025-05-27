@@ -1500,20 +1500,15 @@ function getVolumeRatioSignal(priceData: PriceData[]): 'buy' | 'sell' | 'neutral
 
 // 从RSI获取信号
 function getRSISignal(rsi: number, previousRSI?: number): 'buy' | 'sell' | 'neutral' {
-  // 买入信号：RSI降至30以下并回升
-  if (previousRSI && rsi <= RSI_OVERSOLD && rsi > previousRSI) {
-    return 'buy'; // RSI在超卖区间并回升，强烈买入信号
+  // 超卖区域：RSI < 40 → 买入信号
+  if (rsi < RSI_OVERSOLD) {
+    return 'buy';
   }
-  // 卖出信号：RSI升至70以上并回落
-  else if (previousRSI && rsi >= RSI_OVERBOUGHT && rsi < previousRSI) {
-    return 'sell'; // RSI在超买区间并回落，强烈卖出信号
+  // 超买区域：RSI > 60 → 卖出信号
+  else if (rsi > RSI_OVERBOUGHT) {
+    return 'sell';
   }
-  // 备用信号判断（当没有前一个周期数据时）
-  else if (rsi < RSI_OVERSOLD) {
-    return 'buy'; // RSI低于30，超卖信号
-  } else if (rsi > RSI_OVERBOUGHT) {
-    return 'sell'; // RSI高于70，超买信号
-  }
+  // 中性区域：40 <= RSI <= 60
   return 'neutral';
 }
 
