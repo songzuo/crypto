@@ -1472,12 +1472,28 @@ async function calculateTechnicalIndicators(symbol: string, timeframe: string = 
 }
 
 // 判断交易量市值比率信号
-function getVolumeRatioSignal(ratio: number): 'buy' | 'sell' | 'neutral' {
-  if (ratio >= 0.20) { // 20%以上为买入信号倾向，但仍需技术指标确认
+function getVolumeRatioSignal(priceData: PriceData[]): 'buy' | 'sell' | 'neutral' {
+  if (priceData.length < 3) return 'neutral';
+  
+  // 计算最近3个周期的价格和交易量变化
+  const recent = priceData[0];
+  const previous = priceData[1];
+  const beforePrevious = priceData[2];
+  
+  const priceChange = (recent.close - previous.close) / previous.close;
+  const volumeChange = recent.volume && previous.volume ? 
+    (recent.volume - previous.volume) / previous.volume : 0;
+  
+  // 放量上涨：价格上升且交易量增加
+  if (priceChange > 0.02 && volumeChange > 0.1) { // 价格上涨2%以上，交易量增加10%以上
     return 'buy';
-  } else if (ratio >= 0.05) { // 5%-20%之间为卖出信号倾向，但仍需技术指标确认
+  }
+  // 放量下跌：价格下降且交易量增加  
+  else if (priceChange < -0.02 && volumeChange > 0.1) { // 价格下跌2%以上，交易量增加10%以上
     return 'sell';
-  } else { // 5%以下为中性信号
+  }
+  // 缩量变化：动能不足
+  else {
     return 'neutral';
   }
 }
@@ -1564,9 +1580,10 @@ function getEMASignal(
 }
 
 // 获取综合信号
-function getCombinedSignal(volumeRatio: number, technicalData: TechnicalData): SignalData {
-  // 获取交易量市值比率信号
-  const volumeRatioSignal = getVolumeRatioSignal(volumeRatio);
+function getCombinedSignal(volumeRatio: number, technicalData: TechnicalData, priceData?: PriceData[]): SignalData {
+  // 获取基于价格和交易量变化的正确信号
+  const volumeRatioSignal = priceData && priceData.length >= 3 ? 
+    getVolumeRatioSignal(priceData) : 'neutral';
   
   // 检查是否至少有一个技术指标可用（RSI、MACD或EMA）
   const hasAtLeastOneIndicator = (technicalData.rsi !== undefined) || 
@@ -1822,8 +1839,16 @@ export async function runTechnicalAnalysis(timeframe: string = '1h', specificVmc
         // 计算技术指标，将交易量市值比率传入，即使无法获取历史价格数据，也能提供基本分析
         const technicalData = await calculateTechnicalIndicators(crypto.symbol, timeframe, ratio.volumeToMarketCapRatio);
         
-        // 获取综合信号
-        const signalData = getCombinedSignal(ratio.volumeToMarketCapRatio, technicalData);
+        // 获取历史价格数据用于正确的交易量信号判断
+        let priceData: PriceData[] = [];
+        try {
+          priceData = await fetchHistoricalPrices(crypto.symbol, timeframe, 5); // 只需要最近5个数据点
+        } catch (error) {
+          console.log(`无法获取${crypto.symbol}的价格数据，使用中性交易量信号`);
+        }
+        
+        // 获取综合信号（传递历史价格数据）
+        const signalData = getCombinedSignal(ratio.volumeToMarketCapRatio, technicalData, priceData);
         
         // 存储分析结果
         await db.insert(technicalAnalysisEntries).values({
