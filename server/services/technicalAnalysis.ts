@@ -1676,9 +1676,9 @@ function getCombinedSignal(volumeRatio: number, technicalData: TechnicalData): S
   let techBuySignals = 0;
   let techSellSignals = 0;
   
-  // 交易量信号
-  if (volumeRatioSignal === 'buy') buySignals++;
-  if (volumeRatioSignal === 'sell') sellSignals++;
+  // 交易量信号暂时不计分，需要技术指标确认
+  // if (volumeRatioSignal === 'buy') buySignals++;
+  // if (volumeRatioSignal === 'sell') sellSignals++;
   
   // 技术指标信号
   if (rsiSignal === 'buy') {
@@ -1741,29 +1741,15 @@ function getCombinedSignal(volumeRatio: number, technicalData: TechnicalData): S
   const isValidBuySignal = volumeRatioSignal === 'buy' && hasValidTechnicalBuySignal;
   const isValidSellSignal = volumeRatioSignal === 'sell' && hasValidTechnicalSellSignal;
   
-  // 如果没有技术指标确认交易量信号，则重置相应的信号计数
-  if (volumeRatioSignal === 'buy' && !isValidBuySignal) {
-    buySignals = 0; // 重置买入信号，因为没有有效的技术指标确认
-    console.log(`[${symbol}] 交易量显示买入信号，但没有技术指标明确支持（RSI=${rsiSignal}, MACD=${macdSignal}, EMA=${emaSignal}），强制设为中性`);
+  // 只有当技术指标确认时，才给交易量信号加分
+  if (isValidBuySignal) {
+    buySignals++; // 交易量买入信号得到技术指标确认
+  }
+  if (isValidSellSignal) {
+    sellSignals++; // 交易量卖出信号得到技术指标确认
   }
   
-  if (volumeRatioSignal === 'sell' && !isValidSellSignal) {
-    sellSignals = 0; // 重置卖出信号，因为没有有效的技术指标确认
-    console.log(`[${symbol}] 交易量显示卖出信号，但没有技术指标明确支持（RSI=${rsiSignal}, MACD=${macdSignal}, EMA=${emaSignal}），强制设为中性`);
-  }
-  
-  // 特别处理：确保算法严格要求技术指标支持
-  // 如果所有技术指标都是中性，强制忽略交易量信号
-  if (rsiSignal === 'neutral' && macdSignal === 'neutral' && emaSignal === 'neutral') {
-    if (buySignals > 0) {
-      console.log(`[${symbol}] 所有技术指标都为中性（RSI=${technicalData.rsi?.toFixed(2)}, MACD=${macdSignal}, EMA=${emaSignal}），强制忽略交易量买入信号`);
-      buySignals = 0;
-    }
-    if (sellSignals > 0) {
-      console.log(`[${symbol}] 所有技术指标都为中性（RSI=${technicalData.rsi?.toFixed(2)}, MACD=${macdSignal}, EMA=${emaSignal}），强制忽略交易量卖出信号`);
-      sellSignals = 0;
-    }
-  }
+  // 信号验证已在源头完成，无需额外处理
 
   // 确定综合信号和信号强度
   let combinedSignal: 'strong_buy' | 'buy' | 'neutral' | 'sell' | 'strong_sell';
