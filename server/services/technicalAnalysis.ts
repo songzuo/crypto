@@ -1429,17 +1429,27 @@ async function calculateTechnicalIndicators(symbol: string, timeframe: string = 
             
             // 计算EMA（如果API未获取）
             if (result.shortEma === undefined || result.longEma === undefined) {
-              result.shortEma = calculateEMA(prices, SHORT_EMA_PERIOD);
-              result.longEma = calculateEMA(prices, LONG_EMA_PERIOD);
+              // 确保有足够的数据点计算长期EMA
+              if (prices.length >= LONG_EMA_PERIOD) {
+                result.shortEma = calculateEMA(prices, SHORT_EMA_PERIOD);
+                result.longEma = calculateEMA(prices, LONG_EMA_PERIOD);
+              } else if (prices.length >= SHORT_EMA_PERIOD) {
+                // 如果数据点不足计算长期EMA，使用可用数据点的最大值
+                result.shortEma = calculateEMA(prices, SHORT_EMA_PERIOD);
+                result.longEma = calculateEMA(prices, Math.min(prices.length, 10)); // 使用10作为备用长期周期
+                console.log(`${symbol}：数据点不足(${prices.length})，使用备用长期EMA周期(10)`);
+              } else {
+                // 数据点太少，无法计算有效的EMA
+                console.log(`${symbol}：数据点过少(${prices.length})，无法计算EMA`);
+                result.shortEma = undefined;
+                result.longEma = undefined;
+              }
               
-              // 诊断EMA计算结果
-              const priceDiff = Math.max(...prices) - Math.min(...prices);
-              const emaDiff = Math.abs(result.shortEma - result.longEma);
-              console.log(`${symbol}：价格范围 ${Math.min(...prices).toFixed(4)}-${Math.max(...prices).toFixed(4)} (差异:${priceDiff.toFixed(4)}), 短期EMA=${result.shortEma}, 长期EMA=${result.longEma} (差异:${emaDiff.toFixed(4)})`);
-              
-              // 如果价格变化太小，两条EMA会非常接近，这是正常的
-              if (priceDiff < 0.01) {
-                console.log(`${symbol}：价格变化极小，EMA差异小属于正常现象`);
+              if (result.shortEma !== undefined && result.longEma !== undefined) {
+                // 诊断EMA计算结果
+                const priceDiff = Math.max(...prices) - Math.min(...prices);
+                const emaDiff = Math.abs(result.shortEma - result.longEma);
+                console.log(`${symbol}：价格范围 ${Math.min(...prices).toFixed(4)}-${Math.max(...prices).toFixed(4)}, 短期EMA=${result.shortEma}, 长期EMA=${result.longEma} (差异:${emaDiff.toFixed(4)})`);
               }
             }
             
