@@ -1588,7 +1588,7 @@ function getCombinedSignal(volumeRatio: number, technicalData: TechnicalData, pr
   // 如果没有任何技术指标数据，返回中性信号
   // 确保真正的技术分析必须使用至少一个技术指标，不能仅依靠交易量
   if (!hasAtLeastOneIndicator) {
-    console.log(`${symbol}：没有技术指标数据，无法生成有效的技术分析信号，返回中性信号`);
+    console.log(`没有技术指标数据，无法生成有效的技术分析信号，返回中性信号`);
     return {
       volumeRatioSignal,
       rsiSignal: 'neutral',
