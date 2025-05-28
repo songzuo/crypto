@@ -502,6 +502,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // 测试简单RSI信号判断
+  app.get('/api/test-rsi-signals', async (req, res) => {
+    try {
+      // 简单直接的RSI信号测试
+      function testRSISignal(rsi: number): string {
+        if (rsi < 30) return 'buy';      // 超卖买入
+        if (rsi > 70) return 'sell';     // 超买卖出
+        return 'neutral';                // 中性区域
+      }
+
+      const testCases = [
+        { name: 'MUBARAK', rsi: 34.03 },
+        { name: 'MERL', rsi: 29.92 },
+        { name: 'HIPPO', rsi: 35.57 },
+        { name: 'BANK', rsi: 27.71 },
+        { name: 'ZERO', rsi: 25.38 }
+      ];
+
+      const results = testCases.map(test => ({
+        name: test.name,
+        rsi: test.rsi,
+        expectedSignal: testRSISignal(test.rsi),
+        explanation: test.rsi < 30 ? '超卖，应该买入' : 
+                    test.rsi > 70 ? '超买，应该卖出' : 
+                    '中性区域，持有'
+      }));
+
+      res.json({
+        message: '简单RSI信号测试',
+        results,
+        summary: `买入信号: ${results.filter(r => r.expectedSignal === 'buy').length}个, 卖出信号: ${results.filter(r => r.expectedSignal === 'sell').length}个, 中性信号: ${results.filter(r => r.expectedSignal === 'neutral').length}个`
+      });
+
+    } catch (error) {
+      console.error('RSI信号测试失败:', error);
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
   // Setup the crawler scheduler
   setupScheduler();
 

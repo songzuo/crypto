@@ -1517,18 +1517,11 @@ function getVolumeRatioSignal(priceData: PriceData[]): 'buy' | 'sell' | 'neutral
   }
 }
 
-// 从RSI获取信号
-function getRSISignal(rsi: number, previousRSI?: number): 'buy' | 'sell' | 'neutral' {
-  // 超卖区域：RSI < 40 → 买入信号
-  if (rsi < RSI_OVERSOLD) {
-    return 'buy';
-  }
-  // 超买区域：RSI > 60 → 卖出信号
-  else if (rsi > RSI_OVERBOUGHT) {
-    return 'sell';
-  }
-  // 中性区域：40 <= RSI <= 60
-  return 'neutral';
+// 从RSI获取信号 - 完全重写
+function getRSISignal(rsi: number): 'buy' | 'sell' | 'neutral' {
+  if (rsi < 30) return 'buy';      // 超卖买入
+  if (rsi > 70) return 'sell';     // 超买卖出
+  return 'neutral';                // 中性区域
 }
 
 // 从MACD获取信号
