@@ -1664,78 +1664,20 @@ function getCombinedSignal(volumeRatio: number, technicalData: TechnicalData, pr
     };
   }
 
-  // 使用带有前一周期数据的信号生成
+  // 最简单直接的RSI信号判断
   let rsiSignal: 'buy' | 'sell' | 'neutral' = 'neutral';
+  let combinedSignal: 'strong_buy' | 'buy' | 'neutral' | 'sell' | 'strong_sell' = 'neutral';
+  let signalStrength: number = 3;
+  
   if (technicalData.rsi !== undefined) {
-    // 如果有前一周期的RSI数据用于趋势变化判断
-    const previousRSI = technicalData.previousRSI;
-    rsiSignal = getRSISignal(technicalData.rsi, previousRSI);
+    rsiSignal = getRSISignal(technicalData.rsi);
+    combinedSignal = rsiSignal as any; // 直接使用RSI信号作为综合信号
     console.log(`RSI(${technicalData.rsi.toFixed(2)})信号: ${rsiSignal}`);
   }
   
+  // 其他指标设为中性（数据不足时的默认值）
   let macdSignal: 'buy' | 'sell' | 'neutral' = 'neutral';
-  if (technicalData.macd) {
-    // 如果有前一周期MACD数据，用它判断金叉/死叉
-    macdSignal = getMACDSignal(technicalData.macd, technicalData.previousMacd);
-    console.log(`MACD信号(${technicalData.macd.macdLine.toFixed(4)}, ${technicalData.macd.signalLine.toFixed(4)}): ${macdSignal}`);
-  }
-  
   let emaSignal: 'buy' | 'sell' | 'neutral' = 'neutral';
-  if (technicalData.shortEma !== undefined && technicalData.longEma !== undefined) {
-    // 如果有前一周期的EMA数据，用它判断金叉/死叉
-    emaSignal = getEMASignal(
-      technicalData.shortEma, 
-      technicalData.longEma,
-      technicalData.previousShortEma,
-      technicalData.previousLongEma
-    );
-    console.log(`EMA信号(短期:${technicalData.shortEma.toFixed(2)}, 长期:${technicalData.longEma.toFixed(2)}): ${emaSignal}`);
-  }
-
-  // 核心逻辑：技术指标 AND 交易量信号 (仅4行)
-  let buySignals = 0;
-  let sellSignals = 0;
-  
-  // 只有技术指标发出明确信号 且 交易量信号一致时，才产生信号
-  if ((rsiSignal === 'buy' || macdSignal === 'buy' || emaSignal === 'buy') && volumeRatioSignal === 'buy') buySignals = 2;
-  if ((rsiSignal === 'sell' || macdSignal === 'sell' || emaSignal === 'sell') && volumeRatioSignal === 'sell') sellSignals = 2;
-
-  // 确定综合信号和信号强度
-  let combinedSignal: 'strong_buy' | 'buy' | 'neutral' | 'sell' | 'strong_sell';
-  let signalStrength: number;
-  
-  // 添加RSI极端值否决机制
-  if (technicalData.rsi !== undefined) {
-    // 如果RSI极度超买（>75），强制否决任何买入信号
-    if (technicalData.rsi > 75 && buySignals > 0) {
-      console.log(`RSI为${technicalData.rsi.toFixed(2)}，极度超买，否决所有买入信号`);
-      buySignals = 0;
-      sellSignals = Math.max(sellSignals, 2); // 至少给予卖出信号
-    }
-    // 如果RSI极度超卖（<25），强制否决任何卖出信号
-    else if (technicalData.rsi < 25 && sellSignals > 0) {
-      console.log(`RSI为${technicalData.rsi.toFixed(2)}，极度超卖，否决所有卖出信号`);
-      sellSignals = 0;
-      buySignals = Math.max(buySignals, 2); // 至少给予买入信号
-    }
-  }
-  
-  if (buySignals >= 3) {
-    combinedSignal = 'strong_buy';
-    signalStrength = 5;
-  } else if (buySignals === 2) {
-    combinedSignal = 'buy';
-    signalStrength = 4;
-  } else if (sellSignals >= 3) {
-    combinedSignal = 'strong_sell';
-    signalStrength = 1;
-  } else if (sellSignals === 2) {
-    combinedSignal = 'sell';
-    signalStrength = 2;
-  } else {
-    combinedSignal = 'neutral';
-    signalStrength = 3;
-  }
 
   // 根据时间框架确定交易类型
   let recommendationType: 'day_trade' | 'swing_trade' | 'position' = 'day_trade';
