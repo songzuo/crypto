@@ -1597,72 +1597,8 @@ function getCombinedSignal(volumeRatio: number, technicalData: TechnicalData, pr
                                (technicalData.macd !== undefined) || 
                                (technicalData.shortEma !== undefined && technicalData.longEma !== undefined);
   
-  // 如果没有任何技术指标数据，返回中性信号
-  // 确保真正的技术分析必须使用至少一个技术指标，不能仅依靠交易量
-  if (!hasAtLeastOneIndicator) {
-    console.log(`没有技术指标数据，无法生成有效的技术分析信号，返回中性信号`);
-    return {
-      volumeRatioSignal,
-      rsiSignal: 'neutral',
-      macdSignal: 'neutral',
-      emaSignal: 'neutral',
-      combinedSignal: 'neutral',
-      signalStrength: 1,
-      recommendationType: 'position'
-    };
-  } else {
-    // 增强基于交易量市值比率的分析逻辑
-    let combinedSignal: 'strong_buy' | 'buy' | 'neutral' | 'sell' | 'strong_sell';
-    let signalStrength: number;
-    let recommendationType: 'day_trade' | 'swing_trade' | 'position' = 'day_trade';
-    
-    // 基于交易量市值比率的更细致判断
-    if (volumeRatio > 50) {
-      // 极高的交易量市值比率，强烈买入信号
-      combinedSignal = 'strong_buy';
-      signalStrength = 5;
-      recommendationType = 'day_trade'; // 适合短线
-    } else if (volumeRatio > 20) {
-      // 高交易量市值比率，买入信号
-      combinedSignal = 'buy';
-      signalStrength = 4;
-      recommendationType = 'day_trade';
-    } else if (volumeRatio > 10) {
-      // 中高交易量市值比率
-      combinedSignal = volumeRatioSignal === 'buy' ? 'buy' : 'neutral';
-      signalStrength = 3;
-      recommendationType = 'swing_trade';
-    } else if (volumeRatio > 5) {
-      // 中等交易量市值比率
-      combinedSignal = volumeRatioSignal === 'buy' ? 'buy' : 
-                     volumeRatioSignal === 'sell' ? 'sell' : 'neutral';
-      signalStrength = volumeRatioSignal === 'buy' ? 3 : 
-                     volumeRatioSignal === 'sell' ? 2 : 3;
-      recommendationType = 'swing_trade';
-    } else if (volumeRatio < 1) {
-      // 交易量极低
-      combinedSignal = 'sell';
-      signalStrength = 2;
-      recommendationType = 'position';
-    } else {
-      // 默认情况
-      combinedSignal = volumeRatioSignal === 'buy' ? 'buy' : 
-                     volumeRatioSignal === 'sell' ? 'sell' : 'neutral';
-      signalStrength = volumeRatioSignal === 'buy' ? 3 : 
-                     volumeRatioSignal === 'sell' ? 2 : 3;
-      recommendationType = 'position';
-    }
-    
-    return {
-      volumeRatioSignal,
-      rsiSignal: 'neutral',
-      macdSignal: 'neutral',
-      emaSignal: 'neutral',
-      combinedSignal,
-      signalStrength,
-      recommendationType
-    };
-  }
+  // 删除所有复杂逻辑，使用最简单的RSI判断
+  // 这里是技术分析的核心逻辑，不应该有任何其他复杂判断
 
   // 最简单直接的RSI信号判断
   let rsiSignal: 'buy' | 'sell' | 'neutral' = 'neutral';
