@@ -1600,23 +1600,30 @@ function getCombinedSignal(volumeRatio: number, technicalData: TechnicalData, pr
   // 删除所有复杂逻辑，使用最简单的RSI判断
   // 这里是技术分析的核心逻辑，不应该有任何其他复杂判断
 
-  // 最简单直接的RSI信号判断
+  // 彻底简化：只使用RSI信号判断
   let rsiSignal: 'buy' | 'sell' | 'neutral' = 'neutral';
   let combinedSignal: 'strong_buy' | 'buy' | 'neutral' | 'sell' | 'strong_sell' = 'neutral';
   let signalStrength: number = 3;
+  let recommendationType: 'day_trade' | 'swing_trade' | 'position' = 'day_trade';
   
   if (technicalData.rsi !== undefined) {
-    rsiSignal = getRSISignal(technicalData.rsi);
-    combinedSignal = rsiSignal as any; // 直接使用RSI信号作为综合信号
+    // 使用最直接的RSI判断逻辑
+    if (technicalData.rsi < 30) {
+      rsiSignal = 'buy';
+      combinedSignal = 'buy';
+    } else if (technicalData.rsi > 70) {
+      rsiSignal = 'sell'; 
+      combinedSignal = 'sell';
+    } else {
+      rsiSignal = 'neutral';
+      combinedSignal = 'neutral';
+    }
     console.log(`RSI(${technicalData.rsi.toFixed(2)})信号: ${rsiSignal}`);
   }
   
-  // 其他指标设为中性（数据不足时的默认值）
+  // 其他指标设为中性
   let macdSignal: 'buy' | 'sell' | 'neutral' = 'neutral';
   let emaSignal: 'buy' | 'sell' | 'neutral' = 'neutral';
-
-  // 根据时间框架确定交易类型
-  let recommendationType: 'day_trade' | 'swing_trade' | 'position' = 'day_trade';
 
   return {
     volumeRatioSignal,
