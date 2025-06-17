@@ -19,13 +19,16 @@ interface VolatilityBatch {
 interface VolatilityEntry {
   symbol: string;
   name: string;
-  currentRatio: number;
-  previousRatio: number;
-  volatilityScore: number;
+  period: '7d' | '30d';
   volatilityPercentage: number;
+  standardDeviation: number;
   direction: 'up' | 'down' | 'stable';
-  rank: number;
   category: string;
+  rank: number;
+  dataPoints: number;
+  averageRatio: number;
+  minRatio: number;
+  maxRatio: number;
 }
 
 const VolatilityAnalysis = () => {
@@ -33,6 +36,7 @@ const VolatilityAnalysis = () => {
   
   const [selectedDirection, setSelectedDirection] = useState<string>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedPeriod, setSelectedPeriod] = useState<'7d' | '30d'>('7d');
   const [currentPage, setCurrentPage] = useState(1);
   const [isRunningAnalysis, setIsRunningAnalysis] = useState(false);
 
@@ -48,7 +52,7 @@ const VolatilityAnalysis = () => {
 
   // 获取波动性分析结果
   const { data: resultsData, isLoading, refetch } = useQuery({
-    queryKey: ['/api/volatility-analysis/results', selectedDirection, selectedCategory, currentPage],
+    queryKey: ['/api/volatility-analysis/results', selectedDirection, selectedCategory, selectedPeriod, currentPage],
     queryFn: async () => {
       const params = new URLSearchParams({
         page: currentPage.toString(),
@@ -57,6 +61,7 @@ const VolatilityAnalysis = () => {
       
       if (selectedDirection) params.append('direction', selectedDirection);
       if (selectedCategory) params.append('category', selectedCategory);
+      params.append('period', selectedPeriod);
       
       const response = await fetch(`/api/volatility-analysis/results?${params}`);
       if (!response.ok) throw new Error('获取分析结果失败');
@@ -217,6 +222,16 @@ const VolatilityAnalysis = () => {
               </SelectContent>
             </Select>
 
+            <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="选择分析周期" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7d">7天平均波动</SelectItem>
+                <SelectItem value="30d">30天平均波动</SelectItem>
+              </SelectContent>
+            </Select>
+
             <Button 
               variant="outline" 
               onClick={() => {
@@ -252,12 +267,12 @@ const VolatilityAnalysis = () => {
                   <TableRow>
                     <TableHead className="w-16">排名</TableHead>
                     <TableHead>币种</TableHead>
-                    <TableHead>波动评分</TableHead>
                     <TableHead>波动幅度</TableHead>
+                    <TableHead>标准差</TableHead>
                     <TableHead>方向</TableHead>
                     <TableHead>风险等级</TableHead>
-                    <TableHead>当前比率</TableHead>
-                    <TableHead>之前比率</TableHead>
+                    <TableHead>数据点</TableHead>
+                    <TableHead>平均比率</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
