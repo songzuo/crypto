@@ -44,6 +44,11 @@ export const navItems = [
     label: "Technical Analysis",
     path: "/technical-analysis",
     icon: "ri-bar-chart-line"
+  },
+  {
+    label: "Volatility Analysis",
+    path: "/volatility-analysis",
+    icon: "ri-pulse-line"
   }
 ];
 

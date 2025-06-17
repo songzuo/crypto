@@ -32,6 +32,7 @@ function Router() {
         <Route path="/trends" component={Trends} />
         <Route path="/volume-ratio" component={VolumeRatio} />
         <Route path="/technical-analysis" component={TechnicalAnalysisNew} />
+        <Route path="/volatility-analysis" component={VolatilityAnalysis} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

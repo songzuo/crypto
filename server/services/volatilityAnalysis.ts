@@ -115,9 +115,11 @@ async function getLatestVolumeRatioBatches(): Promise<{
   }
 
   // 按创建时间排序，获取最新的两个批次
-  const sortedBatches = batches.data.sort((a, b) => 
-    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
+  const sortedBatches = batches.data.sort((a, b) => {
+    const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return dateB - dateA;
+  });
 
   return {
     current: sortedBatches[0],
