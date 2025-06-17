@@ -11,6 +11,7 @@ import { eq, sql } from "drizzle-orm";
 import { analyzeNewsWordTrends } from "./services/wordTrendAnalyzer";
 import { getCachedTrendAnalysisResult } from "./services/cacheStore";
 import { getLatestTechnicalAnalysis, getTechnicalAnalysisBatches, getTechnicalAnalysisByBatchId, manualRunTechnicalAnalysis, runTechnicalAnalysis } from "./services/technicalAnalysis";
+import { runSimpleVolatilityAnalysis, getVolatilityResults } from "./services/simpleVolatilityAnalysis";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // 后端健康检查API
@@ -498,6 +499,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error(`使用交易量市值比率批次进行技术分析时出错:`, error);
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // 波动性分析API路由
+  app.get('/api/volatility-analysis/results', async (req, res) => {
+    try {
+      const direction = req.query.direction as string;
+      const category = req.query.category as string;
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 30;
+      
+      const results = await getVolatilityResults(direction, category, page, limit);
+      res.json(results);
+    } catch (error) {
+      console.error('获取波动性分析结果失败:', error);
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  app.get('/api/volatility-analysis/batches', async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 5;
+      const batches = await storage.getVolumeToMarketCapBatches(1, limit);
+      res.json(batches);
+    } catch (error) {
+      console.error('获取波动性分析批次失败:', error);
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  app.post('/api/volatility-analysis/run', async (req, res) => {
+    try {
+      const results = await runSimpleVolatilityAnalysis();
+      res.json({ 
+        success: true, 
+        message: `波动性分析完成，共分析 ${results.length} 个币种`,
+        results: results.slice(0, 10) // 返回前10个作为预览
+      });
+    } catch (error) {
+      console.error('运行波动性分析失败:', error);
       res.status(500).json({ error: (error as Error).message });
     }
   });
