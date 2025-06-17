@@ -31,8 +31,8 @@ interface VolatilityEntry {
 const VolatilityAnalysis = () => {
   console.log('波动性分析页面加载，显示历史数据');
   
-  const [selectedDirection, setSelectedDirection] = useState<string>('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [selectedDirection, setSelectedDirection] = useState<string>('all');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [isRunningAnalysis, setIsRunningAnalysis] = useState(false);
 
@@ -183,7 +183,7 @@ const VolatilityAnalysis = () => {
                 <SelectValue placeholder="选择波动方向" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">全部方向</SelectItem>
+                <SelectItem value="all">全部方向</SelectItem>
                 <SelectItem value="up">上涨 ↑</SelectItem>
                 <SelectItem value="down">下跌 ↓</SelectItem>
                 <SelectItem value="stable">稳定 →</SelectItem>
@@ -195,7 +195,7 @@ const VolatilityAnalysis = () => {
                 <SelectValue placeholder="选择风险等级" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">全部等级</SelectItem>
+                <SelectItem value="all">全部等级</SelectItem>
                 <SelectItem value="极高">极高风险</SelectItem>
                 <SelectItem value="高">高风险</SelectItem>
                 <SelectItem value="中">中等风险</SelectItem>
@@ -207,8 +207,8 @@ const VolatilityAnalysis = () => {
             <Button 
               variant="outline" 
               onClick={() => {
-                setSelectedDirection('');
-                setSelectedCategory('');
+                setSelectedDirection('all');
+                setSelectedCategory('all');
                 setCurrentPage(1);
               }}
             >

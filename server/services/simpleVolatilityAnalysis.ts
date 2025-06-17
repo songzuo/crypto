@@ -132,11 +132,11 @@ export async function getVolatilityResults(
   
   let filtered = results;
   
-  if (direction) {
+  if (direction && direction !== 'all') {
     filtered = filtered.filter(r => r.direction === direction);
   }
   
-  if (category) {
+  if (category && category !== 'all') {
     filtered = filtered.filter(r => r.category === category);
   }
   
