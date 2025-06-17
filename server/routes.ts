@@ -503,28 +503,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 波动性分析API路由
+  // 波动性分析API路由 - 使用数据库存储的结果
   app.get('/api/volatility-analysis/results', async (req, res) => {
     try {
       const direction = req.query.direction as string;
       const category = req.query.category as string;
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 30;
-      
       const period = (req.query.period as string) || '7d';
       
-      // 使用基于价格的波动性分析
-      const { getFilteredPriceVolatility } = await import('./services/priceVolatilityAnalysis');
+      // 使用新的数据库存储波动性分析服务
+      const { getLatestVolatilityAnalysis } = await import('./services/volatilityAnalysisService');
       
-      const results = await getFilteredPriceVolatility(
-        period as '7d' | '30d',
-        direction,
-        category,
+      // 从数据库获取最新结果（如果过期会自动重新计算）
+      const allResults = await getLatestVolatilityAnalysis(period as '7d' | '30d');
+      
+      // 应用筛选条件
+      let filteredResults = allResults;
+      
+      if (direction && direction !== 'all' && direction !== 'undefined') {
+        filteredResults = filteredResults.filter(r => r.direction === direction);
+      }
+      
+      if (category && category !== 'all' && category !== 'undefined') {
+        filteredResults = filteredResults.filter(r => r.category === category);
+      }
+      
+      // 应用分页
+      const offset = (page - 1) * limit;
+      const paginatedResults = filteredResults.slice(offset, offset + limit);
+      
+      console.log(`筛选条件: direction=${direction}, category=${category}`);
+      console.log(`筛选前: ${allResults.length}个结果, 筛选后: ${filteredResults.length}个结果`);
+      
+      res.json({ 
+        entries: paginatedResults,
+        total: filteredResults.length,
         page,
-        limit
-      );
-      
-      res.json(results);
+        limit,
+        period,
+        filters: { direction, category }
+      });
     } catch (error) {
       console.error('获取波动性分析结果失败:', error);
       res.status(500).json({ error: (error as Error).message });
