@@ -511,17 +511,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 30;
       
-      const results = await getVolatilityResults(direction, category, page, limit);
+      const period = (req.query.period as string) || '7d';
       
-      // 确保返回正确的数据结构
-      const response = {
-        entries: Array.isArray(results) ? results : (results.entries || []),
-        total: Array.isArray(results) ? results.length : (results.total || 0),
-        page: page,
-        limit: limit
-      };
+      // 导入多周期波动性分析
+      const { getFilteredMultiPeriodVolatility } = await import('./services/multiPeriodVolatilityAnalysis');
       
-      res.json(response);
+      const results = await getFilteredMultiPeriodVolatility(
+        period as '7d' | '30d',
+        direction,
+        category,
+        page,
+        limit
+      );
+      
+      res.json(results);
     } catch (error) {
       console.error('获取波动性分析结果失败:', error);
       res.status(500).json({ error: (error as Error).message });
