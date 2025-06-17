@@ -22,44 +22,67 @@ export interface PriceVolatilityResult {
 }
 
 /**
- * 计算价格波动率（基于实际价格数据的日均波动率）
+ * 计算市值波动率（基于市值数据和时间戳的准确日均波动率）
+ */
+function calculateMarketCapVolatility(marketCaps: number[], timestamps: Date[]): {
+  mean: number;
+  standardDeviation: number;
+  volatilityPercentage: number;
+} {
+  if (marketCaps.length < 2 || timestamps.length !== marketCaps.length) {
+    return { mean: 0, standardDeviation: 0, volatilityPercentage: 0 };
+  }
+  
+  // 计算每个时间段的市值变化和时间间隔
+  const periodChanges: number[] = [];
+  
+  for (let i = 1; i < marketCaps.length; i++) {
+    if (marketCaps[i-1] > 0 && marketCaps[i] > 0) {
+      // 市值变化百分比：(本次市值 - 上次市值) / 上次市值
+      const percentChange = Math.abs((marketCaps[i] - marketCaps[i-1]) / marketCaps[i-1]);
+      
+      // 计算时间间隔（小时）
+      const timeIntervalHours = (timestamps[i].getTime() - timestamps[i-1].getTime()) / (1000 * 60 * 60);
+      
+      // 转换为日波动率：如果时间间隔不是24小时，按比例调整
+      if (timeIntervalHours > 0) {
+        const dailyVolatility = (percentChange / timeIntervalHours) * 24;
+        periodChanges.push(dailyVolatility * 100); // 转换为百分比
+      }
+    }
+  }
+  
+  if (periodChanges.length === 0) {
+    return { mean: 0, standardDeviation: 0, volatilityPercentage: 0 };
+  }
+  
+  // 计算平均日波动率
+  const avgDailyVolatility = periodChanges.reduce((sum, change) => sum + change, 0) / periodChanges.length;
+  
+  // 计算标准差
+  const variance = periodChanges.reduce((sum, change) => sum + Math.pow(change - avgDailyVolatility, 2), 0) / periodChanges.length;
+  const standardDeviation = Math.sqrt(variance);
+  
+  const averageMarketCap = marketCaps.reduce((sum, cap) => sum + cap, 0) / marketCaps.length;
+  
+  return { 
+    mean: averageMarketCap, 
+    standardDeviation, 
+    volatilityPercentage: Math.min(avgDailyVolatility, 500) // 限制最大值为500%
+  };
+}
+
+/**
+ * 兼容性函数：保持原有接口
  */
 function calculatePriceVolatility(prices: number[]): {
   mean: number;
   standardDeviation: number;
   volatilityPercentage: number;
 } {
-  if (prices.length < 2) {
-    return { mean: 0, standardDeviation: 0, volatilityPercentage: 0 };
-  }
-  
-  // 计算每日价格变化百分比
-  const dailyChanges: number[] = [];
-  for (let i = 1; i < prices.length; i++) {
-    if (prices[i-1] > 0 && prices[i] > 0) {
-      const dailyChangePercent = Math.abs((prices[i] - prices[i-1]) / prices[i-1]) * 100;
-      dailyChanges.push(dailyChangePercent);
-    }
-  }
-  
-  if (dailyChanges.length === 0) {
-    return { mean: 0, standardDeviation: 0, volatilityPercentage: 0 };
-  }
-  
-  // 计算平均每日波动率 = 所有日波动率之和 / 总天数
-  const avgDailyVolatility = dailyChanges.reduce((sum, change) => sum + change, 0) / dailyChanges.length;
-  
-  // 计算标准差
-  const variance = dailyChanges.reduce((sum, change) => sum + Math.pow(change - avgDailyVolatility, 2), 0) / dailyChanges.length;
-  const standardDeviation = Math.sqrt(variance);
-  
-  const averagePrice = prices.reduce((sum, price) => sum + price, 0) / prices.length;
-  
-  return { 
-    mean: averagePrice, 
-    standardDeviation, 
-    volatilityPercentage: avgDailyVolatility 
-  };
+  // 为兼容性创建假时间戳（每24小时一个数据点）
+  const timestamps = prices.map((_, index) => new Date(Date.now() - (prices.length - 1 - index) * 24 * 60 * 60 * 1000));
+  return calculateMarketCapVolatility(prices, timestamps);
 }
 
 /**
