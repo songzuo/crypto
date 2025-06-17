@@ -129,7 +129,7 @@ export async function calculateAndStoreVolatilityAnalysis(period: '7d' | '30d' =
   console.log(`创建了波动性分析批次 ${batch.id}`);
   
   // 获取所有历史批次用于计算
-  const allBatches = await storage.getAllVolatilityRatioBatches();
+  const allBatches = await storage.getVolumeToMarketCapBatches(1, 1000);
   const results: VolatilityResult[] = [];
   
   if (allBatches.length < 2) {
@@ -143,10 +143,10 @@ export async function calculateAndStoreVolatilityAnalysis(period: '7d' | '30d' =
   const cryptoHistoricalData = new Map<string, Array<{marketCap: number, timestamp: Date, batchIndex: number}>>();
   
   // 收集所有批次的数据
-  for (let i = 0; i < allBatches.length; i++) {
-    const batch = allBatches[i];
+  for (let i = 0; i < allBatches.data.length; i++) {
+    const batch = allBatches.data[i];
     try {
-      const batchData = await storage.getVolumeRatiosByBatchId(batch.id);
+      const batchData = await storage.getVolumeToMarketCapRatios(batch.id);
       
       for (const entry of batchData) {
         const crypto = await storage.getCryptocurrency(entry.cryptocurrencyId);

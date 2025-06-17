@@ -9,7 +9,9 @@ import {
   volumeToMarketCapRatios, type VolumeToMarketCapRatio, type InsertVolumeToMarketCapRatio,
   volumeToMarketCapBatches, type VolumeToMarketCapBatch, type InsertVolumeToMarketCapBatch,
   technicalAnalysisBatches, type TechnicalAnalysisBatch, type InsertTechnicalAnalysisBatch,
-  technicalAnalysisEntries, type TechnicalAnalysisEntry, type InsertTechnicalAnalysisEntry
+  technicalAnalysisEntries, type TechnicalAnalysisEntry, type InsertTechnicalAnalysisEntry,
+  volatilityAnalysisBatches, type VolatilityAnalysisBatch, type InsertVolatilityAnalysisBatch,
+  volatilityAnalysisEntries, type VolatilityAnalysisEntry, type InsertVolatilityAnalysisEntry
 } from "@shared/schema";
 
 export interface IStorage {
@@ -94,21 +96,15 @@ export interface IStorage {
   createTechnicalAnalysisEntry(entry: InsertTechnicalAnalysisEntry): Promise<TechnicalAnalysisEntry>;
   
   // 波动性分析批次相关方法
-  getVolatilityAnalysisBatches(page: number, limit: number): Promise<{ data: any[], total: number }>;
-  getLatestVolatilityAnalysisBatch(timeframe?: string): Promise<any | undefined>;
-  getVolatilityAnalysisBatch(id: number): Promise<any | undefined>;
-  createVolatilityAnalysisBatch(batch: any): Promise<any>;
+  getVolatilityAnalysisBatches(page: number, limit: number): Promise<{ data: VolatilityAnalysisBatch[], total: number }>;
+  getLatestVolatilityAnalysisBatch(timeframe?: string): Promise<VolatilityAnalysisBatch | undefined>;
+  getVolatilityAnalysisBatch(id: number): Promise<VolatilityAnalysisBatch | undefined>;
+  createVolatilityAnalysisBatch(batch: InsertVolatilityAnalysisBatch): Promise<VolatilityAnalysisBatch>;
   
   // 波动性分析条目相关方法
-  getVolatilityAnalysisResults(volatilityDirection?: string, volatilityCategory?: string): Promise<{ batch: any, entries: any[] }>;
-  getVolatilityAnalysisResultsByBatchId(batchId: number, volatilityDirection?: string, volatilityCategory?: string): Promise<any[]>;
-  createVolatilityAnalysisEntry(entry: any): Promise<any>;
-  
-  // 辅助方法
-  getAllVolatilityRatioBatches(): Promise<any[]>;
-  getVolumeRatiosByBatchId(batchId: number): Promise<any[]>;
-  getCryptocurrencyBySymbol(symbol: string): Promise<any | undefined>;
-  getVolatilityAnalysisEntriesByBatchId(batchId: number): Promise<any[]>;
+  getVolatilityAnalysisResults(volatilityDirection?: string, volatilityCategory?: string): Promise<{ batch: VolatilityAnalysisBatch, entries: VolatilityAnalysisEntry[] }>;
+  getVolatilityAnalysisResultsByBatchId(batchId: number, volatilityDirection?: string, volatilityCategory?: string): Promise<VolatilityAnalysisEntry[]>;
+  createVolatilityAnalysisEntry(entry: InsertVolatilityAnalysisEntry): Promise<VolatilityAnalysisEntry>;
 }
 
 export class MemStorage implements IStorage {
