@@ -513,10 +513,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const period = (req.query.period as string) || '7d';
       
-      // 导入多周期波动性分析
-      const { getFilteredMultiPeriodVolatility } = await import('./services/multiPeriodVolatilityAnalysis');
+      // 使用基于价格的波动性分析
+      const { getFilteredPriceVolatility } = await import('./services/priceVolatilityAnalysis');
       
-      const results = await getFilteredMultiPeriodVolatility(
+      const results = await getFilteredPriceVolatility(
         period as '7d' | '30d',
         direction,
         category,
