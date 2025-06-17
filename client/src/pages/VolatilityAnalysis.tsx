@@ -269,10 +269,13 @@ const VolatilityAnalysis = () => {
                       </TableCell>
                       <TableCell>
                         <div className={`font-medium ${
-                          Math.abs(entry.volatilityPercentage || 0) > 50 ? 'text-red-600' :
-                          Math.abs(entry.volatilityPercentage || 0) > 20 ? 'text-orange-600' : 'text-green-600'
+                          entry.direction === 'up' ? 'text-green-600' :
+                          entry.direction === 'down' ? 'text-red-600' : 'text-gray-600'
                         }`}>
-                          {entry.volatilityPercentage?.toFixed(2) || '0.00'}%
+                          {entry.volatilityPercentage > 0 ? '+' : ''}{entry.volatilityPercentage?.toFixed(2) || '0.00'}%
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          日标准差: {Math.abs(entry.volatilityPercentage || 0).toFixed(2)}%
                         </div>
                       </TableCell>
                       <TableCell>
