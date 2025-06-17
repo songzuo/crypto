@@ -147,8 +147,8 @@ export async function runSimpleVolatilityAnalysis(): Promise<VolatilityResult[]>
       return createSampleVolatilityData();
     }
     
-    // 按波动性评分排序并分配排名
-    results.sort((a, b) => b.volatilityScore - a.volatilityScore);
+    // 按波动率的绝对值从高到低排序并分配排名
+    results.sort((a, b) => Math.abs(b.volatilityPercentage) - Math.abs(a.volatilityPercentage));
     results.forEach((result, index) => {
       result.rank = index + 1;
     });
