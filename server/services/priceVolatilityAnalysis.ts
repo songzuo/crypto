@@ -22,53 +22,84 @@ export interface PriceVolatilityResult {
 }
 
 /**
- * 计算市值波动率（基于市值数据和时间戳的准确日均波动率）
+ * 计算基于市值的准确波动率（按时间段正确计算）
+ * 对于143个批次，应该有142个比较比值
+ */
+function calculateAccurateVolatility(historicalData: Array<{marketCap: number, timestamp: Date}>): {
+  mean: number;
+  standardDeviation: number;
+  volatilityPercentage: number;
+  totalComparisons: number;
+} {
+  if (historicalData.length < 2) {
+    return { mean: 0, standardDeviation: 0, volatilityPercentage: 0, totalComparisons: 0 };
+  }
+  
+  // 按时间排序
+  const sortedData = historicalData.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+  
+  // 计算所有相邻数据点之间的波动率比值
+  const volatilityRatios: number[] = [];
+  
+  for (let i = 1; i < sortedData.length; i++) {
+    const current = sortedData[i];
+    const previous = sortedData[i - 1];
+    
+    if (previous.marketCap > 0 && current.marketCap > 0) {
+      // 市值变化百分比：(本次市值 - 上次市值) / 上次市值
+      const percentChange = Math.abs((current.marketCap - previous.marketCap) / previous.marketCap);
+      
+      // 计算时间间隔（小时）
+      const timeIntervalHours = (current.timestamp.getTime() - previous.timestamp.getTime()) / (1000 * 60 * 60);
+      
+      // 转换为日波动率：小时波动率 * 24
+      if (timeIntervalHours > 0) {
+        const hourlyVolatility = percentChange / timeIntervalHours;
+        const dailyVolatility = hourlyVolatility * 24;
+        volatilityRatios.push(dailyVolatility * 100); // 转换为百分比
+      }
+    }
+  }
+  
+  if (volatilityRatios.length === 0) {
+    return { mean: 0, standardDeviation: 0, volatilityPercentage: 0, totalComparisons: 0 };
+  }
+  
+  // 计算平均日波动率（所有比值的平均）
+  const avgDailyVolatility = volatilityRatios.reduce((sum, ratio) => sum + ratio, 0) / volatilityRatios.length;
+  
+  // 计算标准差
+  const variance = volatilityRatios.reduce((sum, ratio) => sum + Math.pow(ratio - avgDailyVolatility, 2), 0) / volatilityRatios.length;
+  const standardDeviation = Math.sqrt(variance);
+  
+  const averageMarketCap = sortedData.reduce((sum, item) => sum + item.marketCap, 0) / sortedData.length;
+  
+  return { 
+    mean: averageMarketCap, 
+    standardDeviation, 
+    volatilityPercentage: Math.min(avgDailyVolatility, 500), // 限制最大值为500%
+    totalComparisons: volatilityRatios.length
+  };
+}
+
+/**
+ * 简化的市值波动率计算函数（保持旧代码兼容）
  */
 function calculateMarketCapVolatility(marketCaps: number[], timestamps: Date[]): {
   mean: number;
   standardDeviation: number;
   volatilityPercentage: number;
 } {
-  if (marketCaps.length < 2 || timestamps.length !== marketCaps.length) {
-    return { mean: 0, standardDeviation: 0, volatilityPercentage: 0 };
-  }
+  const historicalData = marketCaps.map((marketCap, index) => ({
+    marketCap,
+    timestamp: timestamps[index]
+  }));
   
-  // 计算每个时间段的市值变化和时间间隔
-  const periodChanges: number[] = [];
-  
-  for (let i = 1; i < marketCaps.length; i++) {
-    if (marketCaps[i-1] > 0 && marketCaps[i] > 0) {
-      // 市值变化百分比：(本次市值 - 上次市值) / 上次市值
-      const percentChange = Math.abs((marketCaps[i] - marketCaps[i-1]) / marketCaps[i-1]);
-      
-      // 计算时间间隔（小时）
-      const timeIntervalHours = (timestamps[i].getTime() - timestamps[i-1].getTime()) / (1000 * 60 * 60);
-      
-      // 转换为日波动率：如果时间间隔不是24小时，按比例调整
-      if (timeIntervalHours > 0) {
-        const dailyVolatility = (percentChange / timeIntervalHours) * 24;
-        periodChanges.push(dailyVolatility * 100); // 转换为百分比
-      }
-    }
-  }
-  
-  if (periodChanges.length === 0) {
-    return { mean: 0, standardDeviation: 0, volatilityPercentage: 0 };
-  }
-  
-  // 计算平均日波动率
-  const avgDailyVolatility = periodChanges.reduce((sum, change) => sum + change, 0) / periodChanges.length;
-  
-  // 计算标准差
-  const variance = periodChanges.reduce((sum, change) => sum + Math.pow(change - avgDailyVolatility, 2), 0) / periodChanges.length;
-  const standardDeviation = Math.sqrt(variance);
-  
-  const averageMarketCap = marketCaps.reduce((sum, cap) => sum + cap, 0) / marketCaps.length;
-  
-  return { 
-    mean: averageMarketCap, 
-    standardDeviation, 
-    volatilityPercentage: Math.min(avgDailyVolatility, 500) // 限制最大值为500%
+  const result = calculateAccurateVolatility(historicalData);
+  return {
+    mean: result.mean,
+    standardDeviation: result.standardDeviation,
+    volatilityPercentage: result.volatilityPercentage
   };
 }
 
@@ -183,32 +214,29 @@ export async function getPriceBasedVolatilityAnalysis(period: '7d' | '30d' = '7d
       // 按时间排序历史数据
       const sortedData = historicalData.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
       
-      // 根据时间周期计算滑动窗口波动性
-      const periodDays = period === '7d' ? 7 : 30;
-      const rollingVolatilities: number[] = [];
+      // 使用新的准确波动率计算方法：143个数据产生142个比值
+      const fullStats = calculateAccurateVolatility(sortedData);
       
-      // 计算每个可能的时间窗口的波动性（使用市值和时间戳）
-      for (let i = periodDays - 1; i < sortedData.length; i++) {
-        const windowData = sortedData.slice(i - periodDays + 1, i + 1);
-        const marketCaps = windowData.map(d => d.marketCap);
-        const timestamps = windowData.map(d => d.timestamp);
-        
-        if (marketCaps.length >= periodDays && timestamps.length === marketCaps.length) {
-          const windowStats = calculateMarketCapVolatility(marketCaps, timestamps);
-          rollingVolatilities.push(windowStats.volatilityPercentage);
-        }
-      }
+      // 根据时间段筛选数据进行平均计算
+      const periodHours = period === '7d' ? 7 * 24 : 30 * 24;
+      const cutoffTime = new Date(Date.now() - periodHours * 60 * 60 * 1000);
+      const periodData = sortedData.filter(d => d.timestamp >= cutoffTime);
       
-      if (rollingVolatilities.length === 0) continue;
+      // 如果时间段内数据不足，使用全部数据
+      const dataForPeriod = periodData.length >= 2 ? periodData : sortedData;
+      const periodStats = calculateAccurateVolatility(dataForPeriod);
       
-      // 计算平均波动性（多个时间窗口的平均值）
-      const avgVolatility = rollingVolatilities.reduce((sum, vol) => sum + vol, 0) / rollingVolatilities.length;
+      // 平均波动性：使用时间段内的准确计算结果
+      const avgVolatility = periodStats.volatilityPercentage;
       
-      // 使用最新时间窗口的数据计算其他指标
-      const recentWindow = sortedData.slice(-periodDays);
+      // 使用最新数据计算其他指标
+      const recentWindow = sortedData.slice(-Math.min(7, sortedData.length));
       const recentMarketCaps = recentWindow.map(d => d.marketCap);
-      const recentTimestamps = recentWindow.map(d => d.timestamp);
-      const recentStats = calculateMarketCapVolatility(recentMarketCaps, recentTimestamps);
+      const recentStats = { 
+        mean: periodStats.mean,
+        standardDeviation: periodStats.standardDeviation, 
+        volatilityPercentage: avgVolatility 
+      };
       
       const category = categorizeVolatility(avgVolatility);
       const direction = determinePriceDirection(recentMarketCaps[0], recentMarketCaps[recentMarketCaps.length - 1]);
