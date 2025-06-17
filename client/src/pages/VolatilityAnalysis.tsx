@@ -60,7 +60,20 @@ const VolatilityAnalysis = () => {
       
       const response = await fetch(`/api/volatility-analysis/results?${params}`);
       if (!response.ok) throw new Error('获取分析结果失败');
-      return response.json();
+      const data = await response.json();
+      
+      // 处理数据结构 - 如果API返回数组，包装成预期格式
+      if (Array.isArray(data)) {
+        return {
+          entries: data,
+          total: data.length,
+          page: currentPage,
+          limit: 30
+        };
+      }
+      
+      // 如果已经是正确格式，直接返回
+      return data;
     }
   });
 

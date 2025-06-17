@@ -512,7 +512,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const limit = parseInt(req.query.limit as string) || 30;
       
       const results = await getVolatilityResults(direction, category, page, limit);
-      res.json(results);
+      
+      // 确保返回正确的数据结构
+      const response = {
+        entries: Array.isArray(results) ? results : (results.entries || []),
+        total: Array.isArray(results) ? results.length : (results.total || 0),
+        page: page,
+        limit: limit
+      };
+      
+      res.json(response);
     } catch (error) {
       console.error('获取波动性分析结果失败:', error);
       res.status(500).json({ error: (error as Error).message });
