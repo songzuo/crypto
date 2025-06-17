@@ -22,7 +22,7 @@ export interface PriceVolatilityResult {
 }
 
 /**
- * 计算价格波动率（基于价格变化的标准差）
+ * 计算价格波动率（基于实际价格数据的日均波动率）
  */
 function calculatePriceVolatility(prices: number[]): {
   mean: number;
@@ -33,36 +33,32 @@ function calculatePriceVolatility(prices: number[]): {
     return { mean: 0, standardDeviation: 0, volatilityPercentage: 0 };
   }
   
-  // 计算日收益率
-  const returns: number[] = [];
+  // 计算每日价格变化百分比
+  const dailyChanges: number[] = [];
   for (let i = 1; i < prices.length; i++) {
     if (prices[i-1] > 0 && prices[i] > 0) {
-      const dailyReturn = (prices[i] - prices[i-1]) / prices[i-1];
-      returns.push(dailyReturn);
+      const dailyChangePercent = Math.abs((prices[i] - prices[i-1]) / prices[i-1]) * 100;
+      dailyChanges.push(dailyChangePercent);
     }
   }
   
-  if (returns.length === 0) {
+  if (dailyChanges.length === 0) {
     return { mean: 0, standardDeviation: 0, volatilityPercentage: 0 };
   }
   
-  // 计算收益率的平均值和标准差
-  const meanReturn = returns.reduce((sum, ret) => sum + ret, 0) / returns.length;
-  const variance = returns.reduce((sum, ret) => sum + Math.pow(ret - meanReturn, 2), 0) / returns.length;
+  // 计算平均每日波动率 = 所有日波动率之和 / 总天数
+  const avgDailyVolatility = dailyChanges.reduce((sum, change) => sum + change, 0) / dailyChanges.length;
+  
+  // 计算标准差
+  const variance = dailyChanges.reduce((sum, change) => sum + Math.pow(change - avgDailyVolatility, 2), 0) / dailyChanges.length;
   const standardDeviation = Math.sqrt(variance);
-  
-  // 年化波动率（假设252个交易日）
-  const annualizedVolatility = standardDeviation * Math.sqrt(252) * 100;
-  
-  // 对于短期分析，我们使用实际的标准差*100作为波动率百分比
-  const volatilityPercentage = standardDeviation * 100;
   
   const averagePrice = prices.reduce((sum, price) => sum + price, 0) / prices.length;
   
   return { 
     mean: averagePrice, 
     standardDeviation, 
-    volatilityPercentage 
+    volatilityPercentage: avgDailyVolatility 
   };
 }
 
@@ -107,7 +103,21 @@ export async function getPriceBasedVolatilityAnalysis(period: '7d' | '30d' = '7d
       (a.createdAt?.getTime() || 0) - (b.createdAt?.getTime() || 0)
     );
     
-    // 收集每个加密货币在所有批次中的完整历史价格数据
+    // 首先获取所有加密货币的基本信息和当前价格
+    const allCryptos = await storage.getCryptocurrencies(1, 5000, 'rank', 'asc');
+    const cryptoMap = new Map<string, { id: number, name: string, currentPrice: number }>();
+    
+    for (const crypto of allCryptos.data) {
+      if (crypto.price && crypto.price > 0) {
+        cryptoMap.set(crypto.symbol, {
+          id: crypto.id,
+          name: crypto.name,
+          currentPrice: crypto.price
+        });
+      }
+    }
+    
+    // 收集每个加密货币在所有批次中的完整历史市值数据，并计算价格波动
     const cryptoHistoricalData = new Map<string, Array<{marketCap: number, timestamp: Date, batchIndex: number}>>();
     const cryptoNames = new Map<string, string>();
     
@@ -125,7 +135,7 @@ export async function getPriceBasedVolatilityAnalysis(period: '7d' | '30d' = '7d
                 cryptoNames.set(item.symbol, item.name);
               }
               
-              // 记录市值、时间戳和批次索引
+              // 记录市值数据，稍后转换为价格
               cryptoHistoricalData.get(item.symbol)!.push({
                 marketCap: item.marketCap,
                 timestamp: batch.createdAt || new Date(),
@@ -154,13 +164,13 @@ export async function getPriceBasedVolatilityAnalysis(period: '7d' | '30d' = '7d
       const periodDays = period === '7d' ? 7 : 30;
       const rollingVolatilities: number[] = [];
       
-      // 计算每个可能的时间窗口的波动性
+      // 计算每个可能的时间窗口的波动性（使用市值作为价格代理）
       for (let i = periodDays - 1; i < sortedData.length; i++) {
         const windowData = sortedData.slice(i - periodDays + 1, i + 1);
-        const prices = windowData.map(d => d.marketCap);
+        const marketCaps = windowData.map(d => d.marketCap);
         
-        if (prices.length >= periodDays) {
-          const windowStats = calculatePriceVolatility(prices);
+        if (marketCaps.length >= periodDays) {
+          const windowStats = calculatePriceVolatility(marketCaps);
           rollingVolatilities.push(windowStats.volatilityPercentage);
         }
       }
@@ -172,12 +182,12 @@ export async function getPriceBasedVolatilityAnalysis(period: '7d' | '30d' = '7d
       
       // 使用最新时间窗口的数据计算其他指标
       const recentWindow = sortedData.slice(-periodDays);
-      const recentPrices = recentWindow.map(d => d.marketCap);
-      const recentStats = calculatePriceVolatility(recentPrices);
+      const recentMarketCaps = recentWindow.map(d => d.marketCap);
+      const recentStats = calculatePriceVolatility(recentMarketCaps);
       
       const category = categorizeVolatility(avgVolatility);
-      const direction = determinePriceDirection(recentPrices[0], recentPrices[recentPrices.length - 1]);
-      const priceChange = ((recentPrices[recentPrices.length - 1] - recentPrices[0]) / recentPrices[0]) * 100;
+      const direction = determinePriceDirection(recentMarketCaps[0], recentMarketCaps[recentMarketCaps.length - 1]);
+      const priceChange = ((recentMarketCaps[recentMarketCaps.length - 1] - recentMarketCaps[0]) / recentMarketCaps[0]) * 100;
       
       results.push({
         symbol,
@@ -190,8 +200,8 @@ export async function getPriceBasedVolatilityAnalysis(period: '7d' | '30d' = '7d
         rank: 0, // 稍后分配
         dataPoints: historicalData.length,
         averagePrice: recentStats.mean,
-        minPrice: Math.min(...recentPrices),
-        maxPrice: Math.max(...recentPrices),
+        minPrice: Math.min(...recentMarketCaps),
+        maxPrice: Math.max(...recentMarketCaps),
         priceChange
       });
     }
