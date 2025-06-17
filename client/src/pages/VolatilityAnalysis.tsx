@@ -17,19 +17,15 @@ interface VolatilityBatch {
 }
 
 interface VolatilityEntry {
-  id: number;
   symbol: string;
   name: string;
-  currentVolumeRatio: number;
-  previousVolumeRatio: number;
+  currentRatio: number;
+  previousRatio: number;
   volatilityScore: number;
   volatilityPercentage: number;
-  volatilityDirection: 'up' | 'down' | 'stable';
-  volatilityRank: number;
-  volatilityCategory: string;
-  riskLevel: string;
-  priceChange24h?: number;
-  volumeChange24h?: number;
+  direction: 'up' | 'down' | 'stable';
+  rank: number;
+  category: string;
 }
 
 const VolatilityAnalysis = () => {
@@ -253,9 +249,9 @@ const VolatilityAnalysis = () => {
                 </TableHeader>
                 <TableBody>
                   {resultsData.entries.map((entry: VolatilityEntry) => (
-                    <TableRow key={entry.id}>
+                    <TableRow key={`${entry.symbol}-${entry.rank}`}>
                       <TableCell className="font-medium">
-                        <Badge variant="outline">#{entry.volatilityRank}</Badge>
+                        <Badge variant="outline">#{entry.rank}</Badge>
                       </TableCell>
                       <TableCell>
                         <div>
@@ -281,27 +277,27 @@ const VolatilityAnalysis = () => {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          {getVolatilityIcon(entry.volatilityDirection)}
-                          <span className="capitalize">{entry.volatilityDirection === 'up' ? '上涨' : 
-                                                        entry.volatilityDirection === 'down' ? '下跌' : '稳定'}</span>
+                          {getVolatilityIcon(entry.direction)}
+                          <span className="capitalize">{entry.direction === 'up' ? '上涨' : 
+                                                        entry.direction === 'down' ? '下跌' : '稳定'}</span>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          {getRiskIcon(entry.riskLevel)}
-                          <Badge className={getCategoryColor(entry.volatilityCategory)}>
-                            {entry.volatilityCategory}
+                          {getRiskIcon(entry.category === '极高' ? '高风险' : entry.category === '高' ? '中风险' : '低风险')}
+                          <Badge className={getCategoryColor(entry.category)}>
+                            {entry.category}
                           </Badge>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="font-mono text-sm">
-                          {entry.currentVolumeRatio?.toFixed(4) || '0.0000'}
+                          {entry.currentRatio?.toFixed(4) || '0.0000'}
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="font-mono text-sm text-muted-foreground">
-                          {entry.previousVolumeRatio?.toFixed(4) || '0.0000'}
+                          {entry.previousRatio?.toFixed(4) || '0.0000'}
                         </div>
                       </TableCell>
                     </TableRow>

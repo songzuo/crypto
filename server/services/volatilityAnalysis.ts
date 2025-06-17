@@ -204,8 +204,8 @@ export async function runVolatilityAnalysis(): Promise<void> {
         volatilityPercentage: volatilityMetrics.volatilityPercentage,
         volatilityDirection: volatilityMetrics.volatilityDirection,
         volatilityRank: 0, // 稍后计算排名
-        priceChange24h: currentRatio.priceChange24h,
-        volumeChange24h: currentRatio.volumeChange24h,
+        priceChange24h: null, // Not available in volume ratio data
+        volumeChange24h: null, // Not available in volume ratio data
         marketCapChange24h: null, // 如果有数据可以添加
         volatilityCategory: volatilityMetrics.volatilityCategory,
         riskLevel: volatilityMetrics.riskLevel
