@@ -110,24 +110,32 @@ export async function getPriceBasedVolatilityAnalysis(period: '7d' | '30d' = '7d
     
     // 收集所有批次的市值数据作为价格代理
     for (const batch of batches.data) {
-      const batchData = await storage.getVolumeToMarketCapRatiosByBatchId(batch.id, 1, 5000);
-      
-      for (const item of batchData.data) {
-        // 使用市值作为价格代理进行波动率分析
-        if (item.marketCap && item.marketCap > 0 && !isNaN(item.marketCap)) {
-          if (!cryptoPriceData.has(item.symbol)) {
-            cryptoPriceData.set(item.symbol, []);
-            cryptoNames.set(item.symbol, item.name);
+      try {
+        const batchData = await storage.getVolumeToMarketCapRatiosByBatchId(batch.id);
+        
+        if (Array.isArray(batchData)) {
+          for (const item of batchData) {
+            // 使用市值作为价格代理进行波动率分析
+            if (item.marketCap && item.marketCap > 0 && !isNaN(item.marketCap)) {
+              if (!cryptoPriceData.has(item.symbol)) {
+                cryptoPriceData.set(item.symbol, []);
+                cryptoNames.set(item.symbol, item.name);
+              }
+              cryptoPriceData.get(item.symbol)!.push(item.marketCap);
+            }
           }
-          cryptoPriceData.get(item.symbol)!.push(item.marketCap);
         }
+      } catch (error) {
+        console.log(`跳过批次 ${batch.id}，获取数据失败:`, error instanceof Error ? error.message : String(error));
+        continue;
       }
     }
     
     const results: PriceVolatilityResult[] = [];
     
     // 分析每个加密货币的价格波动性
-    for (const [symbol, prices] of cryptoPriceData.entries()) {
+    const cryptoEntries = Array.from(cryptoPriceData.entries());
+    for (const [symbol, prices] of cryptoEntries) {
       if (prices.length < 3) continue; // 至少需要3个数据点
       
       const stats = calculatePriceVolatility(prices);
