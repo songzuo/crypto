@@ -187,13 +187,14 @@ export async function getPriceBasedVolatilityAnalysis(period: '7d' | '30d' = '7d
       const periodDays = period === '7d' ? 7 : 30;
       const rollingVolatilities: number[] = [];
       
-      // 计算每个可能的时间窗口的波动性（使用市值作为价格代理）
+      // 计算每个可能的时间窗口的波动性（使用市值和时间戳）
       for (let i = periodDays - 1; i < sortedData.length; i++) {
         const windowData = sortedData.slice(i - periodDays + 1, i + 1);
         const marketCaps = windowData.map(d => d.marketCap);
+        const timestamps = windowData.map(d => d.timestamp);
         
-        if (marketCaps.length >= periodDays) {
-          const windowStats = calculatePriceVolatility(marketCaps);
+        if (marketCaps.length >= periodDays && timestamps.length === marketCaps.length) {
+          const windowStats = calculateMarketCapVolatility(marketCaps, timestamps);
           rollingVolatilities.push(windowStats.volatilityPercentage);
         }
       }
@@ -206,7 +207,8 @@ export async function getPriceBasedVolatilityAnalysis(period: '7d' | '30d' = '7d
       // 使用最新时间窗口的数据计算其他指标
       const recentWindow = sortedData.slice(-periodDays);
       const recentMarketCaps = recentWindow.map(d => d.marketCap);
-      const recentStats = calculatePriceVolatility(recentMarketCaps);
+      const recentTimestamps = recentWindow.map(d => d.timestamp);
+      const recentStats = calculateMarketCapVolatility(recentMarketCaps, recentTimestamps);
       
       const category = categorizeVolatility(avgVolatility);
       const direction = determinePriceDirection(recentMarketCaps[0], recentMarketCaps[recentMarketCaps.length - 1]);
