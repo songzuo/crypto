@@ -21,14 +21,13 @@ interface VolatilityEntry {
   name: string;
   period: '7d' | '30d';
   volatilityPercentage: number;
-  standardDeviation: number;
   direction: 'up' | 'down' | 'stable';
   category: string;
   rank: number;
   dataPoints: number;
-  averageRatio: number;
-  minRatio: number;
-  maxRatio: number;
+  comparisons: number;
+  averageMarketCap: number;
+  marketCapChange: number;
 }
 
 const VolatilityAnalysis = () => {
@@ -282,11 +281,11 @@ const VolatilityAnalysis = () => {
                     <TableHead className="w-16">排名</TableHead>
                     <TableHead>币种</TableHead>
                     <TableHead>波动幅度</TableHead>
-                    <TableHead>标准差</TableHead>
                     <TableHead>方向</TableHead>
                     <TableHead>风险等级</TableHead>
                     <TableHead>数据点</TableHead>
-                    <TableHead>平均比率</TableHead>
+                    <TableHead>比较次数</TableHead>
+                    <TableHead>市值变化</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -303,18 +302,15 @@ const VolatilityAnalysis = () => {
                       </TableCell>
                       <TableCell>
                         <div className={`font-medium ${
-                          entry.direction === 'up' ? 'text-green-600' :
-                          entry.direction === 'down' ? 'text-red-600' : 'text-gray-600'
+                          entry.volatilityPercentage >= 50 ? 'text-red-600' :
+                          entry.volatilityPercentage >= 20 ? 'text-orange-600' :
+                          entry.volatilityPercentage >= 10 ? 'text-yellow-600' :
+                          entry.volatilityPercentage >= 5 ? 'text-blue-600' : 'text-green-600'
                         }`}>
-                          {entry.volatilityPercentage > 0 ? '+' : ''}{entry.volatilityPercentage?.toFixed(2) || '0.00'}%
+                          {entry.volatilityPercentage?.toFixed(2) || '0.00'}%
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          {selectedPeriod}周期波动
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-mono text-sm">
-                          {entry.standardDeviation?.toFixed(4) || '0.0000'}
+                          {selectedPeriod}日均波动
                         </div>
                       </TableCell>
                       <TableCell>
@@ -332,14 +328,23 @@ const VolatilityAnalysis = () => {
                           </Badge>
                         </div>
                       </TableCell>
-                      <TableCell>
-                        <div className="font-mono text-sm">
-                          {entry.dataPoints || 0}
-                        </div>
+                      <TableCell className="text-center">
+                        <div className="text-sm font-medium">{entry.dataPoints || 0}</div>
+                        <div className="text-xs text-muted-foreground">个数据点</div>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <div className="text-sm font-medium">{entry.comparisons || 0}</div>
+                        <div className="text-xs text-muted-foreground">比较次数</div>
                       </TableCell>
                       <TableCell>
-                        <div className="font-mono text-sm">
-                          {entry.averageRatio?.toFixed(4) || '0.0000'}
+                        <div className={`font-medium ${
+                          entry.marketCapChange > 0 ? 'text-green-600' :
+                          entry.marketCapChange < 0 ? 'text-red-600' : 'text-gray-600'
+                        }`}>
+                          {entry.marketCapChange > 0 ? '+' : ''}{entry.marketCapChange?.toFixed(2) || '0.00'}%
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          市值变化
                         </div>
                       </TableCell>
                     </TableRow>
