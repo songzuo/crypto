@@ -222,7 +222,7 @@ const VolatilityAnalysis = () => {
               </SelectContent>
             </Select>
 
-            <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+            <Select value={selectedPeriod} onValueChange={(value: string) => setSelectedPeriod(value as "7d" | "30d")}>
               <SelectTrigger className="w-48">
                 <SelectValue placeholder="选择分析周期" />
               </SelectTrigger>
@@ -288,14 +288,6 @@ const VolatilityAnalysis = () => {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div className="text-lg font-bold text-purple-600">
-                            {entry.volatilityScore?.toFixed(1) || '0.0'}
-                          </div>
-                          <div className="text-sm text-muted-foreground">/100</div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
                         <div className={`font-medium ${
                           entry.direction === 'up' ? 'text-green-600' :
                           entry.direction === 'down' ? 'text-red-600' : 'text-gray-600'
@@ -303,7 +295,12 @@ const VolatilityAnalysis = () => {
                           {entry.volatilityPercentage > 0 ? '+' : ''}{entry.volatilityPercentage?.toFixed(2) || '0.00'}%
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          日标准差: {Math.abs(entry.volatilityPercentage || 0).toFixed(2)}%
+                          {selectedPeriod}周期波动
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-mono text-sm">
+                          {entry.standardDeviation?.toFixed(4) || '0.0000'}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -323,12 +320,12 @@ const VolatilityAnalysis = () => {
                       </TableCell>
                       <TableCell>
                         <div className="font-mono text-sm">
-                          {entry.currentRatio?.toFixed(4) || '0.0000'}
+                          {entry.dataPoints || 0}
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="font-mono text-sm text-muted-foreground">
-                          {entry.previousRatio?.toFixed(4) || '0.0000'}
+                        <div className="font-mono text-sm">
+                          {entry.averageRatio?.toFixed(4) || '0.0000'}
                         </div>
                       </TableCell>
                     </TableRow>
