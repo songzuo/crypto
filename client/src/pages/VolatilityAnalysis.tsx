@@ -38,6 +38,7 @@ const VolatilityAnalysis = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedPeriod, setSelectedPeriod] = useState<'7d' | '30d'>('7d');
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(100);
   const [isRunningAnalysis, setIsRunningAnalysis] = useState(false);
 
   // 获取波动性分析批次
@@ -52,11 +53,11 @@ const VolatilityAnalysis = () => {
 
   // 获取波动性分析结果
   const { data: resultsData, isLoading, refetch } = useQuery({
-    queryKey: ['/api/volatility-analysis/results', selectedDirection, selectedCategory, selectedPeriod, currentPage],
+    queryKey: ['/api/volatility-analysis/results', selectedDirection, selectedCategory, selectedPeriod, currentPage, pageSize],
     queryFn: async () => {
       const params = new URLSearchParams({
         page: currentPage.toString(),
-        limit: '30'
+        limit: pageSize.toString()
       });
       
       if (selectedDirection) params.append('direction', selectedDirection);
@@ -229,6 +230,19 @@ const VolatilityAnalysis = () => {
               <SelectContent>
                 <SelectItem value="7d">7天平均波动</SelectItem>
                 <SelectItem value="30d">30天平均波动</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={pageSize.toString()} onValueChange={(value: string) => {
+              setPageSize(parseInt(value));
+              setCurrentPage(1);
+            }}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="每页显示数量" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="100">每页100个</SelectItem>
+                <SelectItem value="200">每页200个</SelectItem>
               </SelectContent>
             </Select>
 
