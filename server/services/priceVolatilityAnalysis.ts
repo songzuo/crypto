@@ -92,36 +92,45 @@ function determinePriceDirection(firstPrice: number, lastPrice: number): 'up' | 
  */
 export async function getPriceBasedVolatilityAnalysis(period: '7d' | '30d' = '7d'): Promise<PriceVolatilityResult[]> {
   try {
-    const requiredBatches = period === '7d' ? 7 : 30;
+    // 获取所有历史批次数据进行完整的历史波动率分析
+    const allBatches = await storage.getVolumeToMarketCapBatches(1, 200); // 获取所有可用批次
     
-    // 获取最近的批次数据
-    const batches = await storage.getVolumeToMarketCapBatches(1, requiredBatches);
-    
-    if (batches.data.length < 3) {
-      console.warn(`需要至少3个批次进行${period}价格波动性分析，当前只有${batches.data.length}个批次`);
+    if (allBatches.data.length < 7) {
+      console.warn(`历史批次不足，当前只有${allBatches.data.length}个批次，至少需要7个批次进行有效分析`);
       return [];
     }
     
-    console.log(`开始${period}价格波动性分析，使用${batches.data.length}个历史批次`);
+    console.log(`开始${period}完整历史价格波动性分析，使用全部${allBatches.data.length}个历史批次`);
     
-    // 获取加密货币的历史价格数据
-    const cryptoPriceData = new Map<string, number[]>(); // symbol -> [prices]
-    const cryptoNames = new Map<string, string>(); // symbol -> name
+    // 按时间排序批次（最旧的在前）
+    const sortedBatches = allBatches.data.sort((a, b) => 
+      (a.createdAt?.getTime() || 0) - (b.createdAt?.getTime() || 0)
+    );
     
-    // 收集所有批次的市值数据作为价格代理
-    for (const batch of batches.data) {
+    // 收集每个加密货币在所有批次中的完整历史价格数据
+    const cryptoHistoricalData = new Map<string, Array<{marketCap: number, timestamp: Date, batchIndex: number}>>();
+    const cryptoNames = new Map<string, string>();
+    
+    // 遍历所有历史批次收集数据
+    for (let batchIndex = 0; batchIndex < sortedBatches.length; batchIndex++) {
+      const batch = sortedBatches[batchIndex];
       try {
         const batchData = await storage.getVolumeToMarketCapRatiosByBatchId(batch.id);
         
         if (Array.isArray(batchData)) {
           for (const item of batchData) {
-            // 使用市值作为价格代理进行波动率分析
             if (item.marketCap && item.marketCap > 0 && !isNaN(item.marketCap)) {
-              if (!cryptoPriceData.has(item.symbol)) {
-                cryptoPriceData.set(item.symbol, []);
+              if (!cryptoHistoricalData.has(item.symbol)) {
+                cryptoHistoricalData.set(item.symbol, []);
                 cryptoNames.set(item.symbol, item.name);
               }
-              cryptoPriceData.get(item.symbol)!.push(item.marketCap);
+              
+              // 记录市值、时间戳和批次索引
+              cryptoHistoricalData.get(item.symbol)!.push({
+                marketCap: item.marketCap,
+                timestamp: batch.createdAt || new Date(),
+                batchIndex: batchIndex
+              });
             }
           }
         }
@@ -133,29 +142,56 @@ export async function getPriceBasedVolatilityAnalysis(period: '7d' | '30d' = '7d
     
     const results: PriceVolatilityResult[] = [];
     
-    // 分析每个加密货币的价格波动性
-    const cryptoEntries = Array.from(cryptoPriceData.entries());
-    for (const [symbol, prices] of cryptoEntries) {
-      if (prices.length < 3) continue; // 至少需要3个数据点
+    // 计算每个加密货币的完整历史波动性
+    const cryptoEntries = Array.from(cryptoHistoricalData.entries());
+    for (const [symbol, historicalData] of cryptoEntries) {
+      if (historicalData.length < 7) continue; // 至少需要7个历史数据点
       
-      const stats = calculatePriceVolatility(prices);
-      const category = categorizeVolatility(stats.volatilityPercentage);
-      const direction = determinePriceDirection(prices[0], prices[prices.length - 1]);
-      const priceChange = ((prices[prices.length - 1] - prices[0]) / prices[0]) * 100;
+      // 按时间排序历史数据
+      const sortedData = historicalData.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+      
+      // 根据时间周期计算滑动窗口波动性
+      const periodDays = period === '7d' ? 7 : 30;
+      const rollingVolatilities: number[] = [];
+      
+      // 计算每个可能的时间窗口的波动性
+      for (let i = periodDays - 1; i < sortedData.length; i++) {
+        const windowData = sortedData.slice(i - periodDays + 1, i + 1);
+        const prices = windowData.map(d => d.marketCap);
+        
+        if (prices.length >= periodDays) {
+          const windowStats = calculatePriceVolatility(prices);
+          rollingVolatilities.push(windowStats.volatilityPercentage);
+        }
+      }
+      
+      if (rollingVolatilities.length === 0) continue;
+      
+      // 计算平均波动性（多个时间窗口的平均值）
+      const avgVolatility = rollingVolatilities.reduce((sum, vol) => sum + vol, 0) / rollingVolatilities.length;
+      
+      // 使用最新时间窗口的数据计算其他指标
+      const recentWindow = sortedData.slice(-periodDays);
+      const recentPrices = recentWindow.map(d => d.marketCap);
+      const recentStats = calculatePriceVolatility(recentPrices);
+      
+      const category = categorizeVolatility(avgVolatility);
+      const direction = determinePriceDirection(recentPrices[0], recentPrices[recentPrices.length - 1]);
+      const priceChange = ((recentPrices[recentPrices.length - 1] - recentPrices[0]) / recentPrices[0]) * 100;
       
       results.push({
         symbol,
         name: cryptoNames.get(symbol) || symbol,
         period,
-        volatilityPercentage: stats.volatilityPercentage,
-        standardDeviation: stats.standardDeviation,
+        volatilityPercentage: avgVolatility, // 使用多窗口平均波动性
+        standardDeviation: recentStats.standardDeviation,
         direction,
         category,
         rank: 0, // 稍后分配
-        dataPoints: prices.length,
-        averagePrice: stats.mean,
-        minPrice: Math.min(...prices),
-        maxPrice: Math.max(...prices),
+        dataPoints: historicalData.length,
+        averagePrice: recentStats.mean,
+        minPrice: Math.min(...recentPrices),
+        maxPrice: Math.max(...recentPrices),
         priceChange
       });
     }
@@ -168,7 +204,7 @@ export async function getPriceBasedVolatilityAnalysis(period: '7d' | '30d' = '7d
       result.rank = index + 1;
     });
     
-    console.log(`${period}价格波动性分析完成，共分析${results.length}个加密货币`);
+    console.log(`${period}完整历史价格波动性分析完成，共分析${results.length}个加密货币`);
     console.log(`各类别分布：`);
     const categoryCount = results.reduce((acc, r) => {
       acc[r.category] = (acc[r.category] || 0) + 1;

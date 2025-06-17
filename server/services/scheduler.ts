@@ -672,6 +672,29 @@ async function forceBreakthroughScrape(): Promise<void> {
       console.error('Volume-to-Market Cap Ratio analysis task error:', error);
     }
   });
+
+  // 完整历史波动率分析 - 每天凌晨2:00自动运行
+  cron.schedule('0 2 * * *', async () => {
+    console.log('Running scheduled task: Complete Historical Volatility Analysis');
+    
+    try {
+      const { getPriceBasedVolatilityAnalysis } = await import('./priceVolatilityAnalysis');
+      
+      // 运行7天波动率分析
+      console.log('开始执行7天完整历史波动率分析...');
+      const results7d = await getPriceBasedVolatilityAnalysis('7d');
+      console.log(`7天波动率分析完成: 分析了${results7d.length}个加密货币`);
+      
+      // 运行30天波动率分析
+      console.log('开始执行30天完整历史波动率分析...');
+      const results30d = await getPriceBasedVolatilityAnalysis('30d');
+      console.log(`30天波动率分析完成: 分析了${results30d.length}个加密货币`);
+      
+      console.log('每日完整历史波动率分析任务完成');
+    } catch (error) {
+      console.error('Historical Volatility Analysis task error:', error);
+    }
+  });
   
   // 创建一个用于存储最新趋势分析结果的全局变量
   let latestTrendsAnalysisResult: any = null;
