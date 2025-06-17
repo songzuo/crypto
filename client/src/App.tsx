@@ -16,6 +16,7 @@ import Trends from "./pages/Trends";
 import VolumeRatio from "./pages/VolumeRatio";
 // Import the new technical analysis page component
 import TechnicalAnalysisNew from "./pages/TechnicalAnalysisNew";
+import VolatilityAnalysis from "./pages/VolatilityAnalysis";
 
 function Router() {
   return (
