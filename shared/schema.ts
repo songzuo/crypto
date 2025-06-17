@@ -291,3 +291,80 @@ export const technicalAnalysisEntriesRelations = relations(technicalAnalysisEntr
     references: [cryptocurrencies.id]
   })
 }));
+
+// 波动性分析批次表
+export const volatilityAnalysisBatches = pgTable("volatility_analysis_batches", {
+  id: serial("id").primaryKey(),
+  createdAt: timestamp("created_at").defaultNow(),
+  timeframe: text("timeframe").notNull().default("24h"),
+  totalAnalyzed: integer("total_analyzed").default(0),
+  analysisType: text("analysis_type").default("volume_volatility"),
+  baseVolumeRatioBatchId: integer("base_volume_ratio_batch_id"), // 基准批次ID
+  comparisonVolumeRatioBatchId: integer("comparison_volume_ratio_batch_id"), // 对比批次ID
+});
+
+export const insertVolatilityAnalysisBatchSchema = createInsertSchema(volatilityAnalysisBatches).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertVolatilityAnalysisBatch = z.infer<typeof insertVolatilityAnalysisBatchSchema>;
+export type VolatilityAnalysisBatch = typeof volatilityAnalysisBatches.$inferSelect;
+
+// 波动性分析条目表
+export const volatilityAnalysisEntries = pgTable("volatility_analysis_entries", {
+  id: serial("id").primaryKey(),
+  batchId: integer("batch_id").notNull(),
+  cryptocurrencyId: integer("cryptocurrency_id").notNull(),
+  name: text("name").notNull(),
+  symbol: text("symbol").notNull(),
+  // 交易量市值比率数据
+  currentVolumeRatio: real("current_volume_ratio"), // 当前交易量市值比率
+  previousVolumeRatio: real("previous_volume_ratio"), // 之前交易量市值比率
+  // 波动性指标
+  volatilityScore: real("volatility_score"), // 波动性评分 (0-100)
+  volatilityPercentage: real("volatility_percentage"), // 波动性百分比
+  volatilityDirection: text("volatility_direction"), // "up", "down", "stable"
+  volatilityRank: integer("volatility_rank"), // 波动性排名
+  // 价格和交易量变化
+  priceChange24h: real("price_change_24h"), // 24小时价格变化百分比
+  volumeChange24h: real("volume_change_24h"), // 24小时交易量变化百分比
+  marketCapChange24h: real("market_cap_change_24h"), // 24小时市值变化百分比
+  // 波动性分类
+  volatilityCategory: text("volatility_category"), // "极高", "高", "中", "低", "极低"
+  riskLevel: text("risk_level"), // "高风险", "中风险", "低风险"
+  analysisTime: timestamp("analysis_time").defaultNow(),
+});
+
+export const insertVolatilityAnalysisEntrySchema = createInsertSchema(volatilityAnalysisEntries).omit({
+  id: true,
+  analysisTime: true,
+});
+
+export type InsertVolatilityAnalysisEntry = z.infer<typeof insertVolatilityAnalysisEntrySchema>;
+export type VolatilityAnalysisEntry = typeof volatilityAnalysisEntries.$inferSelect;
+
+// 波动性分析批次关系
+export const volatilityAnalysisBatchesRelations = relations(volatilityAnalysisBatches, ({ many, one }) => ({
+  entries: many(volatilityAnalysisEntries),
+  baseVolumeRatioBatch: one(volumeToMarketCapBatches, {
+    fields: [volatilityAnalysisBatches.baseVolumeRatioBatchId],
+    references: [volumeToMarketCapBatches.id]
+  }),
+  comparisonVolumeRatioBatch: one(volumeToMarketCapBatches, {
+    fields: [volatilityAnalysisBatches.comparisonVolumeRatioBatchId],
+    references: [volumeToMarketCapBatches.id]
+  })
+}));
+
+// 波动性分析条目关系
+export const volatilityAnalysisEntriesRelations = relations(volatilityAnalysisEntries, ({ one }) => ({
+  batch: one(volatilityAnalysisBatches, {
+    fields: [volatilityAnalysisEntries.batchId],
+    references: [volatilityAnalysisBatches.id]
+  }),
+  cryptocurrency: one(cryptocurrencies, {
+    fields: [volatilityAnalysisEntries.cryptocurrencyId],
+    references: [cryptocurrencies.id]
+  })
+}));

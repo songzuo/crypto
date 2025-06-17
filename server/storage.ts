@@ -92,6 +92,17 @@ export interface IStorage {
   getTechnicalAnalysisResults(signal?: string): Promise<{ batch: TechnicalAnalysisBatch, entries: TechnicalAnalysisEntry[] }>;
   getTechnicalAnalysisResultsByBatchId(batchId: number, signal?: string): Promise<{ batch: TechnicalAnalysisBatch, entries: TechnicalAnalysisEntry[] }>;
   createTechnicalAnalysisEntry(entry: InsertTechnicalAnalysisEntry): Promise<TechnicalAnalysisEntry>;
+  
+  // 波动性分析批次相关方法
+  getVolatilityAnalysisBatches(page: number, limit: number): Promise<{ data: VolatilityAnalysisBatch[], total: number }>;
+  getLatestVolatilityAnalysisBatch(): Promise<VolatilityAnalysisBatch | undefined>;
+  getVolatilityAnalysisBatch(id: number): Promise<VolatilityAnalysisBatch | undefined>;
+  createVolatilityAnalysisBatch(batch: InsertVolatilityAnalysisBatch): Promise<VolatilityAnalysisBatch>;
+  
+  // 波动性分析条目相关方法
+  getVolatilityAnalysisResults(volatilityDirection?: string, volatilityCategory?: string): Promise<{ batch: VolatilityAnalysisBatch, entries: VolatilityAnalysisEntry[] }>;
+  getVolatilityAnalysisResultsByBatchId(batchId: number, volatilityDirection?: string, volatilityCategory?: string): Promise<VolatilityAnalysisEntry[]>;
+  createVolatilityAnalysisEntry(entry: InsertVolatilityAnalysisEntry): Promise<VolatilityAnalysisEntry>;
 }
 
 export class MemStorage implements IStorage {
@@ -1635,6 +1646,122 @@ export class DatabaseStorage implements IStorage {
       return batch;
     } catch (error) {
       console.error('Error creating volume to market cap batch:', error);
+      throw error;
+    }
+  }
+
+  // 波动性分析批次相关方法
+  async getVolatilityAnalysisBatches(page: number, limit: number): Promise<{ data: VolatilityAnalysisBatch[], total: number }> {
+    try {
+      const offset = (page - 1) * limit;
+      
+      const batchesQuery = await db
+        .select()
+        .from(volatilityAnalysisBatches)
+        .orderBy(desc(volatilityAnalysisBatches.createdAt))
+        .limit(limit)
+        .offset(offset);
+      
+      const countQuery = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(volatilityAnalysisBatches);
+      
+      return {
+        data: batchesQuery,
+        total: countQuery[0].count
+      };
+    } catch (error) {
+      console.error('Error fetching volatility analysis batches:', error);
+      return { data: [], total: 0 };
+    }
+  }
+
+  async getLatestVolatilityAnalysisBatch(): Promise<VolatilityAnalysisBatch | undefined> {
+    try {
+      const [batch] = await db
+        .select()
+        .from(volatilityAnalysisBatches)
+        .orderBy(desc(volatilityAnalysisBatches.createdAt))
+        .limit(1);
+      
+      return batch;
+    } catch (error) {
+      console.error('Error fetching latest volatility analysis batch:', error);
+      return undefined;
+    }
+  }
+
+  async getVolatilityAnalysisBatch(id: number): Promise<VolatilityAnalysisBatch | undefined> {
+    try {
+      const [batch] = await db
+        .select()
+        .from(volatilityAnalysisBatches)
+        .where(eq(volatilityAnalysisBatches.id, id))
+        .limit(1);
+      
+      return batch;
+    } catch (error) {
+      console.error('Error fetching volatility analysis batch by ID:', error);
+      return undefined;
+    }
+  }
+
+  async createVolatilityAnalysisBatch(batch: InsertVolatilityAnalysisBatch): Promise<VolatilityAnalysisBatch> {
+    try {
+      const [result] = await db
+        .insert(volatilityAnalysisBatches)
+        .values(batch)
+        .returning();
+        
+      return result;
+    } catch (error) {
+      console.error('Error creating volatility analysis batch:', error);
+      throw error;
+    }
+  }
+
+  // 波动性分析条目相关方法
+  async getVolatilityAnalysisResults(volatilityDirection?: string, volatilityCategory?: string): Promise<{ batch: VolatilityAnalysisBatch, entries: VolatilityAnalysisEntry[] }> {
+    const latestBatch = await this.getLatestVolatilityAnalysisBatch();
+    if (!latestBatch) {
+      return { batch: {} as VolatilityAnalysisBatch, entries: [] };
+    }
+
+    const entries = await this.getVolatilityAnalysisResultsByBatchId(latestBatch.id, volatilityDirection, volatilityCategory);
+    return { batch: latestBatch, entries };
+  }
+
+  async getVolatilityAnalysisResultsByBatchId(batchId: number, volatilityDirection?: string, volatilityCategory?: string): Promise<VolatilityAnalysisEntry[]> {
+    try {
+      let query = db.select()
+        .from(volatilityAnalysisEntries)
+        .where(eq(volatilityAnalysisEntries.batchId, batchId));
+
+      if (volatilityDirection) {
+        query = query.where(eq(volatilityAnalysisEntries.volatilityDirection, volatilityDirection));
+      }
+
+      if (volatilityCategory) {
+        query = query.where(eq(volatilityAnalysisEntries.volatilityCategory, volatilityCategory));
+      }
+
+      return await query.orderBy(asc(volatilityAnalysisEntries.volatilityRank));
+    } catch (error) {
+      console.error('Error fetching volatility analysis results:', error);
+      return [];
+    }
+  }
+
+  async createVolatilityAnalysisEntry(entry: InsertVolatilityAnalysisEntry): Promise<VolatilityAnalysisEntry> {
+    try {
+      const [result] = await db
+        .insert(volatilityAnalysisEntries)
+        .values(entry)
+        .returning();
+        
+      return result;
+    } catch (error) {
+      console.error('Error creating volatility analysis entry:', error);
       throw error;
     }
   }
