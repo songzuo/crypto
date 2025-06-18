@@ -15,35 +15,36 @@ export async function getVolatilityEntriesFromBatch5(
   try {
     console.log(`Fetching volatility data: direction=${direction}, category=${category}, limit=${limit}, offset=${offset}`);
 
-    let whereClause = 'WHERE batch_id = 5 AND "volatilityRank" IS NOT NULL';
+    let whereClause = 'WHERE batch_id = 5 AND volatility_rank IS NOT NULL';
     
     if (direction && direction !== 'all') {
-      whereClause += ` AND "volatilityDirection" = '${direction}'`;
+      whereClause += ` AND volatility_direction = '${direction}'`;
     }
     
     if (category && category !== 'all') {
-      whereClause += ` AND "volatilityCategory" = '${category}'`;
+      whereClause += ` AND volatility_category = '${category}'`;
     }
 
-    // Get entries with correct column names
+    // Get entries with correct snake_case column names
     const entriesQuery = `
       SELECT 
         symbol,
         name,
-        "volatilityPercentage",
-        "volatilityCategory", 
-        "volatilityDirection",
-        "volatilityRank",
-        "priceChange24h",
-        "marketCapChange24h"
+        volatility_percentage,
+        volatility_category, 
+        volatility_direction,
+        volatility_rank,
+        price_change_24h,
+        market_cap_change_24h
       FROM volatility_analysis_entries 
       ${whereClause}
-      ORDER BY "volatilityRank" ASC
+      ORDER BY volatility_rank ASC
       LIMIT ${limit} OFFSET ${offset}
     `;
 
     console.log('Executing query:', entriesQuery);
-    const entries = await db.execute(sql.raw(entriesQuery));
+    const entriesResult = await db.execute(sql.raw(entriesQuery));
+    const entries = Array.from(entriesResult) as any[];
     console.log(`Query returned ${entries.length} entries`);
 
     // Get total count
@@ -54,11 +55,12 @@ export async function getVolatilityEntriesFromBatch5(
     `;
 
     const countResult = await db.execute(sql.raw(countQuery));
-    const total = (countResult as any[])[0]?.total || 0;
+    const countRows = Array.from(countResult) as any[];
+    const total = countRows[0]?.total || 0;
     console.log(`Total entries matching criteria: ${total}`);
 
     return {
-      entries: entries as any[],
+      entries: entries,
       total: total,
       batchId: 5
     };
