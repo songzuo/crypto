@@ -9,8 +9,8 @@ interface VolatilityResult {
   volatilityDirection: 'up' | 'down' | 'stable';
   volatilityCategory: string;
   rank: number;
-  currentVolumeRatio?: number | null;
-  previousVolumeRatio?: number | null;
+  currentMarketCap?: number | null;
+  previousMarketCap?: number | null;
 }
 
 /**
@@ -43,65 +43,61 @@ export async function runWorkingVolatilityAnalysis(period: '7d' | '30d' = '7d'):
     const batch = await storage.createVolatilityAnalysisBatch(batchData);
     console.log(`创建批次记录，ID: ${batch.id}`);
     
-    // Get the latest two volume ratio batches for comparison
-    const latestBatches = await storage.getVolumeToMarketCapBatches(1, 2);
-    if (latestBatches.data.length < 2) {
-      throw new Error('需要至少两个交易量市值比率批次来计算波动性');
-    }
+    // Get current cryptocurrency market cap data and compare with historical data
+    const currentCryptos = await storage.getCryptocurrencies(1, 2000, 'marketCap', 'desc');
+    const currentCryptoMap = new Map(currentCryptos.data.map(c => [c.id, c]));
     
-    const [currentBatch, previousBatch] = latestBatches.data;
-    console.log(`使用批次 #${currentBatch.id} 和 #${previousBatch.id} 进行波动性计算`);
-    
-    // Get volume ratios for both batches
-    const currentRatios = await storage.getVolumeToMarketCapRatiosByBatchId(currentBatch.id);
-    const previousRatios = await storage.getVolumeToMarketCapRatiosByBatchId(previousBatch.id);
-    
-    // Create maps for efficient lookup
-    const currentRatioMap = new Map(currentRatios.map(r => [r.cryptocurrencyId, r]));
-    const previousRatioMap = new Map(previousRatios.map(r => [r.cryptocurrencyId, r]));
-    
-    console.log(`当前批次有 ${currentRatios.length} 个比率，之前批次有 ${previousRatios.length} 个比率`);
+    console.log(`获取到 ${currentCryptos.data.length} 个当前加密货币的市值数据`);
     
     // Calculate volatility for each cryptocurrency
     const results: VolatilityResult[] = [];
     
     for (const crypto of validCryptos) {
       try {
-        const currentRatio = currentRatioMap.get(crypto.id);
-        const previousRatio = previousRatioMap.get(crypto.id);
-        
         let volatilityPercentage = 0;
         let direction: 'up' | 'down' | 'stable' = 'stable';
+        let currentMarketCap = crypto.marketCap;
+        let previousMarketCap: number | null = null;
         
-        if (currentRatio && previousRatio && currentRatio.volumeToMarketCapRatio && previousRatio.volumeToMarketCapRatio) {
-          // Calculate volatility based on ratio change
-          const ratioChange = currentRatio.volumeToMarketCapRatio - previousRatio.volumeToMarketCapRatio;
-          const relativeChange = Math.abs(ratioChange / previousRatio.volumeToMarketCapRatio) * 100;
+        // Calculate market cap volatility using price change as proxy for market cap change
+        // Since market cap = price × circulating supply, price change reflects market cap change
+        if (crypto.priceChange24h !== null && crypto.priceChange24h !== undefined && currentMarketCap) {
+          // Calculate previous market cap based on price change
+          const priceChangeDecimal = crypto.priceChange24h / 100;
+          const currentPrice = crypto.price || 0;
+          const previousPrice = currentPrice / (1 + priceChangeDecimal);
           
-          // Time-based normalization (as specified in user requirements)
-          const timeDiffHours = (currentRatio.timestamp.getTime() - previousRatio.timestamp.getTime()) / (1000 * 60 * 60);
-          const normalizedVolatility = timeDiffHours > 0 ? (relativeChange / timeDiffHours) * 24 : relativeChange;
-          
-          volatilityPercentage = Math.min(normalizedVolatility, 100); // Cap at 100%
-          
-          // Determine direction based on ratio change
-          if (ratioChange > 0.001) {
-            direction = 'up';
-          } else if (ratioChange < -0.001) {
-            direction = 'down';
-          }
-        } else if (crypto.priceChange24h !== null && crypto.priceChange24h !== undefined) {
-          // Fallback to price change if ratio data is missing
-          volatilityPercentage = Math.abs(crypto.priceChange24h);
-          
-          if (crypto.priceChange24h > 0.1) {
-            direction = 'up';
-          } else if (crypto.priceChange24h < -0.1) {
-            direction = 'down';
+          if (currentPrice > 0) {
+            // Estimate circulating supply from current data
+            const estimatedSupply = currentMarketCap / currentPrice;
+            previousMarketCap = previousPrice * estimatedSupply;
+            
+            // Calculate market cap volatility
+            const marketCapChange = currentMarketCap - previousMarketCap;
+            const marketCapChangePercent = Math.abs(marketCapChange / previousMarketCap) * 100;
+            
+            // Time-based normalization (24-hour period already normalized)
+            volatilityPercentage = Math.min(marketCapChangePercent, 100);
+            
+            // Determine direction based on market cap change
+            if (marketCapChange > 0) {
+              direction = 'up';
+            } else if (marketCapChange < 0) {
+              direction = 'down';
+            }
+          } else {
+            // Fallback to absolute price change percentage
+            volatilityPercentage = Math.abs(crypto.priceChange24h);
+            
+            if (crypto.priceChange24h > 0.1) {
+              direction = 'up';
+            } else if (crypto.priceChange24h < -0.1) {
+              direction = 'down';
+            }
           }
         } else {
-          // Skip cryptocurrencies without sufficient data
-          console.log(`跳过 ${crypto.symbol}: 缺少比率数据和价格变化数据`);
+          // Skip cryptocurrencies without sufficient market data
+          console.log(`跳过 ${crypto.symbol}: 缺少市值或价格变化数据`);
           continue;
         }
         
@@ -118,8 +114,8 @@ export async function runWorkingVolatilityAnalysis(period: '7d' | '30d' = '7d'):
           volatilityDirection: direction,
           volatilityCategory: category,
           rank: 0, // Will be set after sorting
-          currentVolumeRatio: currentRatio?.volumeToMarketCapRatio || null,
-          previousVolumeRatio: previousRatio?.volumeToMarketCapRatio || null
+          currentMarketCap: currentMarketCap,
+          previousMarketCap: previousMarketCap
         });
         
       } catch (error) {
@@ -148,8 +144,8 @@ export async function runWorkingVolatilityAnalysis(period: '7d' | '30d' = '7d'):
           volatilityDirection: result.volatilityDirection,
           volatilityCategory: result.volatilityCategory,
           volatilityRank: result.rank,
-          currentVolumeRatio: result.currentVolumeRatio || 0,
-          previousVolumeRatio: result.previousVolumeRatio || 0,
+          marketCapChange24h: result.currentMarketCap && result.previousMarketCap ? 
+            ((result.currentMarketCap - result.previousMarketCap) / result.previousMarketCap) * 100 : null,
           volatilityScore: result.volatilityPercentage,
           analysisTime: new Date()
         };
