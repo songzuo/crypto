@@ -106,12 +106,12 @@ export async function runImprovedVolatilityAnalysis(period: '7d' | '30d' = '7d')
 async function getLatestBatches(period: '7d' | '30d') {
   if (period === '7d') {
     // 7天分析：获取最新8个批次（用于计算7个波动率数据点）
-    const batches = await storage.getVolumeToMarketCapBatches(1, 8);
-    return batches.data;
+    const batches = await storage.getVolumeToMarketCapRatioBatches(1, 8, 'desc');
+    return batches.data.reverse(); // 按时间顺序排列
   } else {
-    // 30天分析：获取所有可用批次
-    const batches = await storage.getVolumeToMarketCapBatches(1, 200); // 假设最多200个批次
-    return batches.data;
+    // 30天分析：获取所有可用批次（最新148个）
+    const batches = await storage.getVolumeToMarketCapRatioBatches(1, 200, 'desc');
+    return batches.data.reverse(); // 按时间顺序排列
   }
 }
 
@@ -121,8 +121,10 @@ async function getLatestBatches(period: '7d' | '30d') {
 async function calculateVolatilityForPeriod(batches: any[], period: '7d' | '30d'): Promise<VolatilityResult[]> {
   const results: VolatilityResult[] = [];
   
+  console.log(`获取到 ${batches.length} 个批次数据`);
+  
   if (batches.length < 2) {
-    throw new Error('需要至少2个批次数据来计算波动率');
+    throw new Error(`需要至少2个批次数据来计算波动率，当前只有 ${batches.length} 个批次`);
   }
 
   // 获取所有加密货币
