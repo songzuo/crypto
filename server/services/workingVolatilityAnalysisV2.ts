@@ -24,7 +24,7 @@ export async function runWorkingVolatilityAnalysisV2(period: '7d' | '30d' = '7d'
   
   try {
     // Get the latest batches
-    const batchesResponse = await storage.getVolumeToMarketCapRatioBatches(1, period === '7d' ? 8 : 50, 'desc');
+    const batchesResponse = await storage.getVolumeToMarketCapBatches(1, period === '7d' ? 8 : 50, 'desc');
     const batches = batchesResponse.data.reverse(); // Oldest first
     
     console.log(`获取到 ${batches.length} 个批次`);
