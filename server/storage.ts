@@ -1751,19 +1751,26 @@ export class DatabaseStorage implements IStorage {
 
   async getVolatilityAnalysisResultsByBatchId(batchId: number, volatilityDirection?: string, volatilityCategory?: string): Promise<VolatilityAnalysisEntry[]> {
     try {
-      let queryBuilder = db.select()
-        .from(volatilityAnalysisEntries)
-        .where(eq(volatilityAnalysisEntries.batchId, batchId));
-
+      const { and } = await import('drizzle-orm');
+      
+      // Build where conditions
+      const conditions = [eq(volatilityAnalysisEntries.batchId, batchId)];
+      
       if (volatilityDirection && volatilityDirection !== 'all') {
-        queryBuilder = queryBuilder.where(eq(volatilityAnalysisEntries.volatilityDirection, volatilityDirection));
+        conditions.push(eq(volatilityAnalysisEntries.volatilityDirection, volatilityDirection));
       }
 
       if (volatilityCategory && volatilityCategory !== 'all') {
-        queryBuilder = queryBuilder.where(eq(volatilityAnalysisEntries.volatilityCategory, volatilityCategory));
+        conditions.push(eq(volatilityAnalysisEntries.volatilityCategory, volatilityCategory));
       }
 
-      return await queryBuilder.orderBy(asc(volatilityAnalysisEntries.volatilityRank));
+      const results = await db.select()
+        .from(volatilityAnalysisEntries)
+        .where(and(...conditions))
+        .orderBy(asc(volatilityAnalysisEntries.volatilityRank));
+        
+      console.log(`过滤后的波动性分析结果: ${results.length} 条记录 (方向: ${volatilityDirection}, 类别: ${volatilityCategory})`);
+      return results;
     } catch (error) {
       console.error('Error fetching volatility analysis results:', error);
       return [];

@@ -214,11 +214,9 @@ const VolatilityAnalysis = () => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">全部等级</SelectItem>
-                <SelectItem value="极高">极高风险</SelectItem>
-                <SelectItem value="高">高风险</SelectItem>
-                <SelectItem value="中">中等风险</SelectItem>
-                <SelectItem value="低">低风险</SelectItem>
-                <SelectItem value="极低">极低风险</SelectItem>
+                <SelectItem value="High">高风险</SelectItem>
+                <SelectItem value="Medium">中等风险</SelectItem>
+                <SelectItem value="Low">低风险</SelectItem>
               </SelectContent>
             </Select>
 
@@ -289,10 +287,10 @@ const VolatilityAnalysis = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {resultsData.entries.map((entry: VolatilityEntry) => (
-                    <TableRow key={`${entry.symbol}-${entry.rank}`}>
+                  {resultsData.entries.map((entry: VolatilityEntry, index: number) => (
+                    <TableRow key={`${entry.symbol}-${entry.rank || index}`}>
                       <TableCell className="font-medium">
-                        <Badge variant="outline">#{entry.rank}</Badge>
+                        <Badge variant="outline">#{entry.rank || ((currentPage - 1) * pageSize + index + 1)}</Badge>
                       </TableCell>
                       <TableCell>
                         <div>
