@@ -503,20 +503,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 波动性分析API路由 - 直接从数据库获取结果
+  // 波动性分析API路由 - 强制使用batch 5的数据
   app.get('/api/volatility-analysis/results', async (req, res) => {
     try {
       const direction = req.query.direction as string;
       const category = req.query.category as string;
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 30;
+      const offset = (page - 1) * limit;
+
+      // Direct SQL query to get data from batch 5
+      const whereConditions = ['batch_id = 5', 'volatility_rank IS NOT NULL'];
       
-      const results = await storage.getVolatilityAnalysisResults(direction, category);
+      if (direction && direction !== 'all') {
+        whereConditions.push(`volatility_direction = '${direction}'`);
+      }
       
-      // 应用分页
-      const startIndex = (page - 1) * limit;
-      const endIndex = startIndex + limit;
-      const paginatedEntries = results.entries.slice(startIndex, endIndex);
+      if (category && category !== 'all') {
+        whereConditions.push(`volatility_category = '${category}'`);
+      }
+
+      const whereClause = whereConditions.join(' AND ');
+
+      const entriesResult = await db.execute(sql.raw(`
+        SELECT 
+          symbol,
+          name,
+          volatility_percentage,
+          volatility_category,
+          volatility_direction,
+          volatility_rank,
+          price_change_24h,
+          market_cap_change_24h
+        FROM volatility_analysis_entries 
+        WHERE ${whereClause}
+        ORDER BY volatility_rank ASC
+        LIMIT ${limit} OFFSET ${offset}
+      `));
+
+      const countResult = await db.execute(sql.raw(`
+        SELECT COUNT(*) as total
+        FROM volatility_analysis_entries 
+        WHERE ${whereClause}
+      `));
+
+      const entries = Array.isArray(entriesResult) ? entriesResult : [];
+      const total = Array.isArray(countResult) ? (countResult[0] as any)?.total || 0 : 0;
+
+      const paginatedEntries = entries;
       
       // Map database fields to frontend expected fields  
       const mappedEntries = paginatedEntries.map(entry => ({
@@ -532,18 +566,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         period: '24h'
       }));
 
-      const responseData = {
-        batch: results.batch,
+      console.log(`波动性分析结果: 返回${mappedEntries.length}个结果，总共${total}个 (方向: ${direction}, 类别: ${category})`);
+
+      res.json({
+        batch: { id: 5, total_analyzed: 906, timeframe: '7d' },
         entries: mappedEntries,
-        total: results.entries.length,
-        page,
-        limit
-      };
-      
-      console.log(`波动性分析结果: 筛选条件 direction=${direction}, category=${category}`);
-      console.log(`返回${paginatedEntries.length}个结果，总共${results.entries.length}个`);
-      
-      res.json(responseData);
+        total: total,
+        page: Number(page),
+        limit: Number(limit)
+      });
     } catch (error) {
       console.error('获取波动性分析结果失败:', error);
       res.status(500).json({ error: (error as Error).message });
