@@ -52,54 +52,62 @@ export async function runWorkingVolatilityAnalysis(period: '7d' | '30d' = '7d'):
     // Calculate volatility for each cryptocurrency
     const results: VolatilityResult[] = [];
     
-    for (const crypto of validCryptos) {
+    for (const crypto of cryptos.data) {
       try {
-        let volatilityPercentage = 0;
-        let direction: 'up' | 'down' | 'stable' = 'stable';
-        let currentMarketCap = crypto.marketCap;
-        let previousMarketCap: number | null = null;
+        // 收集该加密货币在各批次的市值数据
+        const marketCapData: { batchId: number, marketCap: number, timestamp: Date }[] = [];
         
-        // Calculate market cap volatility using price change as proxy for market cap change
-        // Since market cap = price × circulating supply, price change reflects market cap change
-        if (crypto.priceChange24h !== null && crypto.priceChange24h !== undefined && currentMarketCap) {
-          // Calculate previous market cap based on price change
-          const priceChangeDecimal = crypto.priceChange24h / 100;
-          const currentPrice = crypto.price || 0;
-          const previousPrice = currentPrice / (1 + priceChangeDecimal);
-          
-          if (currentPrice > 0) {
-            // Estimate circulating supply from current data
-            const estimatedSupply = currentMarketCap / currentPrice;
-            previousMarketCap = previousPrice * estimatedSupply;
+        for (const batch of latestBatches.data) {
+          try {
+            const batchEntries = await storage.getVolumeToMarketCapRatios(batch.id, 1, 1000);
+            const cryptoEntry = batchEntries.data.find(entry => 
+              entry.symbol === crypto.symbol || entry.cryptocurrencyId === crypto.id
+            );
             
-            // Calculate market cap volatility
-            const marketCapChange = currentMarketCap - previousMarketCap;
-            const marketCapChangePercent = Math.abs(marketCapChange / previousMarketCap) * 100;
-            
-            // Time-based normalization (24-hour period already normalized)
-            volatilityPercentage = Math.min(marketCapChangePercent, 100);
-            
-            // Determine direction based on market cap change
-            if (marketCapChange > 0) {
-              direction = 'up';
-            } else if (marketCapChange < 0) {
-              direction = 'down';
+            if (cryptoEntry && cryptoEntry.marketCap && cryptoEntry.marketCap > 0) {
+              marketCapData.push({
+                batchId: batch.id,
+                marketCap: cryptoEntry.marketCap,
+                timestamp: batch.createdAt || new Date()
+              });
             }
-          } else {
-            // Fallback to absolute price change percentage
-            volatilityPercentage = Math.abs(crypto.priceChange24h);
-            
-            if (crypto.priceChange24h > 0.1) {
-              direction = 'up';
-            } else if (crypto.priceChange24h < -0.1) {
-              direction = 'down';
-            }
+          } catch (error) {
+            // 忽略单个批次的错误，继续其他批次
           }
-        } else {
-          // Skip cryptocurrencies without sufficient market data
-          console.log(`跳过 ${crypto.symbol}: 缺少市值或价格变化数据`);
+        }
+
+        if (marketCapData.length < 2) {
+          // 数据不足，跳过此币种
           continue;
         }
+
+        // 按时间排序（最新在前）
+        marketCapData.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+        // 计算7天波动率：最新7个变化率的平均值
+        let volatilityPercentage = 0;
+        const dataPointsToUse = Math.min(8, marketCapData.length); // 最多使用8个数据点计算7个变化率
+        
+        if (dataPointsToUse >= 2) {
+          const changes: number[] = [];
+          for (let i = 0; i < dataPointsToUse - 1; i++) {
+            const current = marketCapData[i].marketCap;
+            const previous = marketCapData[i + 1].marketCap;
+            const changePercent = Math.abs((current - previous) / previous) * 100;
+            changes.push(changePercent);
+          }
+          volatilityPercentage = changes.reduce((sum, change) => sum + change, 0) / changes.length;
+        }
+
+        // 确定方向（基于最新vs最旧的市值变化）
+        let direction: 'up' | 'down' | 'stable' = 'stable';
+        const current = marketCapData[0].marketCap;
+        const oldest = marketCapData[marketCapData.length - 1].marketCap;
+        const overallChange = (current - oldest) / oldest;
+
+        if (overallChange > 0.001) direction = 'up';      
+        else if (overallChange < -0.001) direction = 'down';   
+        else direction = 'stable';
         
         // Categorize volatility based on calculated percentage
         let category = 'Low';
