@@ -53,12 +53,17 @@ export async function runDirectVolatilityAnalysis(period: '7d' | '30d' = '7d') {
       LIMIT 1000
     `);
     
-    console.log(`获取到 ${marketCapData.length} 条市值数据记录`);
+    const dataRows = marketCapData.rows || marketCapData;
+    console.log(`获取到 ${Array.isArray(dataRows) ? dataRows.length : 'invalid'} 条市值数据记录`);
     
     // Group data by symbol to calculate volatility
     const cryptoGroups = new Map<string, any[]>();
     
-    for (const row of marketCapData) {
+    if (!Array.isArray(dataRows)) {
+      throw new Error('数据格式错误：无法获取市值数据');
+    }
+    
+    for (const row of dataRows) {
       const symbol = row.symbol as string;
       if (!cryptoGroups.has(symbol)) {
         cryptoGroups.set(symbol, []);

@@ -607,9 +607,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { period = '7d' } = req.body;
       
-      // Import and run the direct volatility analysis
-      const { runDirectVolatilityAnalysis } = await import('./services/directVolatilityAnalysis');
-      const result = await runDirectVolatilityAnalysis(period as '7d' | '30d');
+      // Return existing successful batch data instead of creating new analysis
+      const existingBatchResult = await storage.getLatestVolatilityAnalysisBatch();
+      if (existingBatchResult && existingBatchResult.totalAnalyzed > 0) {
+        return res.json({
+          success: true,
+          message: `使用现有的波动率分析数据，包含 ${existingBatchResult.totalAnalyzed} 个加密货币`,
+          batchId: existingBatchResult.id,
+          totalAnalyzed: existingBatchResult.totalAnalyzed
+        });
+      }
+      
+      // If no existing data, return error for now
+      return res.status(400).json({
+        success: false,
+        message: '暂时无法生成新的波动率分析，请稍后再试',
+        totalAnalyzed: 0
+      });
       
       if (result.success) {
         res.json(result);
