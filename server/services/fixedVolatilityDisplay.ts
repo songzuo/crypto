@@ -16,13 +16,13 @@ export async function getVolatilityDataFromBatch5() {
         volatility_percentage,
         volatility_category,
         volatility_direction,
-        rank as volatility_rank,
-        current_market_cap,
-        previous_market_cap
+        volatility_rank,
+        price_change_24h,
+        market_cap_change_24h
       FROM volatility_analysis_entries 
       WHERE batch_id = 5
-        AND rank IS NOT NULL
-      ORDER BY rank ASC
+        AND volatility_rank IS NOT NULL
+      ORDER BY volatility_rank ASC
       LIMIT 100
     `);
 
@@ -69,7 +69,7 @@ export async function getFilteredVolatilityData(
   offset: number = 0
 ) {
   try {
-    let whereClause = 'WHERE batch_id = 5 AND rank IS NOT NULL';
+    let whereClause = 'WHERE batch_id = 5 AND volatility_rank IS NOT NULL';
     
     if (direction && direction !== 'all') {
       whereClause += ` AND volatility_direction = '${direction}'`;
@@ -86,12 +86,12 @@ export async function getFilteredVolatilityData(
         volatility_percentage,
         volatility_category,
         volatility_direction,
-        rank as volatility_rank,
-        current_market_cap,
-        previous_market_cap
+        volatility_rank,
+        price_change_24h,
+        market_cap_change_24h
       FROM volatility_analysis_entries 
       ${whereClause}
-      ORDER BY rank ASC
+      ORDER BY volatility_rank ASC
       LIMIT ${limit} OFFSET ${offset}
     `));
 
