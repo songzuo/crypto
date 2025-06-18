@@ -5,7 +5,9 @@
  * 3. 30天分析使用全部批次数据的平均值
  */
 
-import { storage } from '../storage';
+import { DatabaseStorage } from '../storage';
+
+const storage = new DatabaseStorage();
 
 interface VolatilityResult {
   symbol: string;
@@ -128,7 +130,7 @@ async function calculateVolatilityForPeriod(batches: any[], period: '7d' | '30d'
   }
 
   // 获取所有加密货币
-  const allCryptos = await storage.getCryptocurrencies(1, 2000, 'rank', 'asc');
+  const allCryptos = await storage.getCryptocurrencies(1, 2000);
   if (!allCryptos.data || allCryptos.data.length === 0) {
     throw new Error('没有找到加密货币数据');
   }
