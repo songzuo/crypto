@@ -47,12 +47,14 @@ export async function getCachedVolatilityAnalysis(
   if (latestBatch && latestBatch.createdAt) {
     const batchAge = now.getTime() - latestBatch.createdAt.getTime();
     
-    // 如果批次数据在24小时内，直接使用
+    // 如果批次数据在24小时内，检查是否有实际数据
     if (batchAge < CACHE_DURATION) {
-      console.log(`使用数据库缓存的${period}波动性分析数据 (批次#${latestBatch.id})`);
-      
       const entries = await storage.getVolatilityAnalysisResultsByBatchId(latestBatch.id);
-      const results = await enrichVolatilityEntries(entries);
+      
+      // 只有当批次确实有数据时才使用缓存
+      if (entries.length > 0) {
+        console.log(`使用数据库缓存的${period}波动性分析数据 (批次#${latestBatch.id}, ${entries.length}条记录)`);
+        const results = await enrichVolatilityEntries(entries);
       
       // 更新内存缓存
       volatilityCache.set(cacheKey, {
