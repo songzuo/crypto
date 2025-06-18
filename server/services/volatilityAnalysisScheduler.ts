@@ -4,7 +4,7 @@
  */
 
 import { storage } from '../storage';
-import { runAPIVolumeRatioAnalysis } from '../apiVolumeRatioAnalysis';
+import { runVolatilityAnalysisWithNewAlgorithm } from './volatilityCalculator';
 
 /**
  * 运行波动性分析并存储新批次
@@ -22,26 +22,10 @@ export async function runScheduledVolatilityAnalysis(): Promise<void> {
       return;
     }
     
-    // 创建新的波动性分析批次
-    const newBatch = await storage.createVolatilityAnalysisBatch({
-      timeframe: '7d',
-      analysisType: 'volatility_ranking',
-      totalAnalyzed: null,
-      baseVolumeRatioBatchId: null,
-      comparisonVolumeRatioBatchId: null
-    });
+    // 运行新的波动性分析算法
+    const batchId = await runVolatilityAnalysisWithNewAlgorithm();
     
-    console.log(`创建新的波动性分析批次: ${newBatch.id}`);
-    
-    // 运行波动性分析
-    await runAPIVolumeRatioAnalysis();
-    
-    // 更新批次状态
-    await storage.updateVolatilityAnalysisBatch(newBatch.id, {
-      totalAnalyzed: cryptoCount
-    });
-    
-    console.log(`波动性分析批次 ${newBatch.id} 完成，分析了 ${cryptoCount} 个加密货币`);
+    console.log(`波动性分析批次 ${batchId} 完成，使用新算法分析了 ${cryptoResult.total} 个加密货币`);
     
   } catch (error) {
     console.error('定期波动性分析失败:', error);
