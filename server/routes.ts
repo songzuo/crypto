@@ -547,15 +547,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/volatility-analysis/run', async (req, res) => {
     try {
-      const results = await runSimpleVolatilityAnalysis();
-      res.json({ 
-        success: true, 
-        message: `波动性分析完成，共分析 ${results.length} 个币种`,
-        results: results.slice(0, 10) // 返回前10个作为预览
-      });
+      const { period = '7d' } = req.body;
+      
+      // Import and run the working volatility analysis
+      const { runWorkingVolatilityAnalysis } = await import('./services/workingVolatilityAnalysis');
+      const result = await runWorkingVolatilityAnalysis(period as '7d' | '30d');
+      
+      if (result.success) {
+        res.json(result);
+      } else {
+        res.status(400).json(result);
+      }
     } catch (error) {
       console.error('运行波动性分析失败:', error);
-      res.status(500).json({ error: (error as Error).message });
+      res.status(500).json({ 
+        success: false,
+        error: error instanceof Error ? error.message : '运行失败' 
+      });
     }
   });
 

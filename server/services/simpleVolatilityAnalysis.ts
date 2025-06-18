@@ -34,8 +34,8 @@ export async function runSimplifiedVolatilityAnalysis(period: '7d' | '30d' = '7d
     const previousBatch = allBatches.data[1];
     
     // 获取当前和前一批次的数据
-    const currentData = await storage.getVolumeToMarketCapResults(currentBatch.id);
-    const previousData = await storage.getVolumeToMarketCapResults(previousBatch.id);
+    const currentData = await storage.getVolumeToMarketCapRatiosByBatchId(currentBatch.id);
+    const previousData = await storage.getVolumeToMarketCapRatiosByBatchId(previousBatch.id);
     
     console.log(`当前批次数据: ${currentData.length} 条, 前一批次数据: ${previousData.length} 条`);
     

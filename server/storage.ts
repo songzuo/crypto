@@ -1751,19 +1751,19 @@ export class DatabaseStorage implements IStorage {
 
   async getVolatilityAnalysisResultsByBatchId(batchId: number, volatilityDirection?: string, volatilityCategory?: string): Promise<VolatilityAnalysisEntry[]> {
     try {
-      let query = db.select()
+      let queryBuilder = db.select()
         .from(volatilityAnalysisEntries)
         .where(eq(volatilityAnalysisEntries.batchId, batchId));
 
-      if (volatilityDirection) {
-        query = query.where(eq(volatilityAnalysisEntries.volatilityDirection, volatilityDirection));
+      if (volatilityDirection && volatilityDirection !== 'all') {
+        queryBuilder = queryBuilder.where(eq(volatilityAnalysisEntries.volatilityDirection, volatilityDirection));
       }
 
-      if (volatilityCategory) {
-        query = query.where(eq(volatilityAnalysisEntries.volatilityCategory, volatilityCategory));
+      if (volatilityCategory && volatilityCategory !== 'all') {
+        queryBuilder = queryBuilder.where(eq(volatilityAnalysisEntries.volatilityCategory, volatilityCategory));
       }
 
-      return await query.orderBy(asc(volatilityAnalysisEntries.volatilityRank));
+      return await queryBuilder.orderBy(asc(volatilityAnalysisEntries.volatilityRank));
     } catch (error) {
       console.error('Error fetching volatility analysis results:', error);
       return [];
