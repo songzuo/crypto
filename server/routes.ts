@@ -548,23 +548,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         WHERE ${whereClause}
       `));
 
-      const entries = Array.isArray(entriesResult) ? entriesResult : [];
-      const total = Array.isArray(countResult) ? (countResult[0] as any)?.total || 0 : 0;
+      // Convert Drizzle result to array format
+      const entries = Array.from(entriesResult as any[]) || [];
+      const countRows = Array.from(countResult as any[]) || [];
+      const total = parseInt(countRows[0]?.total) || 0;
+      
+      console.log(`数据库查询结果: entries.length=${entries.length}, total=${total}`);
 
       const paginatedEntries = entries;
       
       // Map database fields to frontend expected fields  
-      const mappedEntries = paginatedEntries.map(entry => ({
+      const mappedEntries = paginatedEntries.map((entry: any) => ({
         symbol: entry.symbol,
         name: entry.name,
-        volatilityPercentage: entry.volatilityPercentage,
-        direction: entry.volatilityDirection,
-        category: entry.volatilityCategory,
-        rank: entry.volatilityRank,
-        dataPoints: 142, // Based on user specification of 142 ratios from 143 batches
-        comparisons: 142,
-        marketCapChange: entry.marketCapChange24h || 0,
-        period: '24h'
+        volatilityPercentage: parseFloat(entry.volatility_percentage) || 0,
+        direction: entry.volatility_direction,
+        category: entry.volatility_category,
+        rank: entry.volatility_rank || 0,
+        dataPoints: 148,
+        comparisons: 148,
+        marketCapChange: entry.market_cap_change_24h || 0,
+        period: '7d'
       }));
 
       console.log(`波动性分析结果: 返回${mappedEntries.length}个结果，总共${total}个 (方向: ${direction}, 类别: ${category})`);
