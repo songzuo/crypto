@@ -512,11 +512,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const limit = parseInt(req.query.limit as string) || 30;
       const period = (req.query.period as string) || '7d';
       
-      // 使用已验证的价格波动性分析服务
-      const { getFilteredPriceVolatility } = await import('./services/priceVolatilityAnalysis');
+      // 使用新的缓存波动性分析服务
+      const { getCachedVolatilityAnalysis } = await import('./services/cachedVolatilityAnalysis');
       
-      // 获取波动性分析结果
-      const results = await getFilteredPriceVolatility(
+      // 获取缓存的波动性分析结果
+      const results = await getCachedVolatilityAnalysis(
         period as '7d' | '30d',
         direction,
         category,

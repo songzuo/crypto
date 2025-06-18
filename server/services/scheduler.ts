@@ -397,6 +397,48 @@ export async function setupScheduler() {
       console.error('每日技术分析任务出错:', error);
     }
   });
+
+  // 波动性分析任务 - 每天凌晨3点运行一次
+  // 计算7天和30天的价格波动性分析
+  cron.schedule('0 3 * * *', async () => {
+    console.log('运行计划任务: 每日波动性分析');
+    
+    try {
+      // 导入波动性分析服务
+      const { calculateAndStoreVolatilityAnalysis } = await import('./volatilityAnalysisService');
+      const { clearExpiredCache } = await import('./cachedVolatilityAnalysis');
+      
+      // 清除过期缓存
+      clearExpiredCache();
+      
+      // 执行7天波动性分析
+      console.log('开始执行7天波动性分析...');
+      const batch7d = await calculateAndStoreVolatilityAnalysis('7d');
+      if (batch7d) {
+        console.log(`7天波动性分析完成，已创建批次#${batch7d}`);
+      } else {
+        console.error('7天波动性分析失败');
+      }
+      
+      // 等待2分钟后执行30天分析，避免资源竞争
+      setTimeout(async () => {
+        try {
+          console.log('开始执行30天波动性分析...');
+          const batch30d = await calculateAndStoreVolatilityAnalysis('30d');
+          if (batch30d) {
+            console.log(`30天波动性分析完成，已创建批次#${batch30d}`);
+          } else {
+            console.error('30天波动性分析失败');
+          }
+        } catch (error) {
+          console.error('30天波动性分析任务出错:', error);
+        }
+      }, 2 * 60 * 1000); // 2分钟延迟
+      
+    } catch (error) {
+      console.error('每日波动性分析任务出错:', error);
+    }
+  });
   
   // 重点币种市场数据更新任务
   // 每小时专门查询和更新排名前30的币种
