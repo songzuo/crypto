@@ -666,13 +666,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       console.log('手动触发波动性分析（新算法）...');
       
-      const { runVolatilityAnalysisWithNewAlgorithm } = await import('./services/volatilityCalculator');
-      const batchId = await runVolatilityAnalysisWithNewAlgorithm();
+      const { runNewVolatilityAlgorithm } = await import('./newVolatilityAlgorithm');
+      const result = await runNewVolatilityAlgorithm();
       
       res.json({
         success: true,
         message: '波动性分析成功完成',
-        batchId: batchId,
+        batchId: result.batchId,
+        totalAnalyzed: result.totalAnalyzed,
         algorithm: {
           '7day': '使用最近8个数据点计算平均值',
           '30day': '使用全部可用数据点计算平均值'
