@@ -135,8 +135,8 @@ export async function executeUserSpecifiedAlgorithm(): Promise<{ batchId: number
           INSERT INTO volatility_analysis_entries (
             symbol, name, batch_id, cryptocurrency_id, volatility_percentage,
             volatility_category, volatility_direction, volatility_rank,
-            risk_level, data_points, comparisons, period
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            risk_level, period
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         `;
         
         await pool.query(insertQuery, [
@@ -149,8 +149,6 @@ export async function executeUserSpecifiedAlgorithm(): Promise<{ batchId: number
           result.direction,
           i + 1, // 排名
           result.category.toLowerCase(),
-          result.dataPoints7d, // 7天数据点数
-          result.dataPoints30d, // 30天数据点数  
           '7d'
         ]);
         
