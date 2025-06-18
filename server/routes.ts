@@ -661,28 +661,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 手动触发新算法波动性分析
+  // 手动触发用户指定算法波动性分析
   app.post('/api/volatility-analysis/trigger', async (req, res) => {
     try {
-      console.log('手动触发波动性分析（用户指定算法）...');
+      console.log('🎯 手动触发波动性分析（用户指定算法）...');
       
-      const { generateNewVolatilityBatch } = await import('./finalVolatilityAlgorithm');
-      const result = await generateNewVolatilityBatch();
+      const { runUserSpecifiedVolatilityAlgorithm } = await import('./userSpecifiedAlgorithm');
+      const result = await runUserSpecifiedVolatilityAlgorithm();
       
       res.json({
         success: true,
-        message: '波动性分析成功完成',
+        message: '用户指定算法波动性分析成功完成',
         batchId: result.batchId,
         totalAnalyzed: result.totalAnalyzed,
         algorithm: {
-          '7day': '使用最近8个数据点计算平均值',
-          '30day': '使用全部可用数据点计算平均值',
+          name: '用户指定算法',
+          '7day': '使用最近8个数据点的平均值',
+          '30day': '使用全部可用数据点的平均值',
           specification: '算法设计：1、七天算最近8个数据点的平均值  2、三十天算全部数据点的平均值'
         }
       });
       
     } catch (error) {
-      console.error('手动波动性分析失败:', error);
+      console.error('❌ 用户算法波动性分析失败:', error);
       res.status(500).json({
         success: false,
         error: (error as Error).message
