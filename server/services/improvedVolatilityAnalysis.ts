@@ -126,7 +126,10 @@ async function calculateVolatilityForPeriod(batches: any[], period: '7d' | '30d'
   }
 
   // 获取所有加密货币
-  const allCryptos = await storage.getCryptocurrencies(1, 2000);
+  const allCryptos = await storage.getCryptocurrencies(1, 2000, 'rank', 'asc');
+  if (!allCryptos.data || allCryptos.data.length === 0) {
+    throw new Error('没有找到加密货币数据');
+  }
   
   for (const crypto of allCryptos.data) {
     try {
@@ -156,7 +159,7 @@ async function calculateCryptoVolatility(
   
   for (const batch of batches) {
     try {
-      const batchEntries = await storage.getVolumeToMarketCapRatios(batch.id, 1, 1000);
+      const batchEntries = await storage.getVolumeToMarketCapRatios(batch.id, 2000);
       const cryptoEntry = batchEntries.data.find(entry => 
         entry.symbol === crypto.symbol || entry.cryptocurrencyId === crypto.id
       );

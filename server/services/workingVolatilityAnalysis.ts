@@ -59,7 +59,7 @@ export async function runWorkingVolatilityAnalysis(period: '7d' | '30d' = '7d'):
         
         for (const batch of latestBatches.data) {
           try {
-            const batchEntries = await storage.getVolumeToMarketCapRatios(batch.id, 1, 1000);
+            const batchEntries = await storage.getVolumeToMarketCapRatios(batch.id, 1000);
             const cryptoEntry = batchEntries.data.find(entry => 
               entry.symbol === crypto.symbol || entry.cryptocurrencyId === crypto.id
             );
