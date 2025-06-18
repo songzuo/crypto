@@ -666,8 +666,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       console.log('🎯 手动触发波动性分析（用户指定算法）...');
       
-      const { runUserSpecifiedVolatilityAlgorithm } = await import('./userSpecifiedAlgorithm');
-      const result = await runUserSpecifiedVolatilityAlgorithm();
+      const { executeUserSpecifiedAlgorithm } = await import('./workingUserAlgorithm');
+      const result = await executeUserSpecifiedAlgorithm();
       
       res.json({
         success: true,

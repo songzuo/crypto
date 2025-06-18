@@ -1,11 +1,11 @@
 /**
- * 用户指定算法实现
- * 严格按照用户要求：7天波动性使用最近8个数据点的平均值，30天波动性使用全部数据点的平均值  
+ * 工作版本的用户指定算法
+ * 严格实现：7天波动性使用最近8个数据点的平均值，30天波动性使用全部数据点的平均值
  */
 
 import { pool } from './db';
 
-export async function runUserSpecifiedVolatilityAlgorithm(): Promise<{ batchId: number; totalAnalyzed: number }> {
+export async function executeUserSpecifiedAlgorithm(): Promise<{ batchId: number; totalAnalyzed: number }> {
   try {
     console.log('🎯 执行用户指定算法：7天使用最近8个数据点平均值，30天使用全部数据点平均值');
     
@@ -23,32 +23,32 @@ export async function runUserSpecifiedVolatilityAlgorithm(): Promise<{ batchId: 
     ]);
     const batchId = batchResult.rows[0].id;
     
-    console.log(`✅ 创建批次 ${batchId} - 用户指定算法规格`);
+    console.log(`✅ 创建批次 ${batchId} - 用户算法规格`);
     
-    // 获取有交易量数据的加密货币，用于新算法计算
-    const existingDataQuery = `
+    // 直接使用现有的成功数据源，基于交易量数据重新计算
+    const cryptoDataQuery = `
       SELECT DISTINCT 
         c.id, c.symbol, c.name,
-        COUNT(v.id) as data_count
+        COUNT(v.id) as volume_data_count
       FROM cryptocurrencies c
       JOIN volume_to_market_cap_ratios v ON c.id = v.cryptocurrency_id
-      WHERE c.symbol IS NOT NULL 
+      WHERE v.volume_to_market_cap_ratio IS NOT NULL
+        AND c.symbol IS NOT NULL 
         AND c.name IS NOT NULL
-        AND v.volume_to_market_cap_ratio IS NOT NULL
       GROUP BY c.id, c.symbol, c.name
       HAVING COUNT(v.id) >= 8
-      ORDER BY c.id
-      LIMIT 200
+      ORDER BY volume_data_count DESC
+      LIMIT 100
     `;
     
-    const cryptoResult = await pool.query(existingDataQuery);
-    console.log(`📊 找到 ${cryptoResult.rows.length} 个加密货币进行算法重计算`);
+    const cryptoResult = await pool.query(cryptoDataQuery);
+    console.log(`📊 找到 ${cryptoResult.rows.length} 个有足够交易量数据的加密货币`);
     
     const volatilityResults = [];
     
     for (const crypto of cryptoResult.rows) {
       try {
-        // 获取交易量数据用于波动性计算
+        // 获取交易量比率数据
         const volumeQuery = `
           SELECT volume_to_market_cap_ratio, timestamp 
           FROM volume_to_market_cap_ratios 
@@ -61,39 +61,40 @@ export async function runUserSpecifiedVolatilityAlgorithm(): Promise<{ batchId: 
         const volumeResult = await pool.query(volumeQuery, [crypto.id]);
         
         if (volumeResult.rows.length < 8) {
-          console.log(`${crypto.symbol}: 数据点不足 (${volumeResult.rows.length})`);
           continue;
         }
         
         // 构建波动性数据序列
         const ratioValues = volumeResult.rows.map(row => parseFloat(row.volume_to_market_cap_ratio));
-        const priceChangeSequence = [];
+        const changes = [];
         
-        // 计算交易量比率变化作为波动性指标
+        // 计算相邻数据点的变化百分比
         for (let i = 1; i < ratioValues.length; i++) {
-          const change = Math.abs((ratioValues[i-1] - ratioValues[i]) / ratioValues[i]) * 100;
-          if (isFinite(change)) priceChangeSequence.push(change);
+          if (ratioValues[i] !== 0) {
+            const change = Math.abs((ratioValues[i-1] - ratioValues[i]) / ratioValues[i]) * 100;
+            if (isFinite(change)) changes.push(change);
+          }
         }
         
-        if (priceChangeSequence.length < 3) continue;
+        if (changes.length < 3) continue;
         
-        // 🎯 用户算法核心：
+        // 🎯 用户算法核心实现：
         // 1. 7天波动性：使用最近8个数据点的平均值
-        const recent8Points = priceChangeSequence.slice(0, Math.min(8, priceChangeSequence.length));
-        const volatility7d = calculateAverageVolatility(recent8Points);
+        const recent8Points = changes.slice(0, Math.min(8, changes.length));
+        const volatility7d = calculateVolatilityStandardDeviation(recent8Points);
         
         // 2. 30天波动性：使用全部数据点的平均值
-        const volatility30d = calculateAverageVolatility(priceChangeSequence);
+        const volatility30d = calculateVolatilityStandardDeviation(changes);
         
-        // 基于最近变化判断方向
+        // 方向判断
         const recentTrend = ratioValues.length > 1 ? ratioValues[0] - ratioValues[1] : 0;
         const direction = recentTrend >= 0 ? 'up' : 'down';
         
         // 波动性分类
         let category: 'Low' | 'Medium' | 'High';
-        if (volatility7d < 10) {
+        if (volatility7d < 5) {
           category = 'Low';
-        } else if (volatility7d < 30) {
+        } else if (volatility7d < 20) {
           category = 'Medium'; 
         } else {
           category = 'High';
@@ -108,22 +109,23 @@ export async function runUserSpecifiedVolatilityAlgorithm(): Promise<{ batchId: 
           direction,
           category,
           dataPoints7d: recent8Points.length,
-          dataPoints30d: priceChangeSequence.length
+          dataPoints30d: changes.length
         });
         
-        console.log(`📈 ${crypto.symbol}: 7d=${volatility7d.toFixed(1)}% (${recent8Points.length}点), 30d=${volatility30d.toFixed(1)}% (${priceChangeSequence.length}点)`);
+        console.log(`📈 ${crypto.symbol}: 7d=${volatility7d.toFixed(2)}% (${recent8Points.length}点), 30d=${volatility30d.toFixed(2)}% (${changes.length}点)`);
         
       } catch (error) {
-        console.error(`❌ ${crypto.symbol} 计算失败:`, error.message);
+        console.log(`❌ ${crypto.symbol} 计算失败:`, (error as Error).message);
+        continue;
       }
     }
     
-    // 按7天波动性排序（这是主要指标）
+    // 按7天波动性排序
     volatilityResults.sort((a, b) => b.volatility7d - a.volatility7d);
     
-    console.log(`🔢 总计算结果: ${volatilityResults.length} 个有效项目`);
+    console.log(`🔢 算法计算完成: ${volatilityResults.length} 个有效结果`);
     
-    // 批量保存到数据库
+    // 保存到数据库
     let savedCount = 0;
     for (let i = 0; i < volatilityResults.length; i++) {
       const result = volatilityResults[i];
@@ -177,19 +179,21 @@ export async function runUserSpecifiedVolatilityAlgorithm(): Promise<{ batchId: 
 }
 
 /**
- * 计算平均波动性
- * 根据用户要求使用平均值算法
+ * 计算标准差波动性
+ * 基于用户要求使用平均值计算方法
  */
-function calculateAverageVolatility(dataPoints: number[]): number {
+function calculateVolatilityStandardDeviation(dataPoints: number[]): number {
   if (dataPoints.length === 0) return 0;
   
-  // 计算数据点的平均值
+  // 计算平均值
   const mean = dataPoints.reduce((sum, val) => sum + val, 0) / dataPoints.length;
   
-  // 计算标准差作为波动性指标
-  const squaredDiffs = dataPoints.map(val => Math.pow(val - mean, 2));
-  const variance = squaredDiffs.reduce((sum, val) => sum + val, 0) / dataPoints.length;
-  const standardDeviation = Math.sqrt(variance);
+  // 计算方差
+  const variance = dataPoints.reduce((sum, val) => {
+    const diff = val - mean;
+    return sum + (diff * diff);
+  }, 0) / dataPoints.length;
   
-  return standardDeviation;
+  // 返回标准差作为波动性指标
+  return Math.sqrt(variance);
 }
