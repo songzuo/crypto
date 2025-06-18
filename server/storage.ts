@@ -1723,6 +1723,21 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  async updateVolatilityAnalysisBatch(id: number, updates: Partial<InsertVolatilityAnalysisBatch>): Promise<VolatilityAnalysisBatch> {
+    try {
+      const [updatedBatch] = await db
+        .update(volatilityAnalysisBatches)
+        .set(updates)
+        .where(eq(volatilityAnalysisBatches.id, id))
+        .returning();
+        
+      return updatedBatch;
+    } catch (error) {
+      console.error('Error updating volatility analysis batch:', error);
+      throw error;
+    }
+  }
+
   // 波动性分析条目相关方法
   async getVolatilityAnalysisResults(volatilityDirection?: string, volatilityCategory?: string): Promise<{ batch: VolatilityAnalysisBatch, entries: VolatilityAnalysisEntry[] }> {
     const latestBatch = await this.getLatestVolatilityAnalysisBatch();
