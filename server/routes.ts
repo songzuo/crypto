@@ -661,6 +661,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // 手动触发新算法波动性分析
+  app.post('/api/volatility-analysis/trigger', async (req, res) => {
+    try {
+      console.log('手动触发波动性分析（新算法）...');
+      
+      const { runVolatilityAnalysisWithNewAlgorithm } = await import('./services/volatilityCalculator');
+      const batchId = await runVolatilityAnalysisWithNewAlgorithm();
+      
+      res.json({
+        success: true,
+        message: '波动性分析成功完成',
+        batchId: batchId,
+        algorithm: {
+          '7day': '使用最近8个数据点计算平均值',
+          '30day': '使用全部可用数据点计算平均值'
+        }
+      });
+      
+    } catch (error) {
+      console.error('手动波动性分析失败:', error);
+      res.status(500).json({
+        success: false,
+        error: (error as Error).message
+      });
+    }
+  });
+
+  // 获取波动性分析算法信息
+  app.get('/api/volatility-analysis/algorithm', (req, res) => {
+    res.json({
+      algorithm: {
+        name: '改进的波动性计算算法',
+        description: '基于用户指定的计算方法',
+        details: {
+          '7day_volatility': {
+            description: '7天波动性分析',
+            method: '使用最近8个数据点计算平均波动性',
+            data_source: '价格变化历史数据'
+          },
+          '30day_volatility': {
+            description: '30天波动性分析', 
+            method: '使用全部可用数据点计算平均波动性',
+            data_source: '完整的价格变化历史数据'
+          }
+        },
+        ranking: '按照7天波动性进行排序',
+        categories: ['Low (< 20%)', 'Medium (20-50%)', 'High (> 50%)']
+      }
+    });
+  });
+
   app.post('/api/volatility-analysis/run', async (req, res) => {
     try {
       const { period = '7d' } = req.body;

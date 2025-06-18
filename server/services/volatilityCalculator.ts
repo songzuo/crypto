@@ -189,7 +189,8 @@ export async function runVolatilityAnalysisWithNewAlgorithm(): Promise<number> {
       const result = volatilityResults[i];
       
       try {
-        await storage.createVolatilityAnalysisEntry({
+        // Create entry using the storage interface
+        const entryData = {
           symbol: result.symbol,
           name: result.name,
           batchId: newBatch.id,
@@ -201,13 +202,14 @@ export async function runVolatilityAnalysisWithNewAlgorithm(): Promise<number> {
           priceChange24h: null,
           currentVolumeRatio: null,
           previousVolumeRatio: null,
-          volumeRatioChange: null,
           marketCapChange24h: null,
           riskLevel: result.category.toLowerCase(),
           dataPoints: result.dataPoints7d,
           comparisons: result.dataPoints30d,
           period: '7d'
-        });
+        };
+        
+        await storage.createVolatilityAnalysisEntry(entryData);
         
         savedCount++;
       } catch (error) {
