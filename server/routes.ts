@@ -664,10 +664,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // 手动触发新算法波动性分析
   app.post('/api/volatility-analysis/trigger', async (req, res) => {
     try {
-      console.log('手动触发波动性分析（新算法）...');
+      console.log('手动触发波动性分析（用户指定算法）...');
       
-      const { runNewVolatilityAlgorithm } = await import('./newVolatilityAlgorithm');
-      const result = await runNewVolatilityAlgorithm();
+      const { generateNewVolatilityBatch } = await import('./finalVolatilityAlgorithm');
+      const result = await generateNewVolatilityBatch();
       
       res.json({
         success: true,
@@ -676,7 +676,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalAnalyzed: result.totalAnalyzed,
         algorithm: {
           '7day': '使用最近8个数据点计算平均值',
-          '30day': '使用全部可用数据点计算平均值'
+          '30day': '使用全部可用数据点计算平均值',
+          specification: '算法设计：1、七天算最近8个数据点的平均值  2、三十天算全部数据点的平均值'
         }
       });
       
