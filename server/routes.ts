@@ -513,8 +513,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const limit = parseInt(req.query.limit as string) || 30;
       const offset = (page - 1) * limit;
 
-      // Direct SQL query to get data from batch 5 (which has 906 entries)
-      const whereConditions = ['batch_id = 5', 'volatility_rank IS NOT NULL'];
+      // Get the latest batch ID with volatility data
+      const latestBatchResult = await db.execute(sql.raw(`
+        SELECT batch_id 
+        FROM volatility_analysis_entries 
+        WHERE volatility_rank IS NOT NULL 
+        ORDER BY batch_id DESC 
+        LIMIT 1
+      `));
+      
+      const latestBatchRows = Array.from(latestBatchResult as any[]) || [];
+      const latestBatchId = latestBatchRows[0]?.batch_id || 5;
+      
+      console.log(`使用最新批次ID: ${latestBatchId}`);
+      
+      // Use latest batch instead of hardcoded batch 5
+      const whereConditions = [`batch_id = ${latestBatchId}`, 'volatility_rank IS NOT NULL'];
       
       if (direction && direction !== 'all') {
         whereConditions.push(`volatility_direction = '${direction}'`);
@@ -548,9 +562,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         WHERE ${whereClause}
       `));
 
-      // Convert Drizzle result to array format
-      const entries = Array.from(entriesResult as any[]) || [];
-      const countRows = Array.from(countResult as any[]) || [];
+      // Handle Drizzle ORM result conversion properly
+      const entries = entriesResult.rows || entriesResult || [];
+      const countRows = countResult.rows || countResult || [];
       const total = parseInt(countRows[0]?.total) || 0;
       
       console.log(`数据库查询结果: entries.length=${entries.length}, total=${total}`);
@@ -574,7 +588,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`波动性分析结果: 返回${mappedEntries.length}个结果，总共${total}个 (方向: ${direction}, 类别: ${category})`);
 
       res.json({
-        batch: { id: 5, total_analyzed: 906, timeframe: '7d' },
+        batch: { id: latestBatchId, total_analyzed: entries.length, timeframe: '7d' },
         entries: mappedEntries,
         total: total,
         page: Number(page),
