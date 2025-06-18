@@ -607,9 +607,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { period = '7d' } = req.body;
       
-      // Import and run the working volatility analysis V2
-      const { runWorkingVolatilityAnalysisV2 } = await import('./services/workingVolatilityAnalysisV2');
-      const result = await runWorkingVolatilityAnalysisV2(period as '7d' | '30d');
+      // Import and run the direct volatility analysis
+      const { runDirectVolatilityAnalysis } = await import('./services/directVolatilityAnalysis');
+      const result = await runDirectVolatilityAnalysis(period as '7d' | '30d');
       
       if (result.success) {
         res.json(result);

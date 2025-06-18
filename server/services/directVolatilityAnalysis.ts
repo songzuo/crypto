@@ -1,261 +1,208 @@
 /**
- * 直接波动性分析服务
- * 使用您指定的四个改进直接计算和返回波动性结果
- * 
- * 解决的问题：
- * 1. 143个数据产生142个比较比值
- * 2. 每个币的波动率是这142个比值按7天或30天平均的值
- * 3. 根据时间差计算小时波动率然后乘24得到日波动率
- * 4. 避免数据库存储复杂性，直接返回计算结果
+ * Direct Volatility Analysis
+ * Uses raw SQL queries to calculate volatility from existing data
  */
 
-import { storage } from "../storage";
+import { db } from '../db';
+import { sql } from 'drizzle-orm';
 
-export interface DirectVolatilityResult {
+interface VolatilityResult {
   symbol: string;
   name: string;
-  period: '7d' | '30d';
+  cryptocurrencyId: number;
   volatilityPercentage: number;
-  direction: 'up' | 'down' | 'stable';
-  category: string;
+  volatilityDirection: 'up' | 'down' | 'stable';
+  volatilityCategory: string;
   rank: number;
-  dataPoints: number;
-  comparisons: number;
-  averageMarketCap: number;
-  marketCapChange: number;
+  currentMarketCap?: number;
+  previousMarketCap?: number;
 }
 
-/**
- * 计算准确的市值波动率（按时间段正确计算）
- * 对于143个批次，产生142个比较比值
- */
-function calculateAccurateVolatility(historicalData: Array<{marketCap: number, timestamp: Date}>): {
-  volatilityPercentage: number;
-  totalComparisons: number;
-  averageMarketCap: number;
-  marketCapChange: number;
-} {
-  if (historicalData.length < 2) {
-    return { volatilityPercentage: 0, totalComparisons: 0, averageMarketCap: 0, marketCapChange: 0 };
-  }
+export async function runDirectVolatilityAnalysis(period: '7d' | '30d' = '7d') {
+  console.log(`开始直接波动率分析，周期: ${period}`);
   
-  // 按时间排序
-  const sortedData = historicalData.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-  
-  // 计算所有相邻数据点之间的波动率比值
-  const volatilityRatios: number[] = [];
-  
-  for (let i = 1; i < sortedData.length; i++) {
-    const current = sortedData[i];
-    const previous = sortedData[i - 1];
+  try {
+    // Get market cap data directly from volume_to_market_cap_ratios table
+    const batchLimit = period === '7d' ? 8 : 30;
     
-    if (previous.marketCap > 0 && current.marketCap > 0) {
-      // 市值变化百分比：(本次市值 - 上次市值) / 上次市值
-      const percentChange = Math.abs((current.marketCap - previous.marketCap) / previous.marketCap);
-      
-      // 计算时间间隔（小时）
-      const timeIntervalHours = (current.timestamp.getTime() - previous.timestamp.getTime()) / (1000 * 60 * 60);
-      
-      // 转换为日波动率：小时波动率 * 24
-      if (timeIntervalHours > 0) {
-        const hourlyVolatility = percentChange / timeIntervalHours;
-        const dailyVolatility = hourlyVolatility * 24;
-        volatilityRatios.push(dailyVolatility * 100); // 转换为百分比
+    const marketCapData = await db.execute(sql`
+      WITH latest_batches AS (
+        SELECT DISTINCT batch_id 
+        FROM volume_to_market_cap_ratios 
+        WHERE market_cap IS NOT NULL AND market_cap > 0
+        ORDER BY batch_id DESC 
+        LIMIT ${batchLimit}
+      ),
+      crypto_data AS (
+        SELECT 
+          v.symbol,
+          COALESCE(c.name, v.symbol) as name,
+          COALESCE(v.cryptocurrency_id, c.id, 0) as cryptocurrency_id,
+          v.market_cap,
+          v.batch_id,
+          vmb.created_at as timestamp
+        FROM volume_to_market_cap_ratios v
+        LEFT JOIN cryptocurrencies c ON c.symbol = v.symbol
+        LEFT JOIN volume_to_market_cap_batches vmb ON vmb.id = v.batch_id
+        WHERE v.batch_id IN (SELECT batch_id FROM latest_batches)
+          AND v.market_cap IS NOT NULL 
+          AND v.market_cap > 0
+        ORDER BY v.symbol, v.batch_id ASC
+      )
+      SELECT * FROM crypto_data
+      LIMIT 1000
+    `);
+    
+    console.log(`获取到 ${marketCapData.length} 条市值数据记录`);
+    
+    // Group data by symbol to calculate volatility
+    const cryptoGroups = new Map<string, any[]>();
+    
+    for (const row of marketCapData) {
+      const symbol = row.symbol as string;
+      if (!cryptoGroups.has(symbol)) {
+        cryptoGroups.set(symbol, []);
       }
+      cryptoGroups.get(symbol)!.push(row);
+    }
+    
+    console.log(`处理 ${cryptoGroups.size} 个不同的加密货币`);
+    
+    const results: VolatilityResult[] = [];
+    
+    // Calculate volatility for each cryptocurrency
+    for (const [symbol, data] of cryptoGroups) {
+      if (data.length >= 2) {
+        // Sort by batch_id to ensure chronological order
+        data.sort((a, b) => (a.batch_id as number) - (b.batch_id as number));
+        
+        const marketCaps = data.map(d => d.market_cap as number);
+        const volatility = calculateVolatility(marketCaps);
+        const direction = calculateDirection(marketCaps);
+        const category = getCategory(volatility);
+        
+        results.push({
+          symbol,
+          name: data[0].name as string,
+          cryptocurrencyId: data[0].cryptocurrency_id as number,
+          volatilityPercentage: volatility,
+          volatilityDirection: direction,
+          volatilityCategory: category,
+          rank: 0, // Will be set after sorting
+          currentMarketCap: marketCaps[marketCaps.length - 1],
+          previousMarketCap: marketCaps[0]
+        });
+      }
+    }
+    
+    console.log(`计算出 ${results.length} 个有效波动率结果`);
+    
+    // Sort by volatility (highest first) and assign ranks
+    results.sort((a, b) => b.volatilityPercentage - a.volatilityPercentage);
+    results.forEach((result, index) => {
+      result.rank = index + 1;
+    });
+    
+    // Save to database using raw SQL
+    const batchInsertResult = await db.execute(sql`
+      INSERT INTO volatility_analysis_batches 
+      (timeframe, total_analyzed, analysis_type, has_changes, created_at) 
+      VALUES (${period}, ${results.length}, 'direct_market_cap_volatility', ${results.length > 0}, NOW())
+      RETURNING id
+    `);
+    
+    const batchId = (batchInsertResult[0] as any).id;
+    console.log(`创建分析批次 ${batchId}`);
+    
+    // Insert entries in batches
+    if (results.length > 0) {
+      const entries = results.map(result => [
+        batchId,
+        result.symbol,
+        result.name,
+        result.cryptocurrencyId,
+        result.volatilityPercentage,
+        result.volatilityDirection,
+        result.volatilityCategory,
+        result.rank,
+        result.currentMarketCap,
+        result.previousMarketCap
+      ]);
+      
+      // Insert entries in chunks to avoid SQL parameter limits
+      const chunkSize = 50;
+      for (let i = 0; i < entries.length; i += chunkSize) {
+        const chunk = entries.slice(i, i + chunkSize);
+        const values = chunk.map((_, index) => 
+          `($${index * 10 + 1}, $${index * 10 + 2}, $${index * 10 + 3}, $${index * 10 + 4}, $${index * 10 + 5}, $${index * 10 + 6}, $${index * 10 + 7}, $${index * 10 + 8}, $${index * 10 + 9}, $${index * 10 + 10})`
+        ).join(', ');
+        
+        const flatValues = chunk.flat();
+        
+        await db.execute(sql.raw(`
+          INSERT INTO volatility_analysis_entries 
+          (batch_id, symbol, name, cryptocurrency_id, volatility_percentage, volatility_direction, volatility_category, rank, current_market_cap, previous_market_cap)
+          VALUES ${values}
+        `, flatValues));
+      }
+    }
+    
+    console.log(`保存了 ${results.length} 个波动率分析结果到批次 ${batchId}`);
+    
+    return {
+      success: true,
+      message: `成功分析了 ${results.length} 个加密货币的${period === '7d' ? '7天' : '30天'}波动率`,
+      batchId: batchId,
+      totalAnalyzed: results.length
+    };
+    
+  } catch (error) {
+    console.error('直接波动率分析失败:', error);
+    return {
+      success: false,
+      message: `波动率分析失败: ${error instanceof Error ? error.message : '未知错误'}`,
+      totalAnalyzed: 0
+    };
+  }
+}
+
+function calculateVolatility(marketCaps: number[]): number {
+  if (marketCaps.length < 2) return 0;
+  
+  const changes: number[] = [];
+  
+  // Calculate percentage changes between consecutive data points
+  for (let i = 1; i < marketCaps.length; i++) {
+    const previous = marketCaps[i - 1];
+    const current = marketCaps[i];
+    
+    if (previous > 0) {
+      const change = Math.abs((current - previous) / previous) * 100;
+      changes.push(change);
     }
   }
   
-  if (volatilityRatios.length === 0) {
-    return { volatilityPercentage: 0, totalComparisons: 0, averageMarketCap: 0, marketCapChange: 0 };
-  }
+  if (changes.length === 0) return 0;
   
-  // 计算平均日波动率（所有比值的平均）
-  const avgDailyVolatility = volatilityRatios.reduce((sum, ratio) => sum + ratio, 0) / volatilityRatios.length;
-  
-  const averageMarketCap = sortedData.reduce((sum, item) => sum + item.marketCap, 0) / sortedData.length;
-  const marketCapChange = ((sortedData[sortedData.length - 1].marketCap - sortedData[0].marketCap) / sortedData[0].marketCap) * 100;
-  
-  return { 
-    volatilityPercentage: Math.min(avgDailyVolatility, 500), // 限制最大值为500%
-    totalComparisons: volatilityRatios.length,
-    averageMarketCap,
-    marketCapChange
-  };
+  const avgChange = changes.reduce((sum, change) => sum + change, 0) / changes.length;
+  return Math.round(avgChange * 100) / 100;
 }
 
-/**
- * 确定波动性类别（基于真实市场标准）
- */
-function categorizeVolatility(volatilityPercentage: number): string {
-  if (volatilityPercentage >= 50) return '极高';
-  if (volatilityPercentage >= 20) return '高';
-  if (volatilityPercentage >= 10) return '中';
-  if (volatilityPercentage >= 5) return '低';
-  return '极低';
-}
-
-/**
- * 确定价格趋势方向
- */
-function determinePriceDirection(marketCapChange: number): 'up' | 'down' | 'stable' {
-  const threshold = 1; // 1%
+function calculateDirection(marketCaps: number[]): 'up' | 'down' | 'stable' {
+  if (marketCaps.length < 2) return 'stable';
   
-  if (marketCapChange > threshold) return 'up';
-  if (marketCapChange < -threshold) return 'down';
+  const first = marketCaps[0];
+  const last = marketCaps[marketCaps.length - 1];
+  
+  const change = (last - first) / first;
+  
+  if (change > 0.05) return 'up';
+  if (change < -0.05) return 'down';
   return 'stable';
 }
 
-/**
- * 执行直接波动性分析并返回结果
- */
-export async function getDirectVolatilityAnalysis(
-  period: '7d' | '30d' = '7d',
-  direction?: string,
-  category?: string,
-  page: number = 1,
-  limit: number = 30
-): Promise<{
-  entries: DirectVolatilityResult[];
-  total: number;
-  page: number;
-  limit: number;
-  period: string;
-}> {
-  console.log(`开始${period}直接波动性分析...`);
-  
-  // 获取所有历史批次用于计算
-  const allBatches = await storage.getVolumeToMarketCapBatches(1, 1000);
-  const results: DirectVolatilityResult[] = [];
-  
-  if (allBatches.data.length < 2) {
-    console.log('历史数据不足，至少需要2个批次进行波动性分析');
-    return { entries: [], total: 0, page, limit, period };
-  }
-  
-  console.log(`使用${allBatches.data.length}个历史批次进行波动性分析`);
-  
-  // 获取所有加密货币的历史数据
-  const cryptoHistoricalData = new Map<string, Array<{marketCap: number, timestamp: Date}>>();
-  
-  // 收集所有批次的数据
-  for (let i = 0; i < allBatches.data.length; i++) {
-    const batch = allBatches.data[i];
-    try {
-      const batchData = await storage.getVolumeToMarketCapRatios(batch.id);
-      
-      for (const entry of batchData.data) {
-        const crypto = await storage.getCryptocurrency(entry.cryptocurrencyId);
-        if (!crypto || !crypto.marketCap || crypto.marketCap <= 0) continue;
-        
-        if (!cryptoHistoricalData.has(crypto.symbol)) {
-          cryptoHistoricalData.set(crypto.symbol, []);
-        }
-        
-        cryptoHistoricalData.get(crypto.symbol)!.push({
-          marketCap: crypto.marketCap,
-          timestamp: batch.createdAt || new Date()
-        });
-      }
-    } catch (error) {
-      console.log(`跳过批次 ${batch.id}，获取数据失败:`, error instanceof Error ? error.message : String(error));
-      continue;
-    }
-  }
-  
-  // 计算每个加密货币的波动性
-  const cryptoEntries = Array.from(cryptoHistoricalData.entries());
-  for (const [symbol, historicalData] of cryptoEntries) {
-    if (historicalData.length < 7) continue; // 至少需要7个历史数据点
-    
-    // 按时间排序历史数据
-    const sortedData = historicalData.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-    
-    // 使用新的准确波动率计算方法：143个数据产生142个比值
-    const fullStats = calculateAccurateVolatility(sortedData);
-    
-    // 根据时间段筛选数据进行平均计算
-    const periodHours = period === '7d' ? 7 * 24 : 30 * 24;
-    const cutoffTime = new Date(Date.now() - periodHours * 60 * 60 * 1000);
-    const periodData = sortedData.filter(d => d.timestamp >= cutoffTime);
-    
-    // 如果时间段内数据不足，使用全部数据
-    const dataForPeriod = periodData.length >= 2 ? periodData : sortedData;
-    const periodStats = calculateAccurateVolatility(dataForPeriod);
-    
-    // 平均波动性：使用时间段内的准确计算结果
-    const avgVolatility = periodStats.volatilityPercentage;
-    
-    // 计算其他指标
-    const categoryValue = categorizeVolatility(avgVolatility);
-    const direction_value = determinePriceDirection(periodStats.marketCapChange);
-    
-    const crypto = await storage.getCryptocurrencyBySymbol?.(symbol);
-    if (!crypto) {
-      // 尝试通过遍历找到匹配的加密货币
-      const allCryptos = await storage.getCryptocurrencies(1, 2000);
-      const foundCrypto = allCryptos.data.find(c => c.symbol === symbol);
-      if (!foundCrypto) continue;
-    }
-    
-    const finalCrypto = crypto || allCryptos?.data.find(c => c.symbol === symbol);
-    if (!finalCrypto) continue;
-    
-    const result: DirectVolatilityResult = {
-      symbol,
-      name: finalCrypto.name,
-      period,
-      volatilityPercentage: avgVolatility,
-      direction: direction_value,
-      category: categoryValue,
-      rank: finalCrypto.rank || 0,
-      dataPoints: sortedData.length,
-      comparisons: periodStats.totalComparisons,
-      averageMarketCap: periodStats.averageMarketCap,
-      marketCapChange: periodStats.marketCapChange
-    };
-    
-    results.push(result);
-  }
-  
-  // 按波动性排序
-  results.sort((a, b) => b.volatilityPercentage - a.volatilityPercentage);
-  
-  // 更新排名
-  results.forEach((result, index) => {
-    result.rank = index + 1;
-  });
-  
-  // 应用筛选条件
-  let filteredResults = results;
-  
-  if (direction && direction !== 'all' && direction !== 'undefined') {
-    filteredResults = filteredResults.filter(r => r.direction === direction);
-  }
-  
-  if (category && category !== 'all' && category !== 'undefined') {
-    filteredResults = filteredResults.filter(r => r.category === category);
-  }
-  
-  // 应用分页
-  const offset = (page - 1) * limit;
-  const paginatedResults = filteredResults.slice(offset, offset + limit);
-  
-  // 统计各类别分布
-  const categoryDistribution = results.reduce((acc, result) => {
-    acc[result.category] = (acc[result.category] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-  
-  console.log(`${period}直接波动性分析完成，共分析${results.length}个加密货币`);
-  console.log('各类别分布：', categoryDistribution);
-  console.log(`筛选条件: direction=${direction}, category=${category}`);
-  console.log(`筛选前: ${results.length}个结果, 筛选后: ${filteredResults.length}个结果`);
-  
-  return {
-    entries: paginatedResults,
-    total: filteredResults.length,
-    page,
-    limit,
-    period
-  };
+function getCategory(volatility: number): string {
+  if (volatility < 5) return 'low-risk';
+  if (volatility < 15) return 'medium-risk';
+  return 'high-risk';
 }

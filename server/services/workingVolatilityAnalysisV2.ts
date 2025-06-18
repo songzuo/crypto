@@ -33,8 +33,8 @@ export async function runWorkingVolatilityAnalysisV2(period: '7d' | '30d' = '7d'
       throw new Error(`需要至少2个批次，当前只有 ${batches.length} 个`);
     }
 
-    // Get all cryptocurrencies (limit to 100 for testing)
-    const cryptosResponse = await storage.getCryptocurrencies(1, 100);
+    // Get all cryptocurrencies (limit to 50 for testing)
+    const cryptosResponse = await storage.getCryptocurrencies(1, 50);
     const cryptos = cryptosResponse.data;
     
     console.log(`获取到 ${cryptos.length} 个加密货币`);
