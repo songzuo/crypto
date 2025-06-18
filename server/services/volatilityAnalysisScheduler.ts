@@ -4,7 +4,7 @@
  */
 
 import { storage } from '../storage';
-import { runVolatilityAnalysis } from './workingVolatilityAnalysisV2';
+import { runAPIVolumeRatioAnalysis } from '../apiVolumeRatioAnalysis';
 
 /**
  * 运行波动性分析并存储新批次
@@ -14,7 +14,7 @@ export async function runScheduledVolatilityAnalysis(): Promise<void> {
     console.log('开始运行定期波动性分析...');
     
     // 获取当前加密货币总数
-    const allCryptos = await storage.getAllCryptocurrencies();
+    const allCryptos = await storage.getCryptocurrencies(1, 10000);
     const cryptoCount = allCryptos.length;
     
     if (cryptoCount < 100) {
@@ -34,7 +34,7 @@ export async function runScheduledVolatilityAnalysis(): Promise<void> {
     console.log(`创建新的波动性分析批次: ${newBatch.id}`);
     
     // 运行波动性分析
-    await runVolatilityAnalysis(newBatch.id);
+    await runAPIVolumeRatioAnalysis();
     
     // 更新批次状态
     await storage.updateVolatilityAnalysisBatch(newBatch.id, {
@@ -63,7 +63,7 @@ export async function checkAndRunVolatilityAnalysis(): Promise<void> {
     }
     
     const now = new Date().getTime();
-    const batchTime = new Date(latestBatch.createdAt).getTime();
+    const batchTime = new Date(latestBatch.createdAt || latestBatch.createdAt).getTime();
     const hoursSinceLastBatch = (now - batchTime) / (1000 * 60 * 60);
     
     if (hoursSinceLastBatch >= 24) {

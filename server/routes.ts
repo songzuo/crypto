@@ -513,59 +513,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const limit = parseInt(req.query.limit as string) || 30;
       const offset = (page - 1) * limit;
 
+      // Use direct PostgreSQL connection to bypass Drizzle ORM issues
+      const { pool } = await import('./db');
+      
       // Get the latest batch ID with volatility data
-      const latestBatchResult = await db.execute(sql.raw(`
+      const latestBatchQuery = `
         SELECT batch_id 
         FROM volatility_analysis_entries 
         WHERE volatility_rank IS NOT NULL 
         ORDER BY batch_id DESC 
         LIMIT 1
-      `));
+      `;
       
-      const latestBatchRows = Array.from(latestBatchResult as any[]) || [];
-      const latestBatchId = latestBatchRows[0]?.batch_id || 5;
+      const latestBatchResult = await pool.query(latestBatchQuery);
+      const latestBatchId = latestBatchResult.rows[0]?.batch_id || 5;
       
       console.log(`使用最新批次ID: ${latestBatchId}`);
       
-      // Use latest batch instead of hardcoded batch 5
-      const whereConditions = [`batch_id = ${latestBatchId}`, 'volatility_rank IS NOT NULL'];
+      // Build WHERE conditions for parameterized query
+      const whereConditions = [`batch_id = $1`, 'volatility_rank IS NOT NULL'];
+      const queryParams = [latestBatchId];
+      let paramIndex = 2;
       
       if (direction && direction !== 'all') {
-        whereConditions.push(`volatility_direction = '${direction}'`);
+        whereConditions.push(`volatility_direction = $${paramIndex}`);
+        queryParams.push(direction);
+        paramIndex++;
       }
       
       if (category && category !== 'all') {
-        whereConditions.push(`volatility_category = '${category}'`);
+        whereConditions.push(`volatility_category = $${paramIndex}`);
+        queryParams.push(category);
+        paramIndex++;
       }
 
       const whereClause = whereConditions.join(' AND ');
-
-      const entriesResult = await db.execute(sql.raw(`
+      
+      // Get entries with parameterized query
+      const entriesQuery = `
         SELECT 
-          symbol,
-          name,
-          volatility_percentage,
-          volatility_category,
-          volatility_direction,
-          volatility_rank,
-          price_change_24h,
-          market_cap_change_24h
+          symbol, name, volatility_percentage, volatility_category, 
+          volatility_direction, volatility_rank, price_change_24h, 
+          market_cap_change_24h, analysis_time
         FROM volatility_analysis_entries 
         WHERE ${whereClause}
         ORDER BY volatility_rank ASC
-        LIMIT ${limit} OFFSET ${offset}
-      `));
-
-      const countResult = await db.execute(sql.raw(`
-        SELECT COUNT(*) as total
+        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+      `;
+      
+      const entriesResult = await pool.query(entriesQuery, [...queryParams, limit, offset]);
+      
+      // Get total count
+      const countQuery = `
+        SELECT COUNT(*) as total 
         FROM volatility_analysis_entries 
         WHERE ${whereClause}
-      `));
-
-      // Handle Drizzle ORM result conversion properly
-      const entries = entriesResult.rows || entriesResult || [];
-      const countRows = countResult.rows || countResult || [];
-      const total = parseInt(countRows[0]?.total) || 0;
+      `;
+      
+      const countResult = await pool.query(countQuery, queryParams);
+      
+      const entries = entriesResult.rows || [];
+      const total = parseInt(countResult.rows[0]?.total) || 0;
       
       console.log(`数据库查询结果: entries.length=${entries.length}, total=${total}`);
 
