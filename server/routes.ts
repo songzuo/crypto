@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { db } from "./db";
 import cron from "node-cron";
 import { setupScheduler, scheduler } from "./services/scheduler";
 import { searchTopCryptocurrencies } from "./services/cryptoSearch";
@@ -512,7 +513,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const limit = parseInt(req.query.limit as string) || 30;
       const offset = (page - 1) * limit;
 
-      // Direct SQL query to get data from batch 5
+      // Direct SQL query to get data from batch 5 (which has 906 entries)
       const whereConditions = ['batch_id = 5', 'volatility_rank IS NOT NULL'];
       
       if (direction && direction !== 'all') {
