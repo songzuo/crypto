@@ -503,31 +503,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 波动性分析API路由 - 使用已验证的价格波动性分析
+  // 波动性分析API路由 - 直接从数据库获取结果
   app.get('/api/volatility-analysis/results', async (req, res) => {
     try {
       const direction = req.query.direction as string;
       const category = req.query.category as string;
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 30;
-      const period = (req.query.period as string) || '7d';
       
-      // 使用新的缓存波动性分析服务
-      const { getCachedVolatilityAnalysis } = await import('./services/cachedVolatilityAnalysis');
+      const results = await storage.getVolatilityAnalysisResults(direction, category);
       
-      // 获取缓存的波动性分析结果
-      const results = await getCachedVolatilityAnalysis(
-        period as '7d' | '30d',
-        direction,
-        category,
+      // 应用分页
+      const startIndex = (page - 1) * limit;
+      const endIndex = startIndex + limit;
+      const paginatedEntries = results.entries.slice(startIndex, endIndex);
+      
+      const responseData = {
+        batch: results.batch,
+        entries: paginatedEntries,
+        total: results.entries.length,
         page,
         limit
-      );
+      };
       
-      console.log(`波动性分析: ${period}期间, 筛选条件: direction=${direction}, category=${category}`);
-      console.log(`返回${results.entries?.length || 0}个结果，总共${results.total || 0}个`);
+      console.log(`波动性分析结果: 筛选条件 direction=${direction}, category=${category}`);
+      console.log(`返回${paginatedEntries.length}个结果，总共${results.entries.length}个`);
       
-      res.json(results);
+      res.json(responseData);
     } catch (error) {
       console.error('获取波动性分析结果失败:', error);
       res.status(500).json({ error: (error as Error).message });
@@ -537,10 +539,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/volatility-analysis/batches', async (req, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 5;
-      const batches = await storage.getVolumeToMarketCapBatches(1, limit);
+      const batches = await storage.getVolatilityAnalysisBatches(1, limit);
       res.json(batches);
     } catch (error) {
       console.error('获取波动性分析批次失败:', error);
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // Main volatility analysis endpoint
+  app.get('/api/volatility-analysis', async (req, res) => {
+    try {
+      const { volatilityDirection, volatilityCategory, page = 1, limit = 50 } = req.query;
+      
+      const results = await storage.getVolatilityAnalysisResults(
+        volatilityDirection as string,
+        volatilityCategory as string
+      );
+      
+      // Apply pagination
+      const startIndex = (Number(page) - 1) * Number(limit);
+      const endIndex = startIndex + Number(limit);
+      const paginatedEntries = results.entries.slice(startIndex, endIndex);
+      
+      res.json({
+        batch: results.batch,
+        entries: paginatedEntries,
+        total: results.entries.length,
+        page: Number(page),
+        limit: Number(limit)
+      });
+    } catch (error) {
+      console.error('获取波动性分析失败:', error);
       res.status(500).json({ error: (error as Error).message });
     }
   });
