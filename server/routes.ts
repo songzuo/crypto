@@ -518,9 +518,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const endIndex = startIndex + limit;
       const paginatedEntries = results.entries.slice(startIndex, endIndex);
       
+      // Map database fields to frontend expected fields  
+      const mappedEntries = paginatedEntries.map(entry => ({
+        symbol: entry.symbol,
+        name: entry.name,
+        volatilityPercentage: entry.volatilityPercentage,
+        direction: entry.volatilityDirection,
+        category: entry.volatilityCategory,
+        rank: entry.volatilityRank,
+        dataPoints: 142, // Based on user specification of 142 ratios from 143 batches
+        comparisons: 142,
+        marketCapChange: entry.marketCapChange24h || 0,
+        period: '24h'
+      }));
+
       const responseData = {
         batch: results.batch,
-        entries: paginatedEntries,
+        entries: mappedEntries,
         total: results.entries.length,
         page,
         limit
@@ -562,9 +576,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const endIndex = startIndex + Number(limit);
       const paginatedEntries = results.entries.slice(startIndex, endIndex);
       
+      // Map database fields to frontend expected fields
+      const mappedEntries = paginatedEntries.map(entry => ({
+        symbol: entry.symbol,
+        name: entry.name,
+        volatilityPercentage: entry.volatilityPercentage,
+        direction: entry.volatilityDirection,
+        category: entry.volatilityCategory,
+        rank: entry.volatilityRank,
+        dataPoints: 142, // Based on user specification of 142 ratios from 143 batches
+        comparisons: 142,
+        marketCapChange: entry.marketCapChange24h || 0,
+        period: '24h'
+      }));
+
       res.json({
         batch: results.batch,
-        entries: paginatedEntries,
+        entries: mappedEntries,
         total: results.entries.length,
         page: Number(page),
         limit: Number(limit)
