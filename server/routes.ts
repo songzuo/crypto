@@ -11,7 +11,7 @@ import { eq, sql } from "drizzle-orm";
 import { analyzeNewsWordTrends } from "./services/wordTrendAnalyzer";
 import { getCachedTrendAnalysisResult } from "./services/cacheStore";
 import { getLatestTechnicalAnalysis, getTechnicalAnalysisBatches, getTechnicalAnalysisByBatchId, manualRunTechnicalAnalysis, runTechnicalAnalysis } from "./services/technicalAnalysis";
-import { runSimpleVolatilityAnalysis, getVolatilityResults } from "./services/simpleVolatilityAnalysis";
+// Import will be done dynamically when needed
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // 后端健康检查API

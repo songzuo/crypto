@@ -100,6 +100,7 @@ export interface IStorage {
   getLatestVolatilityAnalysisBatch(timeframe?: string): Promise<VolatilityAnalysisBatch | undefined>;
   getVolatilityAnalysisBatch(id: number): Promise<VolatilityAnalysisBatch | undefined>;
   createVolatilityAnalysisBatch(batch: InsertVolatilityAnalysisBatch): Promise<VolatilityAnalysisBatch>;
+  updateVolatilityAnalysisBatch(id: number, updates: Partial<InsertVolatilityAnalysisBatch>): Promise<VolatilityAnalysisBatch>;
   
   // 波动性分析条目相关方法
   getVolatilityAnalysisResults(volatilityDirection?: string, volatilityCategory?: string): Promise<{ batch: VolatilityAnalysisBatch, entries: VolatilityAnalysisEntry[] }>;
