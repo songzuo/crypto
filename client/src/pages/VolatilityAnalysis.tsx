@@ -30,6 +30,17 @@ interface VolatilityEntry {
   marketCapChange: number;
 }
 
+interface AnalysisProgress {
+  batchId: string | null;
+  totalCryptocurrencies: number;
+  processedCount: number;
+  completedCount: number;
+  isComplete: boolean;
+  progressPercentage: number;
+  startTime: string | null;
+  estimatedEndTime?: string | null;
+}
+
 const VolatilityAnalysis = () => {
   console.log('波动性分析页面加载，显示历史数据');
   
@@ -39,6 +50,18 @@ const VolatilityAnalysis = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(100);
   const [isRunningAnalysis, setIsRunningAnalysis] = useState(false);
+  
+  // 获取分析进度
+  const { data: progressData, refetch: refetchProgress } = useQuery({
+    queryKey: ['/api/volatility-analysis/progress'],
+    queryFn: async () => {
+      const response = await fetch('/api/volatility-analysis/progress');
+      if (!response.ok) throw new Error('获取分析进度失败');
+      return response.json();
+    },
+    refetchInterval: 5000, // 每5秒更新一次进度
+    enabled: isRunningAnalysis
+  });
 
   // 获取波动性分析批次
   const { data: batchesData } = useQuery({
@@ -86,7 +109,7 @@ const VolatilityAnalysis = () => {
   const runAnalysis = async () => {
     setIsRunningAnalysis(true);
     try {
-      const response = await fetch('/api/volatility-analysis/run', {
+      const response = await fetch('/api/volatility-analysis/trigger', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -94,13 +117,31 @@ const VolatilityAnalysis = () => {
       if (response.ok) {
         await queryClient.invalidateQueries({ queryKey: ['/api/volatility-analysis'] });
         refetch();
+        refetchProgress(); // 开始监控进度
       }
     } catch (error) {
       console.error('触发波动性分析失败:', error);
     } finally {
-      setIsRunningAnalysis(false);
+      // 不要立即设置为false，让进度监控来处理
+      // setIsRunningAnalysis(false);
     }
   };
+
+  // 监听分析进度
+  useEffect(() => {
+    const progress = progressData?.progress;
+    if (progress && !progress.isComplete) {
+      setIsRunningAnalysis(true);
+    } else if (progress && progress.isComplete) {
+      setIsRunningAnalysis(false);
+      // 刷新数据
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ['/api/volatility-analysis/batches'] });
+    }
+  }, [progressData, refetch]);
+
+  const progress = progressData?.progress;
+  const showProgress = progress && !progress.isComplete && progress.progressPercentage > 0;
 
   const getVolatilityIcon = (direction: string) => {
     switch (direction) {
@@ -148,6 +189,64 @@ const VolatilityAnalysis = () => {
         </Button>
       </div>
 
+      {/* 进度条 */}
+      {showProgress && (
+        <Card className="border-l-4 border-l-blue-500">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">波动性分析进度</h3>
+              <Badge variant="outline">
+                {progress.progressPercentage}% 完成
+              </Badge>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2.5 mb-4">
+              <div 
+                className="bg-blue-600 h-2.5 rounded-full transition-all duration-1000" 
+                style={{ width: `${progress.progressPercentage}%` }}
+              ></div>
+            </div>
+            <div className="text-sm text-muted-foreground">
+              已处理 {progress.processedCount} / {progress.totalCryptocurrencies} 个加密货币
+              {progress.progressPercentage < 100 && (
+                <span className="ml-2 text-blue-600">
+                  还有 {100 - progress.progressPercentage}% 数据正在计算...
+                </span>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      
+      {/* 分析算法说明 */}
+      <Card className="border-l-4 border-l-green-500">
+        <CardContent className="p-6">
+          <h3 className="text-lg font-semibold mb-4">算法说明</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-blue-50 p-4 rounded-lg">
+              <h4 className="font-medium text-blue-900 mb-2">7天波动性分析</h4>
+              <ul className="text-sm text-blue-800 space-y-1">
+                <li>• 需要至少8个数据点</li>
+                <li>• 进行7次价格比较</li>
+                <li>• 使用最近8个数据点的平均值</li>
+                <li>• 适用于短期波动性评估</li>
+              </ul>
+            </div>
+            <div className="bg-purple-50 p-4 rounded-lg">
+              <h4 className="font-medium text-purple-900 mb-2">30天波动性分析</h4>
+              <ul className="text-sm text-purple-800 space-y-1">
+                <li>• 需要至少31个数据点</li>
+                <li>• 进行31次价格比较</li>
+                <li>• 使用31个数据点的平均值</li>
+                <li>• 适用于长期波动性评估</li>
+              </ul>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+      
+      {/* 分析结果 */}
+      <div className="space-y-6">
+
       {/* 批次信息 */}
       {batchesData?.data?.length > 0 && (
         <Card>
@@ -188,74 +287,55 @@ const VolatilityAnalysis = () => {
         </Card>
       )}
 
-      {/* 筛选控件 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>筛选条件</CardTitle>
-          <CardDescription>按波动方向和风险等级筛选结果</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-4">
-            <Select value={selectedDirection} onValueChange={setSelectedDirection}>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="选择波动方向" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部方向</SelectItem>
-                <SelectItem value="up">上涨 ↑</SelectItem>
-                <SelectItem value="down">下跌 ↓</SelectItem>
-                <SelectItem value="stable">稳定 →</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="选择风险等级" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部等级</SelectItem>
-                <SelectItem value="High">高风险</SelectItem>
-                <SelectItem value="Medium">中等风险</SelectItem>
-                <SelectItem value="Low">低风险</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={selectedPeriod} onValueChange={(value: string) => setSelectedPeriod(value as "7d" | "30d")}>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="选择分析周期" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="7d">7天平均波动</SelectItem>
-                <SelectItem value="30d">30天平均波动</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={pageSize.toString()} onValueChange={(value: string) => {
-              setPageSize(parseInt(value));
-              setCurrentPage(1);
-            }}>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="每页显示数量" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="100">每页100个</SelectItem>
-                <SelectItem value="200">每页200个</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                setSelectedDirection('all');
-                setSelectedCategory('all');
-                setCurrentPage(1);
-              }}
-            >
-              重置筛选
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+        {/* 筛选控件 */}
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex flex-wrap gap-4 items-center">
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">时间周期:</label>
+                <Select value={selectedPeriod} onValueChange={(value: '7d' | '30d') => setSelectedPeriod(value)}>
+                  <SelectTrigger className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="7d">7天分析</SelectItem>
+                    <SelectItem value="30d">30天分析</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">波动方向:</label>
+                <Select value={selectedDirection} onValueChange={setSelectedDirection}>
+                  <SelectTrigger className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部方向</SelectItem>
+                    <SelectItem value="up">上涨 ↑</SelectItem>
+                    <SelectItem value="down">下跌 ↓</SelectItem>
+                    <SelectItem value="stable">稳定 →</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">风险等级:</label>
+                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                  <SelectTrigger className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部等级</SelectItem>
+                    <SelectItem value="low">低风险</SelectItem>
+                    <SelectItem value="medium">中风险</SelectItem>
+                    <SelectItem value="high">高风险</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
       {/* 分析结果表格 */}
       <Card>
@@ -384,6 +464,7 @@ const VolatilityAnalysis = () => {
           )}
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 };

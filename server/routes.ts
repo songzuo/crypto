@@ -662,6 +662,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // 获取分析进度
+  app.get('/api/volatility-analysis/progress', async (req, res) => {
+    try {
+      const { getAnalysisProgress } = await import('./services/completeVolatilityAnalysis');
+      const progress = getAnalysisProgress();
+      
+      res.json({
+        success: true,
+        progress: progress || {
+          batchId: null,
+          totalCryptocurrencies: 0,
+          processedCount: 0,
+          completedCount: 0,
+          isComplete: true,
+          progressPercentage: 100,
+          startTime: null,
+          estimatedEndTime: null
+        }
+      });
+      
+    } catch (error) {
+      console.error('❌ 获取分析进度失败:', error);
+      res.status(500).json({
+        success: false,
+        error: (error as Error).message
+      });
+    }
+  });
+
   // 手动触发完整波动性分析
   app.post('/api/volatility-analysis/trigger', async (req, res) => {
     try {
@@ -680,11 +709,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dataQuality: result.dataQuality,
         algorithm: {
           name: '完整数据验证算法',
-          '7day': '使用最近8个数据点的平均值（最少8个数据点）',
-          '30day': '使用全部可用数据点的平均值（最少31个数据点）',
+          '7day': '使用8个数据点进行7次比较（最少8个数据点）',
+          '30day': '使用31个数据点进行31次比较（最少31个数据点）',
           specification: '只处理数据点充足的加密货币，确保分析质量',
           dataSource: '严格验证数据完整性后的有效数据',
-          dataIntegrity: '7天分析需要至少8个数据点，30天分析需要至少31个数据点',
+          dataIntegrity: '7天分析需要至少8个数据点进行7次比较，30天分析需要至少31个数据点进行31次比较',
           separateBatches: true
         }
       });

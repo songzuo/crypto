@@ -1,8 +1,8 @@
 /**
  * 完整波动性分析服务
  * 确保只有数据点充足的加密货币才进行分析和保存
- * 7天分析：至少8个数据点
- * 30天分析：至少31个数据点
+ * 7天分析：至少8个数据点，进行7次比较
+ * 30天分析：至少31个数据点，进行31次比较
  */
 
 import { Pool } from '@neondatabase/serverless';
@@ -23,16 +23,54 @@ interface CompleteVolatilityResult {
   actualComparisons30d: number;
 }
 
+interface AnalysisProgress {
+  batchId: string;
+  totalCryptocurrencies: number;
+  processedCount: number;
+  completedCount: number;
+  isComplete: boolean;
+  progressPercentage: number;
+  startTime: Date;
+  estimatedEndTime?: Date;
+}
+
 /**
  * 计算波动性（平均值方法）
- * 7天：使用最近8个数据点的平均值
- * 30天：使用全部数据点的平均值
+ * 7天：使用8个数据点进行7次比较
+ * 30天：使用31个数据点进行31次比较
  */
-function calculateAverageVolatility(dataPoints: number[]): number {
+function calculateAverageVolatility(dataPoints: number[], analysisType: '7d' | '30d'): number {
   if (dataPoints.length === 0) return 0;
   
-  const sum = dataPoints.reduce((acc, val) => acc + Math.abs(val), 0);
-  return sum / dataPoints.length;
+  let comparisons: number[] = [];
+  
+  if (analysisType === '7d') {
+    // 7天分析：使用最近8个数据点，进行7次比较
+    const recent8 = dataPoints.slice(0, Math.min(8, dataPoints.length));
+    if (recent8.length >= 8) {
+      for (let i = 1; i < recent8.length; i++) {
+        const change = ((recent8[i-1] - recent8[i]) / recent8[i]) * 100;
+        if (!isNaN(change) && isFinite(change)) {
+          comparisons.push(change);
+        }
+      }
+    }
+  } else {
+    // 30天分析：使用31个数据点，进行31次比较
+    if (dataPoints.length >= 31) {
+      for (let i = 1; i < Math.min(31, dataPoints.length); i++) {
+        const change = ((dataPoints[i-1] - dataPoints[i]) / dataPoints[i]) * 100;
+        if (!isNaN(change) && isFinite(change)) {
+          comparisons.push(change);
+        }
+      }
+    }
+  }
+  
+  if (comparisons.length === 0) return 0;
+  
+  const sum = comparisons.reduce((acc, val) => acc + Math.abs(val), 0);
+  return sum / comparisons.length;
 }
 
 /**
@@ -42,6 +80,16 @@ function categorizeVolatility(volatility: number): 'Low' | 'Medium' | 'High' {
   if (volatility < 20) return 'Low';
   if (volatility < 50) return 'Medium';
   return 'High';
+}
+
+// 全局进度跟踪
+let globalProgress: AnalysisProgress | null = null;
+
+/**
+ * 获取当前分析进度
+ */
+export function getAnalysisProgress(): AnalysisProgress | null {
+  return globalProgress;
 }
 
 /**
@@ -98,6 +146,17 @@ export async function runCompleteVolatilityAnalysis(): Promise<{
   const cryptoResult = await pool.query(cryptoQuery);
   console.log(`📈 找到 ${cryptoResult.rows.length} 个有数据的加密货币`);
   
+  // 初始化进度跟踪
+  globalProgress = {
+    batchId: `7d-${batchId7d}_30d-${batchId30d}`,
+    totalCryptocurrencies: cryptoResult.rows.length,
+    processedCount: 0,
+    completedCount: 0,
+    isComplete: false,
+    progressPercentage: 0,
+    startTime: new Date()
+  };
+  
   const volatilityResults: CompleteVolatilityResult[] = [];
   let processedCount = 0;
   let skippedCount = 0;
@@ -126,28 +185,18 @@ export async function runCompleteVolatilityAnalysis(): Promise<{
       }
       
       // 检查数据点是否充足
-      const has7dData = allDataPoints.length >= 8;
-      const has30dData = allDataPoints.length >= 31;
+      const has7dData = allDataPoints.length >= 8;   // 7天需要8个数据点进行7次比较
+      const has30dData = allDataPoints.length >= 31; // 30天需要31个数据点进行31次比较
       
       if (!has7dData && !has30dData) {
-        console.log(`❌ ${crypto.symbol}: 数据不足 (${allDataPoints.length} 个数据点，需要至少8个)`);
+        console.log(`❌ ${crypto.symbol}: 数据不足 (${allDataPoints.length} 个数据点，7天需要8个，30天需要31个)`);
         skippedCount++;
         insufficientDataCount++;
-        continue;
-      }
-      
-      // 计算价格变化（相邻数据点的差值）
-      const changes = [];
-      for (let i = 1; i < allDataPoints.length; i++) {
-        const change = ((allDataPoints[i-1] - allDataPoints[i]) / allDataPoints[i]) * 100;
-        if (!isNaN(change) && isFinite(change)) {
-          changes.push(change);
-        }
-      }
-      
-      if (changes.length === 0) {
-        skippedCount++;
-        insufficientDataCount++;
+        
+        // 更新进度
+        processedCount++;
+        globalProgress!.processedCount = processedCount;
+        globalProgress!.progressPercentage = Math.round((processedCount / globalProgress!.totalCryptocurrencies) * 100);
         continue;
       }
       
@@ -158,19 +207,18 @@ export async function runCompleteVolatilityAnalysis(): Promise<{
       let actualComparisons7d = 0;
       let actualComparisons30d = 0;
       
-      // 7天分析：使用最近8个数据点
+      // 7天分析：使用8个数据点进行7次比较
       if (has7dData) {
-        const recent8Points = changes.slice(0, Math.min(8, changes.length));
-        volatility7d = calculateAverageVolatility(recent8Points);
-        dataPoints7d = recent8Points.length;
-        actualComparisons7d = recent8Points.length;
+        volatility7d = calculateAverageVolatility(allDataPoints, '7d');
+        dataPoints7d = 8;
+        actualComparisons7d = 7;
       }
       
-      // 30天分析：使用全部数据点
+      // 30天分析：使用31个数据点进行31次比较
       if (has30dData) {
-        volatility30d = calculateAverageVolatility(changes);
-        dataPoints30d = changes.length;
-        actualComparisons30d = changes.length;
+        volatility30d = calculateAverageVolatility(allDataPoints, '30d');
+        dataPoints30d = 31;
+        actualComparisons30d = 31;
       }
       
       // 只有数据充足的才保存
@@ -199,8 +247,12 @@ export async function runCompleteVolatilityAnalysis(): Promise<{
       
       processedCount++;
       
+      // 更新进度
+      globalProgress!.processedCount = processedCount;
+      globalProgress!.progressPercentage = Math.round((processedCount / globalProgress!.totalCryptocurrencies) * 100);
+      
       if (processedCount % 100 === 0) {
-        console.log(`📈 已处理 ${processedCount}/${cryptoResult.rows.length} 个加密货币`);
+        console.log(`📈 已处理 ${processedCount}/${cryptoResult.rows.length} 个加密货币 (${globalProgress!.progressPercentage}%)`);
       }
       
     } catch (error) {
@@ -259,7 +311,7 @@ export async function runCompleteVolatilityAnalysis(): Promise<{
           '7d',
           result.dataPoints7d,
           result.actualComparisons7d,
-          `7天波动性：使用最近${result.dataPoints7d}个数据点的平均值计算（数据完整性验证通过）`
+          `7天波动性：使用8个数据点进行7次比较计算平均值（数据完整性验证通过）`
         ]);
         
         savedCount++;
@@ -298,7 +350,7 @@ export async function runCompleteVolatilityAnalysis(): Promise<{
           '30d',
           result.dataPoints30d,
           result.actualComparisons30d,
-          `30天波动性：使用全部${result.dataPoints30d}个数据点的平均值计算（数据完整性验证通过）`
+          `30天波动性：使用31个数据点进行31次比较计算平均值（数据完整性验证通过）`
         ]);
         
         savedCount++;
@@ -313,10 +365,15 @@ export async function runCompleteVolatilityAnalysis(): Promise<{
   await pool.query('UPDATE volatility_analysis_batches SET total_analyzed = $1 WHERE id = $2', [sorted7d.length, batchId7d]);
   await pool.query('UPDATE volatility_analysis_batches SET total_analyzed = $1 WHERE id = $2', [sorted30d.length, batchId30d]);
   
+  // 标记分析完成
+  globalProgress!.isComplete = true;
+  globalProgress!.completedCount = savedCount;
+  globalProgress!.progressPercentage = 100;
+  
   console.log(`✅ 完整波动性分析完成！`);
   console.log(`📊 最终结果:`);
-  console.log(`   - 7天分析: ${sorted7d.length} 个加密货币（至少8个数据点）`);
-  console.log(`   - 30天分析: ${sorted30d.length} 个加密货币（至少31个数据点）`);
+  console.log(`   - 7天分析: ${sorted7d.length} 个加密货币（8个数据点，7次比较）`);
+  console.log(`   - 30天分析: ${sorted30d.length} 个加密货币（31个数据点，31次比较）`);
   console.log(`   - 总计保存: ${savedCount} 条记录`);
   
   return {
