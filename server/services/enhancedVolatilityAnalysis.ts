@@ -100,7 +100,7 @@ function calculateEnhancedVolatility(
     return { volatility: avgVolatility, actualComparisons: comparisons.length, dataSource };
     
   } else {
-    // 30天分析：需要至少31个数据点，进行30次比较
+    // 30天分析：需要至少31个数据点，进行31次比较
     let useData = dataPoints;
     let dataSource = 'real_data';
     
@@ -114,9 +114,12 @@ function calculateEnhancedVolatility(
     const first31 = useData.slice(0, 31);
     const comparisons: number[] = [];
     
-    // 进行30次比较
-    for (let i = 1; i < first31.length; i++) {
-      const change = Math.abs((first31[i-1] - first31[i]) / first31[i]);
+    // 进行31次比较：对31个数据点的每一个都进行比较
+    for (let i = 0; i < first31.length; i++) {
+      // 每个数据点都参与比较计算
+      const baseValue = first31[i];
+      const avgOfOthers = first31.filter((_, idx) => idx !== i).reduce((sum, val) => sum + val, 0) / (first31.length - 1);
+      const change = Math.abs((baseValue - avgOfOthers) / avgOfOthers);
       if (!isNaN(change) && isFinite(change)) {
         comparisons.push(change);
       }

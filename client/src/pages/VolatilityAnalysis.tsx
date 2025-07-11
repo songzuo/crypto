@@ -59,8 +59,9 @@ const VolatilityAnalysis = () => {
       if (!response.ok) throw new Error('获取分析进度失败');
       return response.json();
     },
-    refetchInterval: 5000, // 每5秒更新一次进度
-    enabled: isRunningAnalysis
+    refetchInterval: 2000, // 每2秒更新一次进度
+    enabled: true, // 始终启用，不依赖于isRunningAnalysis状态
+    retry: 3
   });
 
   // 获取波动性分析批次
@@ -158,18 +159,20 @@ const VolatilityAnalysis = () => {
   // 监听分析进度
   useEffect(() => {
     const progress = progressData?.progress;
-    if (progress && !progress.isComplete) {
+    console.log('Progress data received:', progress);
+    
+    if (progress && !progress.isComplete && progress.progressPercentage < 100) {
       setIsRunningAnalysis(true);
-    } else if (progress && progress.isComplete) {
+    } else if (progress && (progress.isComplete || progress.progressPercentage >= 100)) {
       setIsRunningAnalysis(false);
       // 刷新数据
       refetch();
       queryClient.invalidateQueries({ queryKey: ['/api/volatility-analysis/batches'] });
     }
-  }, [progressData, refetch]);
+  }, [progressData, refetch, queryClient]);
 
   const progress = progressData?.progress;
-  const showProgress = progress && !progress.isComplete && progress.progressPercentage > 0;
+  const showProgress = progress && (!progress.isComplete || progress.progressPercentage < 100) && progress.progressPercentage > 0;
 
   const getVolatilityIcon = (direction: string) => {
     switch (direction) {
@@ -273,7 +276,7 @@ const VolatilityAnalysis = () => {
               <ul className="text-sm text-purple-800 space-y-1">
                 <li>• 需要至少31个数据点</li>
                 <li>• 进行31次价格比较</li>
-                <li>• 使用31个数据点的平均值</li>
+                <li>• 每个数据点与其他30个数据点的平均值进行比较</li>
                 <li>• 适用于长期波动性评估</li>
               </ul>
             </div>

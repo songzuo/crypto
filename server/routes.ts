@@ -814,10 +814,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { getEnhancedAnalysisProgress } = await import('./services/enhancedVolatilityAnalysis');
       const enhancedProgress = getEnhancedAnalysisProgress();
       
-      if (enhancedProgress) {
+      console.log('Enhanced progress check:', enhancedProgress);
+      
+      if (enhancedProgress && !enhancedProgress.isComplete) {
         res.json({
           success: true,
-          progress: enhancedProgress,
+          progress: {
+            batchId: enhancedProgress.batchId,
+            totalCryptocurrencies: enhancedProgress.totalCryptocurrencies,
+            processedCount: enhancedProgress.processedCount,
+            completedCount: enhancedProgress.completedCount,
+            isComplete: enhancedProgress.isComplete,
+            progressPercentage: enhancedProgress.progressPercentage,
+            startTime: enhancedProgress.startTime?.toISOString(),
+            message: enhancedProgress.message
+          },
           isRunning: !enhancedProgress.isComplete
         });
         return;
@@ -829,7 +840,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (!progress) {
         res.json({
-          success: false,
+          success: true,
+          progress: {
+            batchId: null,
+            totalCryptocurrencies: 0,
+            processedCount: 0,
+            completedCount: 0,
+            isComplete: true,
+            progressPercentage: 100,
+            startTime: null,
+            estimatedEndTime: null
+          },
           isRunning: false,
           message: '当前没有正在运行的波动性分析'
         });
