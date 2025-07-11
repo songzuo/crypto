@@ -664,21 +664,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // 手动触发用户指定算法波动性分析
   app.post('/api/volatility-analysis/trigger', async (req, res) => {
     try {
-      console.log('🎯 手动触发波动性分析（用户指定算法）...');
+      console.log('🎯 手动触发全面波动性分析（处理所有批次数据）...');
       
-      const { executeUserSpecifiedAlgorithm } = await import('./workingUserAlgorithm');
-      const result = await executeUserSpecifiedAlgorithm();
+      const { runFullVolatilityAnalysis } = await import('./services/comprehensiveVolatilityAnalysis');
+      const result = await runFullVolatilityAnalysis();
       
       res.json({
         success: true,
-        message: '用户指定算法波动性分析成功完成',
-        batchId: result.batchId,
+        message: '全面波动性分析成功完成',
+        batchId7d: result.batchId7d,
+        batchId30d: result.batchId30d,
         totalAnalyzed: result.totalAnalyzed,
         algorithm: {
-          name: '用户指定算法',
-          '7day': '使用最近8个数据点的平均值',
-          '30day': '使用全部可用数据点的平均值',
-          specification: '算法设计：1、七天算最近8个数据点的平均值  2、三十天算全部数据点的平均值'
+          name: '全面分离算法',
+          '7day': '使用最近8个数据点的平均值（独立批次）',
+          '30day': '使用全部可用数据点的平均值（独立批次）',
+          specification: '处理所有780个加密货币，分别计算和保存7天和30天波动性',
+          dataSource: '来自所有165个交易量批次的综合数据',
+          separateBatches: true
         }
       });
       
