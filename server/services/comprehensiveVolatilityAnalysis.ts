@@ -55,7 +55,7 @@ export async function runFullVolatilityAnalysis(): Promise<{ batchId7d: number; 
         AND c.symbol != ''
         AND c.name != ''
       GROUP BY c.id, c.symbol, c.name
-      HAVING COUNT(v.id) >= 3
+      HAVING COUNT(v.id) >= 2
       ORDER BY total_data_points DESC
     `;
     
@@ -80,7 +80,7 @@ export async function runFullVolatilityAnalysis(): Promise<{ batchId7d: number; 
         
         const volumeResult = await pool.query(volumeQuery, [crypto.id]);
         
-        if (volumeResult.rows.length < 3) {
+        if (volumeResult.rows.length < 2) {
           continue;
         }
         
@@ -96,12 +96,12 @@ export async function runFullVolatilityAnalysis(): Promise<{ batchId7d: number; 
           }
         }
         
-        if (changes.length < 2) continue;
+        if (changes.length < 1) continue;
         
-        // 🎯 分离计算：7天波动性使用最近8个点，30天波动性使用全部点
+        // 🎯 分离计算：7天波动性使用最近8个点的平均值，30天波动性使用全部点的平均值
         const recent8Points = changes.slice(0, Math.min(8, changes.length));
-        const volatility7d = calculateVolatility(recent8Points);
-        const volatility30d = calculateVolatility(changes);
+        const volatility7d = calculateAverageVolatility(recent8Points);
+        const volatility30d = calculateAverageVolatility(changes);
         
         // 方向判断
         const recentTrend = ratioValues.length > 1 ? ratioValues[0] - ratioValues[1] : 0;
@@ -121,7 +121,9 @@ export async function runFullVolatilityAnalysis(): Promise<{ batchId7d: number; 
           category7d,
           category30d,
           dataPoints7d: recent8Points.length,
-          dataPoints30d: changes.length
+          dataPoints30d: changes.length,
+          totalRawDataPoints: volumeResult.rows.length,
+          actualComparisons: changes.length
         });
         
         processedCount++;
@@ -156,8 +158,8 @@ export async function runFullVolatilityAnalysis(): Promise<{ batchId7d: number; 
           INSERT INTO volatility_analysis_entries (
             symbol, name, batch_id, cryptocurrency_id, volatility_percentage,
             volatility_category, volatility_direction, volatility_rank,
-            risk_level, period
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            risk_level, period, data_points_used, comparison_count, algorithm_description
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         `;
         
         await pool.query(insertQuery, [
@@ -170,7 +172,10 @@ export async function runFullVolatilityAnalysis(): Promise<{ batchId7d: number; 
           result.direction,
           i + 1,
           result.category7d.toLowerCase(),
-          '7d'
+          '7d',
+          result.dataPoints7d,
+          result.actualComparisons,
+          `7天波动性：使用最近${result.dataPoints7d}个数据点的平均值计算`
         ]);
         
         savedCount++;
@@ -190,8 +195,8 @@ export async function runFullVolatilityAnalysis(): Promise<{ batchId7d: number; 
           INSERT INTO volatility_analysis_entries (
             symbol, name, batch_id, cryptocurrency_id, volatility_percentage,
             volatility_category, volatility_direction, volatility_rank,
-            risk_level, period
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            risk_level, period, data_points_used, comparison_count, algorithm_description
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         `;
         
         await pool.query(insertQuery, [
@@ -204,7 +209,10 @@ export async function runFullVolatilityAnalysis(): Promise<{ batchId7d: number; 
           result.direction,
           i + 1,
           result.category30d.toLowerCase(),
-          '30d'
+          '30d',
+          result.dataPoints30d,
+          result.actualComparisons,
+          `30天波动性：使用全部${result.dataPoints30d}个数据点的平均值计算`
         ]);
         
         savedCount++;
@@ -240,22 +248,17 @@ export async function runFullVolatilityAnalysis(): Promise<{ batchId7d: number; 
 }
 
 /**
- * 计算波动性（标准差）
+ * 计算波动性（平均值方法）
+ * 7天：使用最近8个数据点的平均值
+ * 30天：使用全部数据点的平均值
  */
-function calculateVolatility(dataPoints: number[]): number {
+function calculateAverageVolatility(dataPoints: number[]): number {
   if (dataPoints.length === 0) return 0;
   
-  // 计算平均值
+  // 计算平均值（用户要求的算法）
   const mean = dataPoints.reduce((sum, val) => sum + val, 0) / dataPoints.length;
   
-  // 计算方差
-  const variance = dataPoints.reduce((sum, val) => {
-    const diff = val - mean;
-    return sum + (diff * diff);
-  }, 0) / dataPoints.length;
-  
-  // 返回标准差作为波动性指标
-  return Math.sqrt(variance);
+  return mean;
 }
 
 /**

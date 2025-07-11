@@ -554,7 +554,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         SELECT 
           symbol, name, volatility_percentage, volatility_category, 
           volatility_direction, volatility_rank, price_change_24h, 
-          market_cap_change_24h, analysis_time
+          market_cap_change_24h, analysis_time, data_points_used, 
+          comparison_count, algorithm_description
         FROM volatility_analysis_entries 
         WHERE ${whereClause}
         ORDER BY volatility_rank ASC
@@ -587,8 +588,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         direction: entry.volatility_direction,
         category: entry.volatility_category,
         rank: entry.volatility_rank || 0,
-        dataPoints: 148,
-        comparisons: 148,
+        dataPoints: entry.data_points_used || 0,
+        comparisons: entry.comparison_count || 0,
         marketCapChange: entry.market_cap_change_24h || 0,
         period: '7d'
       }));
@@ -642,8 +643,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         direction: entry.volatilityDirection,
         category: entry.volatilityCategory,
         rank: entry.volatilityRank,
-        dataPoints: 142, // Based on user specification of 142 ratios from 143 batches
-        comparisons: 142,
+        dataPoints: entry.data_points_used || 0,
+        comparisons: entry.comparison_count || 0,
         marketCapChange: entry.marketCapChange24h || 0,
         period: '24h'
       }));
