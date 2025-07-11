@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { db } from "./db";
+import { db, pool } from "./db";
 import cron from "node-cron";
 import { setupScheduler, scheduler } from "./services/scheduler";
 import { searchTopCryptocurrencies } from "./services/cryptoSearch";
@@ -1043,6 +1043,100 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({
         success: false,
         message: '运行修正后的波动性分析失败',
+        error: error.message
+      });
+    }
+  });
+
+  // 获取所有波动性分析结果（包括7天和30天）
+  app.get('/api/volatility-analysis/all-results', async (req, res) => {
+    try {
+      const period = req.query.period as string;
+      const limit = parseInt(req.query.limit as string) || 1000;
+      
+      // 使用原始SQL查询，避免Drizzle ORM的复杂性
+      const entriesQuery = `
+        SELECT 
+          symbol, 
+          name, 
+          volatility_percentage,
+          volatility_category,
+          price_change_24h,
+          volume_change_24h,
+          market_cap_change_24h,
+          volatility_direction,
+          risk_level,
+          volatility_rank,
+          analysis_time
+        FROM volatility_analysis_entries 
+        WHERE batch_id = 104
+        ORDER BY volatility_percentage DESC
+        LIMIT $1
+      `;
+      
+      const entriesResult = await pool.query(entriesQuery, [limit]);
+      
+      // 获取统计信息
+      const statsQuery = `
+        SELECT 
+          volatility_category as category,
+          COUNT(*) as count,
+          AVG(volatility_percentage) as avg_volatility,
+          MIN(volatility_percentage) as min_volatility,
+          MAX(volatility_percentage) as max_volatility
+        FROM volatility_analysis_entries 
+        WHERE batch_id = 104
+        GROUP BY volatility_category
+        ORDER BY volatility_category
+      `;
+      
+      const statsResult = await pool.query(statsQuery);
+      
+      console.log(`查询结果: ${entriesResult.rows.length} 个条目`);
+      
+      const entries = entriesResult.rows.map(row => ({
+        symbol: row.symbol,
+        name: row.name,
+        volatilityPercentage: parseFloat(row.volatility_percentage || 0),
+        category: row.volatility_category,
+        priceChange24h: parseFloat(row.price_change_24h || 0),
+        volumeChange24h: parseFloat(row.volume_change_24h || 0),
+        marketCapChange24h: parseFloat(row.market_cap_change_24h || 0),
+        volatilityDirection: row.volatility_direction,
+        riskLevel: row.risk_level,
+        volatilityRank: row.volatility_rank,
+        analysisTime: row.analysis_time
+      }));
+      
+      const stats = statsResult.rows.map(row => ({
+        category: row.category,
+        count: parseInt(row.count),
+        avgVolatility: parseFloat(row.avg_volatility),
+        minVolatility: parseFloat(row.min_volatility),
+        maxVolatility: parseFloat(row.max_volatility)
+      }));
+      
+      res.json({
+        success: true,
+        data: {
+          entries,
+          stats,
+          total: entries.length,
+          batchId: 104,
+          algorithm: {
+            name: '修正后的波动性分析算法',
+            description: '使用symbol标识符而不是cryptocurrency_id',
+            dataPoints: '每个加密货币171个数据点',
+            calculation: '7天使用8个数据点进行7次比较，30天使用31个数据点进行30次比较'
+          }
+        }
+      });
+      
+    } catch (error) {
+      console.error('获取所有波动性分析结果失败:', error);
+      res.status(500).json({
+        success: false,
+        message: '获取所有波动性分析结果失败',
         error: error.message
       });
     }
