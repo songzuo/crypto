@@ -198,7 +198,7 @@ export async function runRealCompleteVolatilityAnalysis(): Promise<{
         realGlobalProgress.message = `还有${remainingPercentage}%的数据正在计算 (${processedCount}/${cryptoResult.rows.length})`;
       }
       
-      // 获取该加密货币的所有历史数据
+      // 获取该加密货币的所有历史数据 - 增加限制以获取足够的30天数据
       const volumeQuery = `
         SELECT volume_to_market_cap_ratio, timestamp
         FROM volume_to_market_cap_ratios
@@ -206,7 +206,7 @@ export async function runRealCompleteVolatilityAnalysis(): Promise<{
           AND volume_to_market_cap_ratio IS NOT NULL
           AND timestamp IS NOT NULL
         ORDER BY timestamp DESC
-        LIMIT 50
+        LIMIT 100
       `;
       
       const volumeResult = await pool.query(volumeQuery, [crypto.id]);
