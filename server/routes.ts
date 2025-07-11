@@ -992,6 +992,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // 测试基于symbol的数据获取
+  app.get('/api/volatility-analysis/test-symbol-data/:symbol', async (req, res) => {
+    try {
+      const symbol = req.params.symbol.toUpperCase();
+      const { getEnhancedCryptoDataBySymbol } = await import('./services/correctVolatilityAnalysis');
+      
+      const result = await getEnhancedCryptoDataBySymbol(symbol);
+      
+      if (!result) {
+        return res.status(404).json({
+          success: false,
+          message: '未找到该加密货币的数据'
+        });
+      }
+      
+      res.json({
+        success: true,
+        data: {
+          symbol: result.symbol,
+          name: result.name,
+          totalDataPoints: result.dataPoints.length,
+          sampleDataPoints: result.dataPoints.slice(0, 10),
+          batchIdsSample: result.batchIds.slice(0, 5)
+        }
+      });
+    } catch (error) {
+      console.error('测试基于symbol的数据获取失败:', error);
+      res.status(500).json({
+        success: false,
+        message: '测试基于symbol的数据获取失败',
+        error: error.message
+      });
+    }
+  });
+
+  // 运行修正后的波动性分析
+  app.post('/api/volatility-analysis/run-corrected', async (req, res) => {
+    try {
+      const { runCorrectVolatilityAnalysis } = await import('./services/correctVolatilityAnalysis');
+      const result = await runCorrectVolatilityAnalysis();
+      
+      res.json({
+        success: true,
+        message: '修正后的波动性分析已完成',
+        data: result
+      });
+    } catch (error) {
+      console.error('运行修正后的波动性分析失败:', error);
+      res.status(500).json({
+        success: false,
+        message: '运行修正后的波动性分析失败',
+        error: error.message
+      });
+    }
+  });
+
   // 测试简单RSI信号判断
   app.get('/api/test-rsi-signals', async (req, res) => {
     try {
