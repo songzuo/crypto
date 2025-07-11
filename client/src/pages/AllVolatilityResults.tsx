@@ -58,6 +58,32 @@ const AllVolatilityResults: React.FC = () => {
     refetchInterval: 10000, // 每10秒刷新一次
   });
 
+  // 查询统一分析进度
+  const { data: progressData } = useQuery<any>({
+    queryKey: ['unified-analysis-progress'],
+    queryFn: async () => {
+      const response = await fetch('/api/volatility-analysis/unified-progress');
+      if (!response.ok) {
+        throw new Error('Failed to fetch progress');
+      }
+      return response.json();
+    },
+    refetchInterval: 5000, // 每5秒刷新一次
+  });
+
+  // 查询简化统一分析进度
+  const { data: simpleProgressData } = useQuery<any>({
+    queryKey: ['simple-unified-analysis-progress'],
+    queryFn: async () => {
+      const response = await fetch('/api/volatility-analysis/simple-unified-progress');
+      if (!response.ok) {
+        throw new Error('Failed to fetch simple progress');
+      }
+      return response.json();
+    },
+    refetchInterval: 3000, // 每3秒刷新一次
+  });
+
   const handleCorrectVolatilityTrigger = async () => {
     try {
       const response = await fetch('/api/volatility-analysis/correct-trigger', {
@@ -103,6 +129,30 @@ const AllVolatilityResults: React.FC = () => {
       }
     } catch (error) {
       alert('启动30天波动性计算失败：' + error.message);
+    }
+  };
+
+  const handleUnifiedAnalysisTrigger = async () => {
+    try {
+      const response = await fetch('/api/volatility-analysis/unified-trigger', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        alert('统一波动性分析已启动！将合并三个栏目，分析所有3496个加密货币，支持断点续传。');
+        // 延迟几秒后刷新数据
+        setTimeout(() => {
+          refetch();
+        }, 5000);
+      } else {
+        throw new Error('启动失败');
+      }
+    } catch (error) {
+      alert('启动统一波动性分析失败：' + error.message);
     }
   };
 
@@ -193,6 +243,31 @@ const AllVolatilityResults: React.FC = () => {
             <Activity className="h-4 w-4 mr-2" />
             刷新数据
           </Button>
+          <Button onClick={handleUnifiedAnalysisTrigger} variant="default">
+            <BarChart3 className="h-4 w-4 mr-2" />
+            启动统一波动性分析
+          </Button>
+          <Button 
+            onClick={() => {
+              fetch('/api/volatility-analysis/simple-unified-trigger', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+              })
+              .then(response => response.json())
+              .then(data => {
+                console.log('简化统一波动性分析已启动:', data);
+                refetch();
+              })
+              .catch(error => {
+                console.error('启动简化统一波动性分析失败:', error);
+              });
+            }}
+            variant="outline"
+            className="bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
+          >
+            <BarChart3 className="h-4 w-4 mr-2" />
+            简化统一分析
+          </Button>
           <Button onClick={handleCorrectVolatilityTrigger} variant="outline">
             <BarChart3 className="h-4 w-4 mr-2" />
             重新计算7天波动性
@@ -203,6 +278,64 @@ const AllVolatilityResults: React.FC = () => {
           </Button>
         </div>
       </div>
+
+      {/* 统一分析进度显示 */}
+      {progressData && progressData.status === 'running' && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-lg">统一波动性分析进度</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="flex justify-between text-sm">
+                <span>分析进度</span>
+                <span>{progressData.processed || 0} / {progressData.total || 0} ({progressData.percentage || 0}%)</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div 
+                  className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${progressData.percentage || 0}%` }}
+                />
+              </div>
+              <div className="text-sm text-gray-600">
+                还有 {progressData.remaining || 0} 个加密货币待分析
+              </div>
+              <div className="text-xs text-gray-500">
+                批次ID: {progressData.batchId} | 开始时间: {progressData.startTime ? new Date(progressData.startTime).toLocaleString() : ''}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 简化统一分析进度显示 */}
+      {simpleProgressData && simpleProgressData.status === 'running' && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-lg text-purple-700">简化统一波动性分析进度</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="flex justify-between text-sm">
+                <span>分析进度</span>
+                <span>{simpleProgressData.processed || 0} / {simpleProgressData.total || 0} ({simpleProgressData.progress || 0}%)</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div 
+                  className="bg-purple-500 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${simpleProgressData.progress || 0}%` }}
+                />
+              </div>
+              <div className="text-sm text-gray-600">
+                还有 {simpleProgressData.remaining || 0} 个加密货币待分析
+              </div>
+              <div className="text-xs text-gray-500">
+                批次ID: {simpleProgressData.batchId} | 开始时间: {simpleProgressData.startTime ? new Date(simpleProgressData.startTime).toLocaleString() : ''}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* 算法信息 */}
       <Card>

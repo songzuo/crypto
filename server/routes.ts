@@ -535,6 +535,136 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
+
+  // 统一波动性分析API
+  app.post('/api/volatility-analysis/unified-trigger', async (req, res) => {
+    try {
+      console.log('收到统一波动性分析触发请求');
+      
+      // 异步启动统一波动性分析
+      setImmediate(async () => {
+        try {
+          const { runUnifiedVolatilityAnalysis } = await import('./unifiedVolatilityAnalysis');
+          
+          // 持续运行直到完成
+          let isRunning = true;
+          while (isRunning) {
+            const result = await runUnifiedVolatilityAnalysis();
+            
+            if (result.success) {
+              console.log(`统一波动性分析进度: ${result.message}`);
+              
+              if (result.progress && result.progress.percentage >= 100) {
+                console.log('统一波动性分析完成！');
+                isRunning = false;
+              } else {
+                // 等待5秒后继续下一批
+                await new Promise(resolve => setTimeout(resolve, 5000));
+              }
+            } else {
+              console.error('统一波动性分析失败:', result.message);
+              isRunning = false;
+            }
+          }
+        } catch (error) {
+          console.error('统一波动性分析失败:', error);
+        }
+      });
+      
+      res.json({
+        success: true,
+        message: '统一波动性分析已启动！将合并三个栏目，分析所有加密货币，支持断点续传'
+      });
+      
+    } catch (error) {
+      console.error('启动统一波动性分析时出错:', error);
+      res.status(500).json({
+        success: false,
+        error: '启动统一波动性分析失败',
+        details: error.message
+      });
+    }
+  });
+
+  // 获取统一波动性分析进度
+  app.get('/api/volatility-analysis/unified-progress', async (req, res) => {
+    try {
+      const { getAnalysisProgress } = await import('./unifiedVolatilityAnalysis');
+      const progress = await getAnalysisProgress();
+      res.json(progress);
+    } catch (error) {
+      console.error('获取分析进度失败:', error);
+      res.status(500).json({
+        success: false,
+        error: '获取进度失败',
+        details: error.message
+      });
+    }
+  });
+
+  // 简化统一波动性分析触发端点
+  app.post('/api/volatility-analysis/simple-unified-trigger', async (req, res) => {
+    try {
+      console.log('收到简化统一波动性分析触发请求');
+      
+      // 异步启动分析
+      setImmediate(async () => {
+        try {
+          const { runSimpleUnifiedVolatilityAnalysis } = await import('./simpleUnifiedVolatilityAnalysis');
+          
+          // 持续运行直到完成
+          let isRunning = true;
+          while (isRunning) {
+            const result = await runSimpleUnifiedVolatilityAnalysis();
+            
+            if (result.success) {
+              console.log(`简化统一波动性分析进度: ${result.message}`);
+              
+              if (result.message.includes('已完成')) {
+                console.log('简化统一波动性分析完成！');
+                isRunning = false;
+              } else {
+                // 等待3秒后继续下一批
+                await new Promise(resolve => setTimeout(resolve, 3000));
+              }
+            } else {
+              console.error('简化统一波动性分析失败:', result.message);
+              isRunning = false;
+            }
+          }
+        } catch (error) {
+          console.error('简化统一波动性分析失败:', error);
+        }
+      });
+      
+      res.json({
+        success: true,
+        message: '简化统一波动性分析已启动！'
+      });
+    } catch (error) {
+      console.error('启动简化统一波动性分析失败:', error);
+      res.status(500).json({
+        success: false,
+        message: '启动简化统一波动性分析失败: ' + error.message
+      });
+    }
+  });
+
+  // 获取简化统一波动性分析进度
+  app.get('/api/volatility-analysis/simple-unified-progress', async (req, res) => {
+    try {
+      const { getSimpleAnalysisProgress } = await import('./simpleUnifiedVolatilityAnalysis');
+      const progress = await getSimpleAnalysisProgress();
+      res.json(progress);
+    } catch (error) {
+      console.error('获取简化分析进度失败:', error);
+      res.status(500).json({
+        success: false,
+        error: '获取进度失败',
+        details: error.message
+      });
+    }
+  });
   
   // 使用特定的交易量市值比率批次（如批次#83）进行技术分析
   app.post("/api/technical-analysis/analyze-with-batch/:batchId", async (req, res) => {
