@@ -938,6 +938,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // 增强30天分析触发器
+  app.post('/api/volatility-analysis/trigger-enhanced-30day', async (req, res) => {
+    try {
+      const { runEnhanced30DayAnalysis } = await import('./services/enhancedVolatilityAnalysis');
+      const result = await runEnhanced30DayAnalysis();
+      res.json({
+        success: true,
+        message: '增强30天分析已触发',
+        data: result
+      });
+    } catch (error) {
+      console.error('触发增强30天分析失败:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+  // 测试单个加密货币的增强数据提取
+  app.get('/api/volatility-analysis/test-enhanced-data/:id', async (req, res) => {
+    try {
+      const cryptocurrencyId = parseInt(req.params.id);
+      const { extractEnhancedHistoricalData } = await import('./services/enhancedVolatilityAnalysis');
+      
+      const result = await extractEnhancedHistoricalData(cryptocurrencyId);
+      
+      if (!result) {
+        return res.status(404).json({
+          success: false,
+          message: '未找到该加密货币的数据'
+        });
+      }
+      
+      res.json({
+        success: true,
+        data: {
+          symbol: result.symbol,
+          name: result.name,
+          totalDataPoints: result.allDataPoints.length,
+          sampleDataPoints: result.allDataPoints.slice(0, 10),
+          batchHistorySample: result.batchHistory.slice(0, 5)
+        }
+      });
+    } catch (error) {
+      console.error('测试增强数据提取失败:', error);
+      res.status(500).json({
+        success: false,
+        message: '测试增强数据提取失败',
+        error: error.message
+      });
+    }
+  });
+
   // 测试简单RSI信号判断
   app.get('/api/test-rsi-signals', async (req, res) => {
     try {

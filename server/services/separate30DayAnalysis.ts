@@ -5,6 +5,7 @@
  */
 
 import { pool } from '../db';
+import { getCompleteHistoricalData, buildEnhancedDataset } from './improvedDataRetrieval';
 
 // 断点续传状态管理
 interface ResumeState {
@@ -272,37 +273,21 @@ export async function runSeparate30DayAnalysis(): Promise<{
         });
       }
       
-      // 获取该加密货币的历史数据 - 分批获取所有数据点
-      const volumeQuery = `
-        SELECT volume_to_market_cap_ratio, batch_id, id
-        FROM volume_to_market_cap_ratios
-        WHERE cryptocurrency_id = $1
-          AND volume_to_market_cap_ratio IS NOT NULL
-        ORDER BY batch_id DESC, id DESC
-      `;
+      // 使用改进的数据检索系统获取完整历史数据
+      const enhancedDataset = await buildEnhancedDataset(crypto.id);
+      let allDataPoints = enhancedDataset;
       
-      const volumeResult = await pool.query(volumeQuery, [crypto.id]);
-      const ratioDataPoints = volumeResult.rows.map(row => parseFloat(row.volume_to_market_cap_ratio));
-      
-      // 如果没有交易量数据，尝试获取价格历史数据
-      let allDataPoints = ratioDataPoints;
+      // 如果增强数据集仍然不足，尝试获取完整历史数据
       if (allDataPoints.length < 31) {
-        // 尝试获取历史价格数据（使用当前价格和价格变化）
-        const priceQuery = `
-          SELECT price, price_change_24h
-          FROM cryptocurrencies
-          WHERE id = $1
-            AND price IS NOT NULL
-            AND price_change_24h IS NOT NULL
-          LIMIT 1
-        `;
-        
-        const priceResult = await pool.query(priceQuery, [crypto.id]);
-        if (priceResult.rows.length > 0) {
-          // 由于我们只有当前价格和24小时变化，无法获取31个历史数据点
-          // 这里我们需要依赖volume_to_market_cap_ratios表的历史数据
-          console.log(`📊 ${crypto.symbol}: 无法从价格数据获取足够的历史数据点`);
+        const completeData = await getCompleteHistoricalData(crypto.id);
+        if (completeData) {
+          allDataPoints = completeData.dataPoints;
+          console.log(`📊 ${crypto.symbol}: 获取到 ${allDataPoints.length} 个历史数据点 (时间范围: ${completeData.dataRange.earliest.toISOString().split('T')[0]} - ${completeData.dataRange.latest.toISOString().split('T')[0]})`);
+        } else {
+          console.log(`📊 ${crypto.symbol}: 无法获取完整的历史数据`);
         }
+      } else {
+        console.log(`📊 ${crypto.symbol}: 通过增强数据集获取到 ${allDataPoints.length} 个数据点`);
       }
       
       // 检查是否有足够的数据进行30天分析
