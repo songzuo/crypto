@@ -751,6 +751,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
+  // 触发真正的完整波动性分析
+  app.post('/api/volatility-analysis/trigger', async (req, res) => {
+    try {
+      const { runRealCompleteVolatilityAnalysis } = await import('./services/realCompleteVolatilityAnalysis');
+      
+      console.log('🚀 开始触发真实的完整波动性分析...');
+      
+      // 异步运行分析，不等待完成
+      runRealCompleteVolatilityAnalysis().then(result => {
+        console.log('✅ 真实波动性分析完成:', result);
+      }).catch(error => {
+        console.error('❌ 真实波动性分析失败:', error);
+      });
+      
+      res.json({
+        success: true,
+        message: '已开始完整的波动性分析，包含全部1000+加密货币',
+        note: '分析正在后台进行中，请使用 /api/volatility-analysis/progress 查看进度'
+      });
+    } catch (error) {
+      console.error('触发波动性分析失败:', error);
+      res.status(500).json({ 
+        success: false,
+        error: error instanceof Error ? error.message : '触发失败' 
+      });
+    }
+  });
+
+  // 获取分析进度
+  app.get('/api/volatility-analysis/progress', async (req, res) => {
+    try {
+      const { getRealAnalysisProgress } = await import('./services/realCompleteVolatilityAnalysis');
+      const progress = getRealAnalysisProgress();
+      
+      if (!progress) {
+        res.json({
+          isRunning: false,
+          message: '当前没有正在运行的波动性分析'
+        });
+        return;
+      }
+      
+      res.json({
+        isRunning: !progress.isComplete,
+        ...progress
+      });
+    } catch (error) {
+      console.error('获取波动性分析进度失败:', error);
+      res.status(500).json({ 
+        success: false,
+        error: error instanceof Error ? error.message : '获取进度失败' 
+      });
+    }
+  });
+
   app.post('/api/volatility-analysis/run', async (req, res) => {
     try {
       const { period = '7d' } = req.body;
