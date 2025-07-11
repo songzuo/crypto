@@ -8,6 +8,20 @@ CryptoScan is a comprehensive cryptocurrency data analysis platform that provide
 
 Preferred communication style: Simple, everyday language.
 
+## Data Quality Requirements (Updated 2025-07-11)
+- **7-day volatility analysis**: Requires minimum 8 data points
+- **30-day volatility analysis**: Requires minimum 31 data points
+- **Processing scope**: All 1000+ cryptocurrencies must be processed
+- **Data integrity**: Complete calculations only - no partial results saved to database
+- **Current data status**: 780 cryptocurrencies available, but only 25 meet 7-day requirements (8+ points), 0 meet 30-day requirements (31+ points)
+
+## Recent Changes (2025-07-11)
+- Implemented complete volatility analysis with strict data validation
+- Added proper data point requirements: 8 for 7-day, 31 for 30-day analysis
+- Enhanced system to process all available cryptocurrencies before database storage
+- Fixed database schema issues (timestamp vs created_at columns)
+- System now correctly rejects insufficient data instead of saving partial calculations
+
 ## System Architecture
 
 ### Frontend Architecture

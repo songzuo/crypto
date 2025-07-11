@@ -662,32 +662,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 手动触发用户指定算法波动性分析
+  // 手动触发完整波动性分析
   app.post('/api/volatility-analysis/trigger', async (req, res) => {
     try {
-      console.log('🎯 手动触发全面波动性分析（处理所有批次数据）...');
+      console.log('🎯 手动触发完整波动性分析（数据完整性验证）...');
       
-      const { runFullVolatilityAnalysis } = await import('./services/comprehensiveVolatilityAnalysis');
-      const result = await runFullVolatilityAnalysis();
+      const { runCompleteVolatilityAnalysis } = await import('./services/completeVolatilityAnalysis');
+      const result = await runCompleteVolatilityAnalysis();
       
       res.json({
         success: true,
-        message: '全面波动性分析成功完成',
+        message: '完整波动性分析成功完成',
         batchId7d: result.batchId7d,
         batchId30d: result.batchId30d,
         totalAnalyzed: result.totalAnalyzed,
+        totalSkipped: result.totalSkipped,
+        dataQuality: result.dataQuality,
         algorithm: {
-          name: '全面分离算法',
-          '7day': '使用最近8个数据点的平均值（独立批次）',
-          '30day': '使用全部可用数据点的平均值（独立批次）',
-          specification: '处理所有780个加密货币，分别计算和保存7天和30天波动性',
-          dataSource: '来自所有165个交易量批次的综合数据',
+          name: '完整数据验证算法',
+          '7day': '使用最近8个数据点的平均值（最少8个数据点）',
+          '30day': '使用全部可用数据点的平均值（最少31个数据点）',
+          specification: '只处理数据点充足的加密货币，确保分析质量',
+          dataSource: '严格验证数据完整性后的有效数据',
+          dataIntegrity: '7天分析需要至少8个数据点，30天分析需要至少31个数据点',
           separateBatches: true
         }
       });
       
     } catch (error) {
-      console.error('❌ 用户算法波动性分析失败:', error);
+      console.error('❌ 完整波动性分析失败:', error);
       res.status(500).json({
         success: false,
         error: (error as Error).message

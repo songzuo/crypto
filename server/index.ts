@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { setupHourlyVolatilityAnalysis } from "./services/comprehensiveVolatilityAnalysis";
+import { setupDailyCompleteAnalysis } from "./services/completeVolatilityAnalysis";
 
 const app = express();
 app.use(express.json());
@@ -75,5 +76,10 @@ app.use((req, res, next) => {
     
     // 启动波动性分析定时任务
     setupHourlyVolatilityAnalysis();
+    console.log('📅 全面波动性分析将每小时自动执行，分别处理7天和30天数据');
+    
+    // 设置完整数据验证分析
+    setupDailyCompleteAnalysis();
+    console.log('📅 完整数据验证分析将每日自动执行，确保数据完整性');
   });
 })();
