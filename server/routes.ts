@@ -779,14 +779,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // 触发增强波动性分析
+  app.post('/api/volatility-analysis/trigger-enhanced', async (req, res) => {
+    try {
+      const { runEnhancedVolatilityAnalysis } = await import('./services/enhancedVolatilityAnalysis');
+      
+      console.log('🚀 开始触发增强波动性分析...');
+      
+      // 异步运行分析
+      runEnhancedVolatilityAnalysis().then(result => {
+        console.log('✅ 增强波动性分析完成:', result);
+      }).catch(error => {
+        console.error('❌ 增强波动性分析失败:', error);
+      });
+      
+      res.json({
+        success: true,
+        message: '已开始增强波动性分析，将处理所有加密货币并生成更多结果',
+        note: '分析正在后台进行中，请使用 /api/volatility-analysis/progress 查看进度'
+      });
+    } catch (error) {
+      console.error('触发增强波动性分析失败:', error);
+      res.status(500).json({ 
+        success: false,
+        error: error instanceof Error ? error.message : '触发失败' 
+      });
+    }
+  });
+
   // 获取分析进度
   app.get('/api/volatility-analysis/progress', async (req, res) => {
     try {
+      // 尝试获取增强分析进度
+      const { getEnhancedAnalysisProgress } = await import('./services/enhancedVolatilityAnalysis');
+      const enhancedProgress = getEnhancedAnalysisProgress();
+      
+      if (enhancedProgress) {
+        res.json({
+          success: true,
+          progress: enhancedProgress,
+          isRunning: !enhancedProgress.isComplete
+        });
+        return;
+      }
+      
+      // 如果没有增强分析，尝试获取常规分析进度
       const { getRealAnalysisProgress } = await import('./services/realCompleteVolatilityAnalysis');
       const progress = getRealAnalysisProgress();
       
       if (!progress) {
         res.json({
+          success: false,
           isRunning: false,
           message: '当前没有正在运行的波动性分析'
         });
@@ -794,8 +837,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       res.json({
-        isRunning: !progress.isComplete,
-        ...progress
+        success: true,
+        progress: progress,
+        isRunning: !progress.isComplete
       });
     } catch (error) {
       console.error('获取波动性分析进度失败:', error);

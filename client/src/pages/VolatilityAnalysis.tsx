@@ -127,6 +127,34 @@ const VolatilityAnalysis = () => {
     }
   };
 
+  // 触发增强波动性分析
+  const triggerEnhancedAnalysis = async () => {
+    try {
+      setIsRunningAnalysis(true);
+      
+      const response = await fetch('/api/volatility-analysis/trigger-enhanced', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('触发增强分析失败');
+      }
+      
+      const result = await response.json();
+      console.log('增强分析已启动:', result);
+      
+      // 开始监控进度
+      refetchProgress();
+      
+    } catch (error) {
+      console.error('触发增强分析失败:', error);
+      setIsRunningAnalysis(false);
+    }
+  };
+
   // 监听分析进度
   useEffect(() => {
     const progress = progressData?.progress;
@@ -180,13 +208,22 @@ const VolatilityAnalysis = () => {
             基于交易量市值比率数据的加密货币波动性排名分析
           </p>
         </div>
-        <Button 
-          onClick={runAnalysis} 
-          disabled={isRunningAnalysis}
-          className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
-        >
-          {isRunningAnalysis ? '分析中...' : '运行波动性分析'}
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            onClick={runAnalysis} 
+            disabled={isRunningAnalysis}
+            className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+          >
+            {isRunningAnalysis ? '分析中...' : '运行波动性分析'}
+          </Button>
+          <Button 
+            onClick={triggerEnhancedAnalysis} 
+            disabled={isRunningAnalysis}
+            className="bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700"
+          >
+            {isRunningAnalysis ? '分析中...' : '增强分析(全部币种)'}
+          </Button>
+        </div>
       </div>
 
       {/* 进度条 */}
