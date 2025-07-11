@@ -111,14 +111,15 @@ function calculateEnhancedVolatility(
       dataSource = 'simulated_data';
     }
     
-    const first31 = useData.slice(0, 31);
+    // 使用全部数据点，不限制为31个
+    const allData = useData;
     const comparisons: number[] = [];
     
-    // 进行31次比较：对31个数据点的每一个都进行比较
-    for (let i = 0; i < first31.length; i++) {
+    // 进行31次比较：对每个数据点进行比较
+    for (let i = 0; i < Math.min(allData.length, 31); i++) {
       // 每个数据点都参与比较计算
-      const baseValue = first31[i];
-      const avgOfOthers = first31.filter((_, idx) => idx !== i).reduce((sum, val) => sum + val, 0) / (first31.length - 1);
+      const baseValue = allData[i];
+      const avgOfOthers = allData.filter((_, idx) => idx !== i).reduce((sum, val) => sum + val, 0) / (allData.length - 1);
       const change = Math.abs((baseValue - avgOfOthers) / avgOfOthers);
       if (!isNaN(change) && isFinite(change)) {
         comparisons.push(change);
@@ -288,6 +289,14 @@ export async function runEnhancedVolatilityAnalysis(): Promise<{
     }
   }
   
+  // 标记分析完成
+  if (enhancedGlobalProgress) {
+    enhancedGlobalProgress.isComplete = true;
+    enhancedGlobalProgress.progressPercentage = 100;
+    enhancedGlobalProgress.completedCount = validResults.length;
+    enhancedGlobalProgress.message = `分析完成，正在保存 ${validResults.length} 个结果到数据库...`;
+  }
+  
   // 保存7天分析结果
   console.log(`💾 保存 ${validResults.length} 个7天波动性分析结果...`);
   
@@ -362,8 +371,15 @@ export async function runEnhancedVolatilityAnalysis(): Promise<{
     enhancedGlobalProgress.isComplete = true;
     enhancedGlobalProgress.progressPercentage = 100;
     enhancedGlobalProgress.remainingPercentage = 0;
-    enhancedGlobalProgress.message = `增强分析完成！处理了 ${processedCount} 个加密货币，获得 ${validResults.length} 个有效结果`;
+    enhancedGlobalProgress.message = `✅ 增强分析完成！处理了 ${processedCount} 个加密货币，获得 ${validResults.length} 个有效结果`;
   }
+  
+  // 延迟清空进度，让前端有时间显示完成状态
+  setTimeout(() => {
+    if (enhancedGlobalProgress) {
+      enhancedGlobalProgress = null;
+    }
+  }, 5000);
   
   console.log(`✅ 增强波动性分析完成！`);
   console.log(`📊 总处理: ${processedCount}, 有效结果: ${validResults.length}, 跳过: ${skippedCount}`);

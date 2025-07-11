@@ -161,9 +161,9 @@ const VolatilityAnalysis = () => {
     const progress = progressData?.progress;
     console.log('Progress data received:', progress);
     
-    if (progress && !progress.isComplete && progress.progressPercentage < 100) {
+    if (progress && progress.progressPercentage > 0 && progress.progressPercentage < 100) {
       setIsRunningAnalysis(true);
-    } else if (progress && (progress.isComplete || progress.progressPercentage >= 100)) {
+    } else if (progress && progress.progressPercentage >= 100) {
       setIsRunningAnalysis(false);
       // 刷新数据
       refetch();
@@ -172,7 +172,7 @@ const VolatilityAnalysis = () => {
   }, [progressData, refetch, queryClient]);
 
   const progress = progressData?.progress;
-  const showProgress = progress && (!progress.isComplete || progress.progressPercentage < 100) && progress.progressPercentage > 0;
+  const showProgress = progress && progress.progressPercentage > 0 && progress.progressPercentage < 100;
 
   const getVolatilityIcon = (direction: string) => {
     switch (direction) {
@@ -248,9 +248,14 @@ const VolatilityAnalysis = () => {
             <div className="text-sm text-muted-foreground">
               已处理 {progress.processedCount} / {progress.totalCryptocurrencies} 个加密货币
               {progress.progressPercentage < 100 && (
-                <span className="ml-2 text-blue-600">
-                  还有 {100 - progress.progressPercentage}% 数据正在计算...
+                <span className="ml-2 text-blue-600 font-medium">
+                  还有 {100 - progress.progressPercentage}% 的数据正在计算...
                 </span>
+              )}
+              {progress.message && (
+                <div className="mt-1 text-xs text-gray-500">
+                  {progress.message}
+                </div>
               )}
             </div>
           </CardContent>
@@ -338,8 +343,8 @@ const VolatilityAnalysis = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="7d">7天分析</SelectItem>
-                    <SelectItem value="30d">30天分析</SelectItem>
+                    <SelectItem value="7d">7天分析 (8个数据点)</SelectItem>
+                    <SelectItem value="30d">30天分析 (31个数据点)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -380,9 +385,10 @@ const VolatilityAnalysis = () => {
       {/* 分析结果表格 */}
       <Card>
         <CardHeader>
-          <CardTitle>波动性排名</CardTitle>
+          <CardTitle>波动性排名 - {selectedPeriod === '7d' ? '7天分析' : '30天分析'}</CardTitle>
           <CardDescription>
             {resultsData?.total ? `共 ${resultsData.total} 个结果` : '加载中...'}
+            {selectedPeriod === '7d' ? ' (基于8个数据点，7次比较)' : ' (基于31个数据点，31次比较)'}
           </CardDescription>
         </CardHeader>
         <CardContent>

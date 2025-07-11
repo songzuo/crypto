@@ -816,7 +816,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log('Enhanced progress check:', enhancedProgress);
       
-      if (enhancedProgress && !enhancedProgress.isComplete) {
+      if (enhancedProgress) {
         res.json({
           success: true,
           progress: {
