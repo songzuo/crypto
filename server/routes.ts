@@ -891,6 +891,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // 30天独立分析触发器
+  app.post('/api/volatility-analysis/trigger-30day', async (req, res) => {
+    try {
+      const { runSeparate30DayAnalysis } = await import('./services/separate30DayAnalysis');
+      const result = await runSeparate30DayAnalysis();
+      res.json({
+        success: true,
+        message: '30天独立分析已触发',
+        data: result
+      });
+    } catch (error) {
+      console.error('触发30天独立分析失败:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+  // 30天独立分析进度
+  app.get('/api/volatility-analysis/30day-progress', async (req, res) => {
+    try {
+      const { getSeparate30DayAnalysisProgress } = await import('./services/separate30DayAnalysis');
+      const progress = getSeparate30DayAnalysisProgress();
+      res.json({
+        success: true,
+        progress: progress || {
+          batchId: null,
+          totalCryptocurrencies: 0,
+          processedCount: 0,
+          completedCount: 0,
+          isComplete: true,
+          progressPercentage: 100,
+          remainingPercentage: 0,
+          startTime: null,
+          message: '30天分析未运行'
+        }
+      });
+    } catch (error) {
+      console.error('获取30天分析进度失败:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
   // 测试简单RSI信号判断
   app.get('/api/test-rsi-signals', async (req, res) => {
     try {

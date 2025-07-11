@@ -49,6 +49,11 @@ export const navItems = [
     label: "Volatility Analysis",
     path: "/volatility-analysis",
     icon: "ri-pulse-line"
+  },
+  {
+    label: "30天独立分析",
+    path: "/30day-analysis",
+    icon: "ri-calendar-line"
   }
 ];
 

@@ -17,6 +17,7 @@ import VolumeRatio from "./pages/VolumeRatio";
 // Import the new technical analysis page component
 import TechnicalAnalysisNew from "./pages/TechnicalAnalysisNew";
 import VolatilityAnalysis from "./pages/VolatilityAnalysis";
+import ThirtyDayAnalysis from "./pages/ThirtyDayAnalysis";
 
 function Router() {
   return (
@@ -33,6 +34,7 @@ function Router() {
         <Route path="/volume-ratio" component={VolumeRatio} />
         <Route path="/technical-analysis" component={TechnicalAnalysisNew} />
         <Route path="/volatility-analysis" component={VolatilityAnalysis} />
+        <Route path="/30day-analysis" component={ThirtyDayAnalysis} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

@@ -24,6 +24,9 @@ Preferred communication style: Simple, everyday language.
 - **VALIDATION**: System now correctly validates data sufficiency before processing (no more 1-2 data point errors)
 - **SCALE**: Successfully processing all available cryptocurrencies instead of limited 186 subset
 - **FRONTEND**: Added real-time progress monitoring with 2-second refresh interval
+- **30-DAY INDEPENDENT SYSTEM**: Created completely separate 30-day analysis system with dedicated backend and frontend
+- **NEW FRONTEND PAGE**: Added "/30day-analysis" route with independent interface for 30-day volatility analysis
+- **DEDICATED APIS**: Implemented separate API endpoints for 30-day analysis trigger and progress tracking
 
 ## System Architecture
 
