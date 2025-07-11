@@ -58,6 +58,54 @@ const AllVolatilityResults: React.FC = () => {
     refetchInterval: 10000, // 每10秒刷新一次
   });
 
+  const handleCorrectVolatilityTrigger = async () => {
+    try {
+      const response = await fetch('/api/volatility-analysis/correct-trigger', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        alert('7天波动性重新计算已启动！将使用正确的标准差算法分析所有加密货币。');
+        // 延迟几秒后刷新数据
+        setTimeout(() => {
+          refetch();
+        }, 5000);
+      } else {
+        throw new Error('启动失败');
+      }
+    } catch (error) {
+      alert('启动7天波动性计算失败：' + error.message);
+    }
+  };
+
+  const handleCorrect30DayTrigger = async () => {
+    try {
+      const response = await fetch('/api/volatility-analysis/correct-30day-trigger', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        alert('30天波动性重新计算已启动！将使用正确的标准差算法分析所有加密货币。');
+        // 延迟几秒后刷新数据
+        setTimeout(() => {
+          refetch();
+        }, 5000);
+      } else {
+        throw new Error('启动失败');
+      }
+    } catch (error) {
+      alert('启动30天波动性计算失败：' + error.message);
+    }
+  };
+
   const data = volatilityData?.data;
 
   const getVolatilityColor = (volatility: number) => {
@@ -140,10 +188,20 @@ const AllVolatilityResults: React.FC = () => {
             基于修正后的算法，使用symbol标识符分析所有加密货币的波动性
           </p>
         </div>
-        <Button onClick={() => refetch()}>
-          <Activity className="h-4 w-4 mr-2" />
-          刷新数据
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => refetch()}>
+            <Activity className="h-4 w-4 mr-2" />
+            刷新数据
+          </Button>
+          <Button onClick={handleCorrectVolatilityTrigger} variant="outline">
+            <BarChart3 className="h-4 w-4 mr-2" />
+            重新计算7天波动性
+          </Button>
+          <Button onClick={handleCorrect30DayTrigger} variant="outline">
+            <BarChart3 className="h-4 w-4 mr-2" />
+            重新计算30天波动性
+          </Button>
+        </div>
       </div>
 
       {/* 算法信息 */}

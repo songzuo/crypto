@@ -473,6 +473,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: (error as Error).message });
     }
   });
+
+  // 正确的波动性计算API
+  app.post('/api/volatility-analysis/correct-trigger', async (req, res) => {
+    try {
+      console.log('收到正确波动性分析触发请求');
+      
+      // 异步启动正确的波动性计算
+      setImmediate(async () => {
+        try {
+          const { calculateCorrectVolatility } = await import('./correctVolatilityCalculator');
+          const result = await calculateCorrectVolatility();
+          console.log(`正确波动性计算完成: 批次 ${result.batchId}, 分析了 ${result.totalAnalyzed} 个加密货币`);
+        } catch (error) {
+          console.error('正确波动性计算失败:', error);
+        }
+      });
+      
+      res.json({
+        success: true,
+        message: '正确波动性计算已启动，将分析所有加密货币，使用真实价格数据计算标准差波动性'
+      });
+      
+    } catch (error) {
+      console.error('启动正确波动性计算时出错:', error);
+      res.status(500).json({
+        success: false,
+        error: '启动正确波动性计算失败',
+        details: error.message
+      });
+    }
+  });
+
+  // 正确的30天波动性计算API
+  app.post('/api/volatility-analysis/correct-30day-trigger', async (req, res) => {
+    try {
+      console.log('收到正确30天波动性分析触发请求');
+      
+      // 异步启动30天波动性分析
+      setImmediate(async () => {
+        try {
+          const { calculate30DayVolatility } = await import('./correctVolatilityCalculator');
+          const result = await calculate30DayVolatility();
+          console.log(`30天波动性计算完成: 批次 ${result.batchId}, 分析了 ${result.totalAnalyzed} 个加密货币`);
+        } catch (error) {
+          console.error('30天波动性计算失败:', error);
+        }
+      });
+      
+      res.json({
+        success: true,
+        message: '30天波动性分析已启动，将分析所有加密货币，使用31个数据点计算标准差波动性'
+      });
+      
+    } catch (error) {
+      console.error('启动30天波动性分析时出错:', error);
+      res.status(500).json({
+        success: false,
+        error: '启动30天波动性分析失败',
+        details: error.message
+      });
+    }
+  });
   
   // 使用特定的交易量市值比率批次（如批次#83）进行技术分析
   app.post("/api/technical-analysis/analyze-with-batch/:batchId", async (req, res) => {
