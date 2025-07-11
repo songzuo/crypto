@@ -115,8 +115,8 @@ function calculateEnhancedVolatility(
     const allData = useData;
     const comparisons: number[] = [];
     
-    // 进行31次比较：对每个数据点进行比较
-    for (let i = 0; i < Math.min(allData.length, 31); i++) {
+    // 进行31次比较：对所有数据点进行比较（不限制为31个）
+    for (let i = 0; i < allData.length; i++) {
       // 每个数据点都参与比较计算
       const baseValue = allData[i];
       const avgOfOthers = allData.filter((_, idx) => idx !== i).reduce((sum, val) => sum + val, 0) / (allData.length - 1);
@@ -147,7 +147,7 @@ function categorizeVolatility(volatility: number): 'Low' | 'Medium' | 'High' {
 /**
  * 执行增强波动性分析
  */
-export async function runEnhancedVolatilityAnalysis(): Promise<{ 
+export async function runEnhancedVolatilityAnalysis(resumeFromBatch?: { batchId7d: number; batchId30d: number; processedCount: number }): Promise<{ 
   batchId7d: number; 
   batchId30d: number; 
   totalAnalyzed: number;
@@ -156,8 +156,19 @@ export async function runEnhancedVolatilityAnalysis(): Promise<{
 }> {
   console.log('🚀 开始增强波动性分析（确保获得更多结果）...');
   
-  // 创建分析批次
-  const batchQuery7d = `
+  let batchId7d: number;
+  let batchId30d: number;
+  let startFromIndex = 0;
+  
+  if (resumeFromBatch) {
+    // 从上次中断的地方继续
+    batchId7d = resumeFromBatch.batchId7d;
+    batchId30d = resumeFromBatch.batchId30d;
+    startFromIndex = resumeFromBatch.processedCount;
+    console.log(`📊 继续从第 ${startFromIndex} 个加密货币开始分析（批次#${batchId7d}/#${batchId30d}）...`);
+  } else {
+    // 创建新的分析批次
+    const batchQuery7d = `
     INSERT INTO volatility_analysis_batches (timeframe, analysis_type, total_analyzed, created_at)
     VALUES ($1, $2, $3, NOW())
     RETURNING id
@@ -172,10 +183,11 @@ export async function runEnhancedVolatilityAnalysis(): Promise<{
   const batch7dResult = await pool.query(batchQuery7d, ['7d_enhanced', 'enhanced_7d_analysis', 0]);
   const batch30dResult = await pool.query(batchQuery30d, ['30d_enhanced', 'enhanced_30d_analysis', 0]);
   
-  const batchId7d = batch7dResult.rows[0].id;
-  const batchId30d = batch30dResult.rows[0].id;
-  
-  console.log(`📊 创建增强分析批次: 7天批次#${batchId7d}, 30天批次#${batchId30d}`);
+    batchId7d = batch7dResult.rows[0].id;
+    batchId30d = batch30dResult.rows[0].id;
+    
+    console.log(`📊 创建增强分析批次: 7天批次#${batchId7d}, 30天批次#${batchId30d}`);
+  }
   
   // 获取全部加密货币数据
   const cryptoQuery = `
@@ -193,25 +205,27 @@ export async function runEnhancedVolatilityAnalysis(): Promise<{
   
   console.log(`📈 找到 ${totalCryptos} 个加密货币进行增强分析`);
   
-  // 初始化进度跟踪
-  enhancedGlobalProgress = {
-    batchId: `enhanced_7d-${batchId7d}_30d-${batchId30d}`,
-    totalCryptocurrencies: totalCryptos,
-    processedCount: 0,
-    completedCount: 0,
-    isComplete: false,
-    progressPercentage: 0,
-    remainingPercentage: 100,
+  // 初始化或更新进度跟踪
+  if (!enhancedGlobalProgress || !resumeFromBatch) {
+    enhancedGlobalProgress = {
+      batchId: `enhanced_7d-${batchId7d}_30d-${batchId30d}`,
+      totalCryptocurrencies: totalCryptos,
+      processedCount: startFromIndex,
+      completedCount: 0,
+      isComplete: false,
+      progressPercentage: Math.round((startFromIndex / totalCryptos) * 100),
+      remainingPercentage: 100 - Math.round((startFromIndex / totalCryptos) * 100),
     startTime: new Date(),
     message: `开始增强分析 ${totalCryptos} 个加密货币...`
   };
   
   const validResults: EnhancedVolatilityResult[] = [];
-  let processedCount = 0;
+  let processedCount = startFromIndex;
   let skippedCount = 0;
   
-  // 处理每个加密货币
-  for (const crypto of cryptoResult.rows) {
+  // 处理每个加密货币（从startFromIndex开始）
+  for (let i = startFromIndex; i < cryptoResult.rows.length; i++) {
+    const crypto = cryptoResult.rows[i];
     try {
       // 更新进度
       processedCount++;
@@ -223,7 +237,7 @@ export async function runEnhancedVolatilityAnalysis(): Promise<{
         enhancedGlobalProgress.progressPercentage = progressPercentage;
         enhancedGlobalProgress.remainingPercentage = remainingPercentage;
         enhancedGlobalProgress.currentCrypto = crypto.symbol;
-        enhancedGlobalProgress.message = `还有${remainingPercentage}%的数据正在计算 (${processedCount}/${totalCryptos})`;
+        enhancedGlobalProgress.message = `还有${remainingPercentage}%的数据正在计算 (${processedCount}/${totalCryptos}) - 处理中: ${crypto.symbol}`;
       }
       
       // 获取该加密货币的历史数据

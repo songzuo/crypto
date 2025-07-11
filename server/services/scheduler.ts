@@ -398,47 +398,71 @@ export async function setupScheduler() {
     }
   });
 
-  // 波动性分析任务 - 每天凌晨3点运行一次
-  // 计算7天和30天的价格波动性分析
-  cron.schedule('0 3 * * *', async () => {
-    console.log('运行计划任务: 每日波动性分析');
+  // 智能增强波动性分析任务 - 每小时检查并继续未完成的分析
+  // 这个任务会检查现有的分析进度，如果有未完成的则继续，否则开始新的分析
+  console.log('⏰ 设置增强波动性分析定时任务 - 每小时执行一次');
+  cron.schedule('0 * * * *', async () => {
+    console.log('🎯 运行计划任务: 增强波动性分析（智能续传）');
     
     try {
-      // 导入波动性分析服务
-      const { calculateAndStoreVolatilityAnalysis } = await import('./volatilityAnalysisService');
-      const { clearExpiredCache } = await import('./cachedVolatilityAnalysis');
+      // 导入增强波动性分析服务
+      const { runEnhancedVolatilityAnalysis, getEnhancedAnalysisProgress } = await import('./enhancedVolatilityAnalysis');
       
-      // 清除过期缓存
-      clearExpiredCache();
+      // 检查当前是否有正在进行的分析
+      const currentProgress = getEnhancedAnalysisProgress();
       
-      // 执行7天波动性分析
-      console.log('开始执行7天波动性分析...');
-      const batch7d = await calculateAndStoreVolatilityAnalysis('7d');
-      if (batch7d) {
-        console.log(`7天波动性分析完成，已创建批次#${batch7d}`);
+      if (currentProgress && !currentProgress.isComplete) {
+        console.log(`🔄 检测到未完成的增强分析 - 进度: ${currentProgress.progressPercentage}% (${currentProgress.processedCount}/${currentProgress.totalCryptocurrencies})`);
+        console.log(`📊 继续处理批次: ${currentProgress.batchId}`);
+        
+        // 如果分析没有完成，让其继续在后台运行
+        // 不需要重新启动，因为增强分析会自动继续
+        console.log('✅ 检测到正在进行的增强分析，让其继续运行...');
+        
       } else {
-        console.error('7天波动性分析失败');
+        console.log('🚀 启动新的增强波动性分析...');
+        
+        // 如果没有正在进行的分析，启动新的分析
+        runEnhancedVolatilityAnalysis().then(result => {
+          console.log('✅ 增强波动性分析完成:', result);
+        }).catch(error => {
+          console.error('❌ 增强波动性分析失败:', error);
+        });
       }
       
-      // 等待2分钟后执行30天分析，避免资源竞争
-      setTimeout(async () => {
-        try {
-          console.log('开始执行30天波动性分析...');
-          const batch30d = await calculateAndStoreVolatilityAnalysis('30d');
-          if (batch30d) {
-            console.log(`30天波动性分析完成，已创建批次#${batch30d}`);
-          } else {
-            console.error('30天波动性分析失败');
-          }
-        } catch (error) {
-          console.error('30天波动性分析任务出错:', error);
-        }
-      }, 2 * 60 * 1000); // 2分钟延迟
-      
     } catch (error) {
-      console.error('每日波动性分析任务出错:', error);
+      console.error('❌ 增强波动性分析任务出错:', error);
     }
   });
+  
+  console.log('📅 增强波动性分析将每小时自动执行，分别处理7天和30天数据');
+  
+  // 传统波动性分析任务 - 每天凌晨2点运行一次（作为备份）
+  // 计算7天和30天的价格波动性分析
+  console.log('⏰ 设置每日完整波动性分析定时任务 - 每天凌晨2点执行');
+  cron.schedule('0 2 * * *', async () => {
+    console.log('🎯 手动触发完整波动性分析（数据完整性验证）...');
+    
+    try {
+      // 导入完整波动性分析服务
+      const { runRealCompleteVolatilityAnalysis } = await import('./realCompleteVolatilityAnalysis');
+      
+      console.log('🎯 开始完整波动性分析（确保数据完整性）...');
+      const result = await runRealCompleteVolatilityAnalysis();
+      
+      if (result) {
+        console.log(`✅ 完整波动性分析完成: 7天批次#${result.batchId7d}, 30天批次#${result.batchId30d}`);
+        console.log(`📊 总共分析了 ${result.totalAnalyzed} 个加密货币`);
+      } else {
+        console.error('❌ 完整波动性分析失败');
+      }
+      
+    } catch (error) {
+      console.error('❌ 完整波动性分析任务出错:', error);
+    }
+  });
+  
+  console.log('📅 完整数据验证分析将每日自动执行，确保数据完整性');
   
   // 重点币种市场数据更新任务
   // 每小时专门查询和更新排名前30的币种
