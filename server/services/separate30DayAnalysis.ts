@@ -1,9 +1,19 @@
 /**
  * 独立的30天波动性分析系统
  * 完全独立于7天分析，使用完整的30天数据进行计算
+ * 支持断点续传和分批处理
  */
 
 import { pool } from '../db';
+
+// 断点续传状态管理
+interface ResumeState {
+  batchId: number;
+  lastProcessedId: number;
+  processedCount: number;
+  totalCount: number;
+  lastUpdated: Date;
+}
 
 interface Separate30DayResult {
   symbol: string;
@@ -100,61 +110,147 @@ function categorize30DayVolatility(volatility: number): 'Low' | 'Medium' | 'High
 }
 
 /**
- * 运行独立的30天波动性分析
+ * 保存断点续传状态
+ */
+async function saveResumeState(state: ResumeState): Promise<void> {
+  try {
+    await pool.query(`
+      INSERT INTO analysis_resume_states (analysis_type, batch_id, last_processed_id, processed_count, total_count, last_updated)
+      VALUES ('separate_30day', $1, $2, $3, $4, $5)
+      ON CONFLICT (analysis_type) DO UPDATE SET
+        batch_id = EXCLUDED.batch_id,
+        last_processed_id = EXCLUDED.last_processed_id,
+        processed_count = EXCLUDED.processed_count,
+        total_count = EXCLUDED.total_count,
+        last_updated = EXCLUDED.last_updated
+    `, [state.batchId, state.lastProcessedId, state.processedCount, state.totalCount, state.lastUpdated]);
+  } catch (error) {
+    console.error('保存断点续传状态失败:', error);
+  }
+}
+
+/**
+ * 获取断点续传状态
+ */
+async function getResumeState(): Promise<ResumeState | null> {
+  try {
+    const result = await pool.query(`
+      SELECT batch_id, last_processed_id, processed_count, total_count, last_updated
+      FROM analysis_resume_states
+      WHERE analysis_type = 'separate_30day'
+      ORDER BY last_updated DESC
+      LIMIT 1
+    `);
+    
+    if (result.rows.length === 0) return null;
+    
+    const row = result.rows[0];
+    return {
+      batchId: row.batch_id,
+      lastProcessedId: row.last_processed_id,
+      processedCount: row.processed_count,
+      totalCount: row.total_count,
+      lastUpdated: row.last_updated
+    };
+  } catch (error) {
+    console.error('获取断点续传状态失败:', error);
+    return null;
+  }
+}
+
+/**
+ * 运行独立的30天波动性分析（支持断点续传）
  */
 export async function runSeparate30DayAnalysis(): Promise<{ 
   batchId: number; 
   totalAnalyzed: number; 
   progressMessage: string 
 }> {
-  console.log('🚀 开始独立30天波动性分析...');
+  console.log('🚀 开始独立30天波动性分析（支持断点续传）...');
   
-  // 创建新的30天分析批次
-  const batchResult = await pool.query(`
-    INSERT INTO volatility_analysis_batches (timeframe, analysis_type, total_analyzed, created_at)
-    VALUES ('30d', 'separate_30day', 0, NOW())
-    RETURNING id
-  `);
+  // 检查是否有断点续传状态
+  const resumeState = await getResumeState();
+  let batchId: number;
+  let startFromId = 0;
+  let initialProcessedCount = 0;
   
-  const batchId = batchResult.rows[0].id;
-  console.log(`📊 创建30天分析批次: ${batchId}`);
+  if (resumeState && resumeState.lastUpdated > new Date(Date.now() - 24 * 60 * 60 * 1000)) {
+    // 使用断点续传状态（24小时内的状态）
+    batchId = resumeState.batchId;
+    startFromId = resumeState.lastProcessedId;
+    initialProcessedCount = resumeState.processedCount;
+    console.log(`🔄 恢复上次分析：批次 ${batchId}，从ID ${startFromId} 开始，已处理 ${initialProcessedCount} 个`);
+  } else {
+    // 创建新的30天分析批次
+    const batchResult = await pool.query(`
+      INSERT INTO volatility_analysis_batches (timeframe, analysis_type, total_analyzed, created_at)
+      VALUES ('30d', 'separate_30day', 0, NOW())
+      RETURNING id
+    `);
+    
+    batchId = batchResult.rows[0].id;
+    console.log(`📊 创建新的30天分析批次: ${batchId}`);
+  }
   
-  // 获取所有加密货币
+  // 获取所有有交易量数据的加密货币，分批处理，支持断点续传
   const cryptoQuery = `
-    SELECT DISTINCT c.id, c.name, c.symbol, c.price_change_24h, c.market_cap
+    SELECT DISTINCT c.id, c.name, c.symbol, c.price_change_24h, c.market_cap, 
+           COUNT(v.volume_to_market_cap_ratio) as data_points
     FROM cryptocurrencies c
+    JOIN volume_to_market_cap_ratios v ON c.id = v.cryptocurrency_id
     WHERE c.name IS NOT NULL 
       AND c.symbol IS NOT NULL
-      AND c.id IS NOT NULL
+      AND c.id > $1
+      AND v.volume_to_market_cap_ratio IS NOT NULL
+    GROUP BY c.id, c.name, c.symbol, c.price_change_24h, c.market_cap
+    HAVING COUNT(v.volume_to_market_cap_ratio) >= 8
     ORDER BY c.market_cap DESC NULLS LAST
+    LIMIT 100
   `;
   
-  const cryptoResult = await pool.query(cryptoQuery);
-  console.log(`🔍 找到 ${cryptoResult.rows.length} 个加密货币进行30天分析`);
+  const cryptoResult = await pool.query(cryptoQuery, [startFromId]);
+  console.log(`🔍 找到 ${cryptoResult.rows.length} 个加密货币进行30天分析 (从ID ${startFromId} 开始)`);
+  
+  // 获取总加密货币数量用于进度计算
+  const totalCountResult = await pool.query(`
+    SELECT COUNT(DISTINCT c.id) as total_count
+    FROM cryptocurrencies c
+    JOIN volume_to_market_cap_ratios v ON c.id = v.cryptocurrency_id
+    WHERE c.name IS NOT NULL 
+      AND c.symbol IS NOT NULL
+      AND c.id > 0
+      AND v.volume_to_market_cap_ratio IS NOT NULL
+    GROUP BY c.id
+    HAVING COUNT(v.volume_to_market_cap_ratio) >= 8
+  `);
+  
+  const totalCryptocurrencies = totalCountResult.rows.length + initialProcessedCount;
   
   // 初始化进度跟踪
   separate30DayGlobalProgress = {
     batchId,
-    totalCryptocurrencies: cryptoResult.rows.length,
-    processedCount: 0,
+    totalCryptocurrencies,
+    processedCount: initialProcessedCount,
     completedCount: 0,
     isComplete: false,
-    progressPercentage: 0,
-    remainingPercentage: 100,
+    progressPercentage: Math.round((initialProcessedCount / totalCryptocurrencies) * 100),
+    remainingPercentage: Math.round(((totalCryptocurrencies - initialProcessedCount) / totalCryptocurrencies) * 100),
     startTime: new Date(),
-    message: `开始30天独立分析 ${cryptoResult.rows.length} 个加密货币...`
+    message: `开始30天独立分析 ${totalCryptocurrencies} 个加密货币...`
   };
   
   const validResults: Separate30DayResult[] = [];
-  let processedCount = 0;
+  let processedCount = initialProcessedCount;
   let skippedCount = 0;
+  let lastProcessedId = startFromId;
   
   // 处理每个加密货币
   for (const crypto of cryptoResult.rows) {
     try {
       // 更新进度
       processedCount++;
-      const progressPercentage = Math.round((processedCount / cryptoResult.rows.length) * 100);
+      lastProcessedId = crypto.id;
+      const progressPercentage = Math.round((processedCount / totalCryptocurrencies) * 100);
       const remainingPercentage = 100 - progressPercentage;
       
       if (separate30DayGlobalProgress) {
@@ -162,18 +258,27 @@ export async function runSeparate30DayAnalysis(): Promise<{
         separate30DayGlobalProgress.progressPercentage = progressPercentage;
         separate30DayGlobalProgress.remainingPercentage = remainingPercentage;
         separate30DayGlobalProgress.currentCrypto = crypto.symbol;
-        separate30DayGlobalProgress.message = `30天分析还有${remainingPercentage}%的数据正在计算 (${processedCount}/${cryptoResult.rows.length})`;
+        separate30DayGlobalProgress.message = `30天分析还有${remainingPercentage}%的数据正在计算 (${processedCount}/${totalCryptocurrencies})`;
       }
       
-      // 获取该加密货币的历史数据 - 获取更多数据点用于30天分析
+      // 每处理10个保存一次断点续传状态
+      if (processedCount % 10 === 0) {
+        await saveResumeState({
+          batchId,
+          lastProcessedId,
+          processedCount,
+          totalCount: totalCryptocurrencies,
+          lastUpdated: new Date()
+        });
+      }
+      
+      // 获取该加密货币的历史数据 - 分批获取所有数据点
       const volumeQuery = `
-        SELECT volume_to_market_cap_ratio, timestamp
+        SELECT volume_to_market_cap_ratio, batch_id, id
         FROM volume_to_market_cap_ratios
         WHERE cryptocurrency_id = $1
           AND volume_to_market_cap_ratio IS NOT NULL
-          AND timestamp IS NOT NULL
-        ORDER BY timestamp DESC
-        LIMIT 100
+        ORDER BY batch_id DESC, id DESC
       `;
       
       const volumeResult = await pool.query(volumeQuery, [crypto.id]);

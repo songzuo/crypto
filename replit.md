@@ -27,6 +27,11 @@ Preferred communication style: Simple, everyday language.
 - **30-DAY INDEPENDENT SYSTEM**: Created completely separate 30-day analysis system with dedicated backend and frontend
 - **NEW FRONTEND PAGE**: Added "/30day-analysis" route with independent interface for 30-day volatility analysis
 - **DEDICATED APIS**: Implemented separate API endpoints for 30-day analysis trigger and progress tracking
+- **CRITICAL FIX**: Fixed cryptocurrency ID 0 issue and implemented proper cryptocurrency identification using name/symbol
+- **BREAKPOINT RESUME**: Added断点续传功能 with analysis_resume_states table for continuous processing
+- **BATCH PROCESSING**: Implemented分批处理 with 100-item batches and smart data collection
+- **DATA DISCOVERY**: Identified root issue - only 25 cryptocurrencies have 8+ data points, none have 31+ points for proper 30-day analysis
+- **SQL OPTIMIZATION**: Fixed all SQL errors and improved query performance with proper column references
 
 ## System Architecture
 
