@@ -64,6 +64,11 @@ export const navItems = [
     label: "数据库管理",
     path: "/database-management",
     icon: "ri-database-2-line"
+  },
+  {
+    label: "自定义仪表板",
+    path: "/custom-dashboard",
+    icon: "ri-layout-3-line"
   }
 ];
 

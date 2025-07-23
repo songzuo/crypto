@@ -1422,6 +1422,119 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Dashboard Configuration API Routes
+  
+  // Get all dashboard configurations for a user
+  app.get('/api/dashboards', async (req, res) => {
+    try {
+      const userId = req.query.userId as string || 'default';
+      const configs = await storage.getDashboardConfigs(userId);
+      res.json(configs);
+    } catch (error) {
+      console.error('获取仪表板配置失败:', error);
+      res.status(500).json({ error: '获取仪表板配置失败', details: error.message });
+    }
+  });
+
+  // Get a specific dashboard configuration
+  app.get('/api/dashboards/:id', async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const config = await storage.getDashboardConfig(id);
+      
+      if (!config) {
+        return res.status(404).json({ error: '仪表板配置未找到' });
+      }
+      
+      res.json(config);
+    } catch (error) {
+      console.error('获取仪表板配置失败:', error);
+      res.status(500).json({ error: '获取仪表板配置失败', details: error.message });
+    }
+  });
+
+  // Create a new dashboard configuration
+  app.post('/api/dashboards', async (req, res) => {
+    try {
+      const config = await storage.createDashboardConfig(req.body);
+      res.status(201).json(config);
+    } catch (error) {
+      console.error('创建仪表板配置失败:', error);
+      res.status(500).json({ error: '创建仪表板配置失败', details: error.message });
+    }
+  });
+
+  // Update a dashboard configuration
+  app.put('/api/dashboards/:id', async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const config = await storage.updateDashboardConfig(id, req.body);
+      
+      if (!config) {
+        return res.status(404).json({ error: '仪表板配置未找到' });
+      }
+      
+      res.json(config);
+    } catch (error) {
+      console.error('更新仪表板配置失败:', error);
+      res.status(500).json({ error: '更新仪表板配置失败', details: error.message });
+    }
+  });
+
+  // Delete a dashboard configuration
+  app.delete('/api/dashboards/:id', async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const success = await storage.deleteDashboardConfig(id);
+      
+      if (!success) {
+        return res.status(404).json({ error: '仪表板配置未找到' });
+      }
+      
+      res.json({ message: '仪表板配置删除成功' });
+    } catch (error) {
+      console.error('删除仪表板配置失败:', error);
+      res.status(500).json({ error: '删除仪表板配置失败', details: error.message });
+    }
+  });
+
+  // Get default dashboard configuration or create one
+  app.get('/api/dashboards/default', async (req, res) => {
+    try {
+      const userId = req.query.userId as string || 'default';
+      let config = await storage.getDefaultDashboardConfig(userId);
+      
+      if (!config) {
+        // Create default configuration if none exists
+        config = await storage.createDefaultDashboardConfig(userId);
+      }
+      
+      res.json(config);
+    } catch (error) {
+      console.error('获取默认仪表板配置失败:', error);
+      res.status(500).json({ error: '获取默认仪表板配置失败', details: error.message });
+    }
+  });
+
+  // Clone a dashboard configuration
+  app.post('/api/dashboards/:id/clone', async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { name, userId } = req.body;
+      
+      const clonedConfig = await storage.cloneDashboardConfig(id, name, userId);
+      
+      if (!clonedConfig) {
+        return res.status(404).json({ error: '源仪表板配置未找到' });
+      }
+      
+      res.status(201).json(clonedConfig);
+    } catch (error) {
+      console.error('克隆仪表板配置失败:', error);
+      res.status(500).json({ error: '克隆仪表板配置失败', details: error.message });
+    }
+  });
+
   // Setup the crawler scheduler
   setupScheduler();
 

@@ -11,7 +11,9 @@ import {
   technicalAnalysisBatches, type TechnicalAnalysisBatch, type InsertTechnicalAnalysisBatch,
   technicalAnalysisEntries, type TechnicalAnalysisEntry, type InsertTechnicalAnalysisEntry,
   volatilityAnalysisBatches, type VolatilityAnalysisBatch, type InsertVolatilityAnalysisBatch,
-  volatilityAnalysisEntries, type VolatilityAnalysisEntry, type InsertVolatilityAnalysisEntry
+  volatilityAnalysisEntries, type VolatilityAnalysisEntry, type InsertVolatilityAnalysisEntry,
+  dashboardConfigs, type DashboardConfig, type InsertDashboardConfig,
+  DEFAULT_DASHBOARD_LAYOUT, DEFAULT_DASHBOARD_PREFERENCES, DEFAULT_WIDGETS
 } from "@shared/schema";
 
 export interface IStorage {
@@ -106,6 +108,16 @@ export interface IStorage {
   getVolatilityAnalysisResults(volatilityDirection?: string, volatilityCategory?: string): Promise<{ batch: VolatilityAnalysisBatch, entries: VolatilityAnalysisEntry[] }>;
   getVolatilityAnalysisResultsByBatchId(batchId: number, volatilityDirection?: string, volatilityCategory?: string): Promise<VolatilityAnalysisEntry[]>;
   createVolatilityAnalysisEntry(entry: InsertVolatilityAnalysisEntry): Promise<VolatilityAnalysisEntry>;
+
+  // Dashboard Configuration methods
+  getDashboardConfigs(userId: string): Promise<DashboardConfig[]>;
+  getDashboardConfig(id: number): Promise<DashboardConfig | undefined>;
+  getDefaultDashboardConfig(userId: string): Promise<DashboardConfig | undefined>;
+  createDashboardConfig(config: InsertDashboardConfig): Promise<DashboardConfig>;
+  createDefaultDashboardConfig(userId: string): Promise<DashboardConfig>;
+  updateDashboardConfig(id: number, updates: Partial<InsertDashboardConfig>): Promise<DashboardConfig | undefined>;
+  deleteDashboardConfig(id: number): Promise<boolean>;
+  cloneDashboardConfig(id: number, name: string, userId: string): Promise<DashboardConfig | undefined>;
 }
 
 export class MemStorage implements IStorage {
@@ -1788,6 +1800,130 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Error creating volatility analysis entry:', error);
       throw error;
+    }
+  }
+
+  // Dashboard Configuration methods
+  async getDashboardConfigs(userId: string): Promise<DashboardConfig[]> {
+    try {
+      const configs = await db.select()
+        .from(dashboardConfigs)
+        .where(eq(dashboardConfigs.userId, userId))
+        .orderBy(desc(dashboardConfigs.updatedAt));
+      return configs;
+    } catch (error) {
+      console.error('Error fetching dashboard configs:', error);
+      return [];
+    }
+  }
+
+  async getDashboardConfig(id: number): Promise<DashboardConfig | undefined> {
+    try {
+      const [config] = await db.select()
+        .from(dashboardConfigs)
+        .where(eq(dashboardConfigs.id, id));
+      return config;
+    } catch (error) {
+      console.error('Error fetching dashboard config:', error);
+      return undefined;
+    }
+  }
+
+  async getDefaultDashboardConfig(userId: string): Promise<DashboardConfig | undefined> {
+    try {
+      const [config] = await db.select()
+        .from(dashboardConfigs)
+        .where(eq(dashboardConfigs.userId, userId))
+        .orderBy(desc(dashboardConfigs.createdAt))
+        .limit(1);
+      return config;
+    } catch (error) {
+      console.error('Error fetching default dashboard config:', error);
+      return undefined;
+    }
+  }
+
+  async createDashboardConfig(config: InsertDashboardConfig): Promise<DashboardConfig> {
+    try {
+      const [result] = await db
+        .insert(dashboardConfigs)
+        .values(config)
+        .returning();
+      return result;
+    } catch (error) {
+      console.error('Error creating dashboard config:', error);
+      throw error;
+    }
+  }
+
+  async createDefaultDashboardConfig(userId: string): Promise<DashboardConfig> {
+    try {
+      const defaultConfig: InsertDashboardConfig = {
+        name: 'Default Dashboard',
+        userId,
+        widgets: DEFAULT_WIDGETS,
+        layout: DEFAULT_DASHBOARD_LAYOUT,
+        preferences: DEFAULT_DASHBOARD_PREFERENCES,
+        isDefault: true
+      };
+
+      const [result] = await db
+        .insert(dashboardConfigs)
+        .values(defaultConfig)
+        .returning();
+      return result;
+    } catch (error) {
+      console.error('Error creating default dashboard config:', error);
+      throw error;
+    }
+  }
+
+  async updateDashboardConfig(id: number, updates: Partial<InsertDashboardConfig>): Promise<DashboardConfig | undefined> {
+    try {
+      const [result] = await db
+        .update(dashboardConfigs)
+        .set({ ...updates, updatedAt: new Date() })
+        .where(eq(dashboardConfigs.id, id))
+        .returning();
+      return result;
+    } catch (error) {
+      console.error('Error updating dashboard config:', error);
+      return undefined;
+    }
+  }
+
+  async deleteDashboardConfig(id: number): Promise<boolean> {
+    try {
+      const result = await db
+        .delete(dashboardConfigs)
+        .where(eq(dashboardConfigs.id, id));
+      return result.rowCount > 0;
+    } catch (error) {
+      console.error('Error deleting dashboard config:', error);
+      return false;
+    }
+  }
+
+  async cloneDashboardConfig(id: number, name: string, userId: string): Promise<DashboardConfig | undefined> {
+    try {
+      const originalConfig = await this.getDashboardConfig(id);
+      if (!originalConfig) {
+        return undefined;
+      }
+
+      const clonedConfig: InsertDashboardConfig = {
+        name,
+        userId,
+        widgets: originalConfig.widgets,
+        layout: originalConfig.layout,
+        preferences: originalConfig.preferences,
+        isDefault: false
+      };
+
+      return await this.createDashboardConfig(clonedConfig);
+    } catch (error) {
+      console.error('Error cloning dashboard config:', error);
+      return undefined;
     }
   }
 }

@@ -20,6 +20,7 @@ import VolatilityAnalysis from "./pages/VolatilityAnalysis";
 import ThirtyDayAnalysis from "./pages/ThirtyDayAnalysis";
 import AllVolatilityResults from "./pages/AllVolatilityResults";
 import DatabaseManagement from "./pages/DatabaseManagement";
+import CustomDashboard from "./pages/CustomDashboard";
 
 function Router() {
   return (
@@ -39,6 +40,7 @@ function Router() {
         <Route path="/30day-analysis" component={ThirtyDayAnalysis} />
         <Route path="/all-volatility-results" component={AllVolatilityResults} />
         <Route path="/database-management" component={DatabaseManagement} />
+        <Route path="/custom-dashboard" component={CustomDashboard} />
         <Route component={NotFound} />
       </Switch>
     </Layout>
