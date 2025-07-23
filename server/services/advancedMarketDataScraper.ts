@@ -573,10 +573,12 @@ export async function scrapeAdvancedMarketData(): Promise<number> {
     
     for (const crypto of uniqueCryptos) {
       try {
-        // 查找是否已存在
+        // 增强重复检查：同时检查symbol和name
         const existingCrypto = await findExistingCrypto(crypto.symbol);
+        const { checkNameSymbolExists } = await import('../deduplicateDatabase.js');
+        const isDuplicate = await checkNameSymbolExists(crypto.name, crypto.symbol);
         
-        if (!existingCrypto) {
+        if (!existingCrypto && !isDuplicate) {
           // 优先添加新加密货币
           console.log(`发现新币种: ${crypto.name} (${crypto.symbol})，准备添加`);
           const newCrypto: InsertCryptocurrency = {

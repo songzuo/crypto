@@ -1373,6 +1373,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // 数据库去重
+  app.post('/api/database/deduplicate', async (req, res) => {
+    try {
+      const { deduplicateDatabase } = await import('./deduplicateDatabase.js');
+      const result = await deduplicateDatabase();
+      res.json({
+        success: true,
+        message: '数据库去重完成',
+        ...result
+      });
+    } catch (error) {
+      console.error('数据库去重失败:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: '数据库去重失败', 
+        details: error.message 
+      });
+    }
+  });
+
+  // 检查数据库重复状态
+  app.get('/api/database/duplicate-status', async (req, res) => {
+    try {
+      const totalCount = await db.select({ count: sql`COUNT(*)` }).from(cryptocurrencies);
+      const uniqueCount = await db.select({ count: sql`COUNT(DISTINCT name)` }).from(cryptocurrencies);
+      
+      const duplicates = await db
+        .select({
+          name: cryptocurrencies.name,
+          count: sql<number>`COUNT(*)`
+        })
+        .from(cryptocurrencies)
+        .groupBy(cryptocurrencies.name)
+        .having(sql`COUNT(*) > 1`)
+        .orderBy(sql`COUNT(*) DESC`)
+        .limit(10);
+
+      res.json({
+        totalRecords: totalCount[0].count,
+        uniqueNames: uniqueCount[0].count,
+        duplicateCount: totalCount[0].count - uniqueCount[0].count,
+        topDuplicates: duplicates
+      });
+    } catch (error) {
+      console.error('获取重复状态失败:', error);
+      res.status(500).json({ error: '获取重复状态失败', details: error.message });
+    }
+  });
+
   // Setup the crawler scheduler
   setupScheduler();
 

@@ -59,6 +59,11 @@ export const navItems = [
     label: "完整波动性结果",
     path: "/all-volatility-results",
     icon: "ri-list-check-line"
+  },
+  {
+    label: "数据库管理",
+    path: "/database-management",
+    icon: "ri-database-2-line"
   }
 ];
 
