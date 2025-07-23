@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { TrendingUp, TrendingDown, ArrowRight, BarChart3, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { TrendingUp, TrendingDown, ArrowRight, BarChart3, AlertTriangle, CheckCircle, RefreshCw, PlayCircle, StopCircle, Database, Clock } from 'lucide-react';
 import { queryClient } from '@/lib/queryClient';
 
 interface VolatilityBatch {
@@ -106,7 +108,80 @@ const VolatilityAnalysis = () => {
     }
   });
 
-  // 手动触发波动性分析
+  // 手动触发7天波动性分析
+  const run7DayAnalysis = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/api/volatility-analysis/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ period: '7d' })
+      });
+      if (!response.ok) throw new Error('启动7天分析失败');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/volatility-analysis'] });
+      refetch();
+      refetchProgress();
+    }
+  });
+
+  // 手动触发30天波动性分析
+  const run30DayAnalysis = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/api/volatility-analysis/trigger-30day', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (!response.ok) throw new Error('启动30天分析失败');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/volatility-analysis'] });
+      refetch();
+      refetchProgress();
+    }
+  });
+
+  // 运行修正后的波动性分析
+  const runCorrectedAnalysis = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/api/volatility-analysis/run-corrected', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (!response.ok) throw new Error('启动修正分析失败');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/volatility-analysis'] });
+      refetch();
+      refetchProgress();
+    }
+  });
+
+  // 检查调度器状态
+  const { data: schedulerStatus } = useQuery({
+    queryKey: ['/api/volatility-analysis/scheduler-status'],
+    queryFn: async () => {
+      const response = await fetch('/api/volatility-analysis/scheduler-status');
+      if (!response.ok) throw new Error('获取调度器状态失败');
+      return response.json();
+    },
+    refetchInterval: 30000 // 每30秒检查一次
+  });
+
+  // 获取完整波动性结果
+  const { data: allResults } = useQuery({
+    queryKey: ['/api/volatility-analysis/all-results', selectedPeriod],
+    queryFn: async () => {
+      const response = await fetch(`/api/volatility-analysis/all-results?period=${selectedPeriod}&limit=1000`);
+      if (!response.ok) throw new Error('获取完整结果失败');
+      return response.json();
+    }
+  });
+
+  // 手动触发波动性分析（保留兼容性）
   const runAnalysis = async () => {
     setIsRunningAnalysis(true);
     try {
@@ -206,311 +281,517 @@ const VolatilityAnalysis = () => {
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold">波动性分析</h1>
+          <h1 className="text-3xl font-bold">波动性分析中心</h1>
           <p className="text-muted-foreground mt-2">
-            基于交易量市值比率数据的加密货币波动性排名分析
+            全面的加密货币波动性分析、自动调度和数据挖掘系统
           </p>
         </div>
         <div className="flex gap-2">
           <Button 
-            onClick={runAnalysis} 
-            disabled={isRunningAnalysis}
-            className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+            onClick={() => run7DayAnalysis.mutate()}
+            disabled={run7DayAnalysis.isPending}
+            variant="outline"
+            className="flex items-center space-x-2"
           >
-            {isRunningAnalysis ? '分析中...' : '运行波动性分析'}
+            {run7DayAnalysis.isPending ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>7天分析中</span>
+              </>
+            ) : (
+              <>
+                <PlayCircle className="w-4 h-4" />
+                <span>启动7天分析</span>
+              </>
+            )}
           </Button>
           <Button 
-            onClick={triggerEnhancedAnalysis} 
-            disabled={isRunningAnalysis}
-            className="bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700"
+            onClick={() => run30DayAnalysis.mutate()}
+            disabled={run30DayAnalysis.isPending}
+            variant="outline"
+            className="flex items-center space-x-2"
           >
-            {isRunningAnalysis ? '分析中...' : '增强分析(全部币种)'}
+            {run30DayAnalysis.isPending ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>30天分析中</span>
+              </>
+            ) : (
+              <>
+                <Clock className="w-4 h-4" />
+                <span>启动30天分析</span>
+              </>
+            )}
+          </Button>
+          <Button 
+            onClick={() => runCorrectedAnalysis.mutate()}
+            disabled={runCorrectedAnalysis.isPending}
+            className="flex items-center space-x-2"
+          >
+            {runCorrectedAnalysis.isPending ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>修正分析中</span>
+              </>
+            ) : (
+              <>
+                <Database className="w-4 h-4" />
+                <span>运行修正分析</span>
+              </>
+            )}
           </Button>
         </div>
       </div>
 
-      {/* 进度条 */}
-      {showProgress && (
-        <Card className="border-l-4 border-l-blue-500">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">波动性分析进度</h3>
-              <Badge variant="outline">
-                {progress.progressPercentage}% 完成
-              </Badge>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2.5 mb-4">
-              <div 
-                className="bg-blue-600 h-2.5 rounded-full transition-all duration-1000" 
-                style={{ width: `${progress.progressPercentage}%` }}
-              ></div>
-            </div>
-            <div className="text-sm text-muted-foreground">
-              已处理 {progress.processedCount} / {progress.totalCryptocurrencies} 个加密货币
-              {progress.progressPercentage < 100 && (
-                <span className="ml-2 text-blue-600 font-medium">
-                  还有 {100 - progress.progressPercentage}% 的数据正在计算...
-                </span>
-              )}
-              {progress.message && (
-                <div className="mt-1 text-xs text-gray-500">
-                  {progress.message}
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-      
-      {/* 分析算法说明 */}
-      <Card className="border-l-4 border-l-green-500">
-        <CardContent className="p-6">
-          <h3 className="text-lg font-semibold mb-4">算法说明</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <h4 className="font-medium text-blue-900 mb-2">7天波动性分析</h4>
-              <ul className="text-sm text-blue-800 space-y-1">
-                <li>• 需要至少8个数据点</li>
-                <li>• 进行7次价格比较</li>
-                <li>• 使用最近8个数据点的平均值</li>
-                <li>• 适用于短期波动性评估</li>
-              </ul>
-            </div>
-            <div className="bg-purple-50 p-4 rounded-lg">
-              <h4 className="font-medium text-purple-900 mb-2">30天波动性分析</h4>
-              <ul className="text-sm text-purple-800 space-y-1">
-                <li>• 需要至少31个数据点</li>
-                <li>• 进行31次价格比较</li>
-                <li>• 每个数据点与其他30个数据点的平均值进行比较</li>
-                <li>• 适用于长期波动性评估</li>
-              </ul>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-      
-      {/* 分析结果 */}
-      <div className="space-y-6">
-
-      {/* 批次信息 */}
-      {batchesData?.data?.length > 0 && (
+      {/* 调度器状态监控 */}
+      {schedulerStatus && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5" />
-              最新分析批次
+            <CardTitle className="flex items-center space-x-2">
+              <Clock className="w-5 h-5" />
+              <span>自动调度状态</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="text-center">
-                <p className="text-2xl font-bold text-purple-600">
-                  {batchesData.data[0]?.totalAnalyzed || 0}
-                </p>
-                <p className="text-sm text-muted-foreground">分析币种数</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="flex items-center space-x-2">
+                <Badge variant={schedulerStatus.isActive ? "default" : "secondary"}>
+                  {schedulerStatus.isActive ? "运行中" : "已停止"}
+                </Badge>
+                <span className="text-sm text-muted-foreground">
+                  调度器状态
+                </span>
               </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-pink-600">
-                  {batchesData.data[0]?.timeframe || '24h'}
-                </p>
-                <p className="text-sm text-muted-foreground">分析周期</p>
+              <div className="text-sm">
+                <span className="font-medium">下次运行:</span>{" "}
+                {schedulerStatus.nextRunTime || "未设置"}
               </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-blue-600">
-                  #{batchesData.data[0]?.id}
-                </p>
-                <p className="text-sm text-muted-foreground">批次编号</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-green-600">
-                  {new Date(batchesData.data[0]?.createdAt).toLocaleDateString()}
-                </p>
-                <p className="text-sm text-muted-foreground">分析时间</p>
+              <div className="text-sm">
+                <span className="font-medium">上次运行:</span>{" "}
+                {schedulerStatus.lastRunTime || "从未运行"}
               </div>
             </div>
           </CardContent>
         </Card>
       )}
 
-        {/* 筛选控件 */}
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex flex-wrap gap-4 items-center">
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium">时间周期:</label>
-                <Select value={selectedPeriod} onValueChange={(value: '7d' | '30d') => setSelectedPeriod(value)}>
-                  <SelectTrigger className="w-32">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="7d">7天分析 (8个数据点)</SelectItem>
-                    <SelectItem value="30d">30天分析 (31个数据点)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium">波动方向:</label>
-                <Select value={selectedDirection} onValueChange={setSelectedDirection}>
-                  <SelectTrigger className="w-32">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">全部方向</SelectItem>
-                    <SelectItem value="up">上涨 ↑</SelectItem>
-                    <SelectItem value="down">下跌 ↓</SelectItem>
-                    <SelectItem value="stable">稳定 →</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium">风险等级:</label>
-                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                  <SelectTrigger className="w-32">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">全部等级</SelectItem>
-                    <SelectItem value="low">低风险</SelectItem>
-                    <SelectItem value="medium">中风险</SelectItem>
-                    <SelectItem value="high">高风险</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <Tabs defaultValue="results" className="w-full">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="results">分析结果</TabsTrigger>
+          <TabsTrigger value="progress">进度监控</TabsTrigger>
+          <TabsTrigger value="batches">历史批次</TabsTrigger>
+          <TabsTrigger value="settings">设置管理</TabsTrigger>
+        </TabsList>
 
-      {/* 分析结果表格 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>波动性排名 - {selectedPeriod === '7d' ? '7天分析' : '30天分析'}</CardTitle>
-          <CardDescription>
-            {resultsData?.total ? `共 ${resultsData.total} 个结果` : '加载中...'}
-            {selectedPeriod === '7d' ? ' (基于8个数据点，7次比较)' : ' (基于31个数据点，31次比较)'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="text-center py-8">
-              <div className="animate-spin h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
-              <p className="mt-2 text-muted-foreground">加载分析数据中...</p>
-            </div>
-          ) : resultsData?.entries?.length > 0 ? (
-            <div className="space-y-4">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-16">排名</TableHead>
-                    <TableHead>币种</TableHead>
-                    <TableHead>波动幅度</TableHead>
-                    <TableHead>方向</TableHead>
-                    <TableHead>风险等级</TableHead>
-                    <TableHead>数据点</TableHead>
-                    <TableHead>比较次数</TableHead>
-                    <TableHead>市值变化</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {resultsData.entries.map((entry: VolatilityEntry, index: number) => (
-                    <TableRow key={`${entry.symbol}-${entry.rank || index}`}>
-                      <TableCell className="font-medium">
-                        <Badge variant="outline">#{entry.rank || ((currentPage - 1) * pageSize + index + 1)}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{entry.symbol}</div>
-                          <div className="text-sm text-muted-foreground">{entry.name}</div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className={`font-medium ${
-                          entry.volatilityPercentage >= 50 ? 'text-red-600' :
-                          entry.volatilityPercentage >= 20 ? 'text-orange-600' :
-                          entry.volatilityPercentage >= 10 ? 'text-yellow-600' :
-                          entry.volatilityPercentage >= 5 ? 'text-blue-600' : 'text-green-600'
-                        }`}>
-                          {entry.volatilityPercentage?.toFixed(2) || '0.00'}%
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {selectedPeriod}日均波动
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          {getVolatilityIcon(entry.direction)}
-                          <span className="capitalize">{entry.direction === 'up' ? '上涨' : 
-                                                        entry.direction === 'down' ? '下跌' : '稳定'}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          {getRiskIcon(entry.category === '极高' ? '高风险' : entry.category === '高' ? '中风险' : '低风险')}
-                          <Badge className={getCategoryColor(entry.category)}>
-                            {entry.category}
-                          </Badge>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <div className="text-sm font-medium">{entry.dataPoints || 0}</div>
-                        <div className="text-xs text-muted-foreground">个数据点</div>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <div className="text-sm font-medium">{entry.comparisons || 0}</div>
-                        <div className="text-xs text-muted-foreground">比较次数</div>
-                      </TableCell>
-                      <TableCell>
-                        <div className={`font-medium ${
-                          entry.marketCapChange > 0 ? 'text-green-600' :
-                          entry.marketCapChange < 0 ? 'text-red-600' : 'text-gray-600'
-                        }`}>
-                          {entry.marketCapChange > 0 ? '+' : ''}{entry.marketCapChange?.toFixed(2) || '0.00'}%
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          市值变化
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+        <TabsContent value="results" className="space-y-4">
+          {/* 筛选控件 */}
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex flex-wrap gap-4 items-center">
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium">时间周期:</label>
+                  <Select value={selectedPeriod} onValueChange={(value: '7d' | '30d') => setSelectedPeriod(value)}>
+                    <SelectTrigger className="w-40">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="7d">7天分析</SelectItem>
+                      <SelectItem value="30d">30天分析</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium">波动方向:</label>
+                  <Select value={selectedDirection} onValueChange={setSelectedDirection}>
+                    <SelectTrigger className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">全部方向</SelectItem>
+                      <SelectItem value="up">上涨 ↑</SelectItem>
+                      <SelectItem value="down">下跌 ↓</SelectItem>
+                      <SelectItem value="stable">稳定 →</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              {/* 分页控件 */}
-              {resultsData?.total > 30 && (
-                <div className="flex justify-center gap-2 mt-4">
-                  <Button
-                    variant="outline"
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                  >
-                    上一页
-                  </Button>
-                  <span className="flex items-center px-4">
-                    第 {currentPage} 页，共 {Math.ceil(resultsData.total / 30)} 页
-                  </span>
-                  <Button
-                    variant="outline"
-                    disabled={currentPage >= Math.ceil(resultsData.total / 30)}
-                    onClick={() => setCurrentPage(prev => prev + 1)}
-                  >
-                    下一页
-                  </Button>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium">风险类别:</label>
+                  <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                    <SelectTrigger className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">全部类别</SelectItem>
+                      <SelectItem value="极高">极高风险</SelectItem>
+                      <SelectItem value="高">高风险</SelectItem>
+                      <SelectItem value="中">中风险</SelectItem>
+                      <SelectItem value="低">低风险</SelectItem>
+                      <SelectItem value="极低">极低风险</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium">每页显示:</label>
+                  <Select value={pageSize.toString()} onValueChange={(value) => setPageSize(parseInt(value))}>
+                    <SelectTrigger className="w-20">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="25">25</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                      <SelectItem value="200">200</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 分析结果表格 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5" />
+                波动性分析结果
+              </CardTitle>
+              <CardDescription>
+                根据{selectedPeriod === '7d' ? '7天' : '30天'}数据计算的市值波动性分析
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <RefreshCw className="h-6 w-6 animate-spin mr-2" />
+                  <span>加载分析结果...</span>
+                </div>
+              ) : resultsData?.entries?.length > 0 ? (
+                <div className="space-y-4">
+                  <div className="text-sm text-muted-foreground">
+                    显示 {resultsData.entries.length} 个结果
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>排名</TableHead>
+                        <TableHead>币种</TableHead>
+                        <TableHead>波动性</TableHead>
+                        <TableHead>趋势</TableHead>
+                        <TableHead>风险等级</TableHead>
+                        <TableHead>数据点</TableHead>
+                        <TableHead>市值变化</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {resultsData.entries.map((entry: any, index: number) => (
+                        <TableRow key={`${entry.symbol}-${index}`}>
+                          <TableCell className="font-medium">
+                            #{(currentPage - 1) * pageSize + index + 1}
+                          </TableCell>
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">{entry.symbol}</div>
+                              <div className="text-sm text-muted-foreground truncate max-w-32">
+                                {entry.name}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="font-medium">
+                              {entry.volatilityPercentage?.toFixed(2) || '0.00'}%
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {getVolatilityIcon(entry.direction || entry.volatilityDirection)}
+                              <span className="text-sm">
+                                {entry.direction || entry.volatilityDirection || 'stable'}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={getCategoryColor(entry.category || entry.riskLevel || '中')}>
+                              {entry.category || entry.riskLevel || '中风险'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              <div>{entry.dataPoints || 'N/A'} 点</div>
+                              <div className="text-muted-foreground">
+                                {entry.comparisons || 'N/A'} 比较
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              {entry.marketCapChange ? 
+                                `${entry.marketCapChange > 0 ? '+' : ''}${entry.marketCapChange.toFixed(2)}%` : 
+                                'N/A'
+                              }
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+
+                  {/* 分页控制 */}
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-muted-foreground">
+                      第 {currentPage} 页，共 {Math.ceil((resultsData.total || 0) / pageSize)} 页
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                        disabled={currentPage <= 1}
+                      >
+                        上一页
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(currentPage + 1)}
+                        disabled={currentPage >= Math.ceil((resultsData.total || 0) / pageSize)}
+                      >
+                        下一页
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <BarChart3 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-medium mb-2">暂无分析结果</h3>
+                  <p className="text-muted-foreground mb-4">
+                    点击上方按钮启动波动性分析以查看结果
+                  </p>
                 </div>
               )}
-            </div>
-          ) : (
-            <div className="text-center py-8">
-              <BarChart3 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground">暂无波动性分析数据</p>
-              <p className="text-sm text-muted-foreground mt-2">
-                点击上方"运行波动性分析"按钮开始分析
-              </p>
-            </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="progress" className="space-y-4">
+          {/* 分析进度监控 */}
+          {showProgress && (
+            <Card className="border-l-4 border-l-blue-500">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold">波动性分析进度</h3>
+                  <Badge variant="outline">
+                    {progress.progressPercentage}% 完成
+                  </Badge>
+                </div>
+                <Progress value={progress.progressPercentage} className="mb-4" />
+                <div className="text-sm text-muted-foreground">
+                  已处理 {progress.processedCount} / {progress.totalCryptocurrencies} 个加密货币
+                  {progress.progressPercentage < 100 && (
+                    <span className="ml-2 text-blue-600 font-medium">
+                      还有 {100 - progress.progressPercentage}% 的数据正在计算...
+                    </span>
+                  )}
+                  {progress.message && (
+                    <div className="mt-1 text-xs text-gray-500">
+                      {progress.message}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           )}
-        </CardContent>
-      </Card>
-      </div>
+
+          {/* 算法说明 */}
+          <Card className="border-l-4 border-l-green-500">
+            <CardContent className="p-6">
+              <h3 className="text-lg font-semibold mb-4">算法说明</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <h4 className="font-medium text-blue-900 mb-2">7天波动性分析</h4>
+                  <ul className="text-sm text-blue-800 space-y-1">
+                    <li>• 需要至少8个数据点</li>
+                    <li>• 进行7次价格比较</li>
+                    <li>• 使用最近8个数据点的平均值</li>
+                    <li>• 适用于短期波动性评估</li>
+                  </ul>
+                </div>
+                <div className="bg-purple-50 p-4 rounded-lg">
+                  <h4 className="font-medium text-purple-900 mb-2">30天波动性分析</h4>
+                  <ul className="text-sm text-purple-800 space-y-1">
+                    <li>• 需要至少31个数据点</li>
+                    <li>• 进行31次价格比较</li>
+                    <li>• 每个数据点与其他30个数据点的平均值进行比较</li>
+                    <li>• 适用于长期波动性评估</li>
+                  </ul>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 完整数据结果预览 */}
+          {allResults?.success && allResults.data && (
+            <Card>
+              <CardHeader>
+                <CardTitle>修正分析算法结果</CardTitle>
+                <CardDescription>
+                  使用{allResults.data.algorithm?.name}的分析结果
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  <div className="text-center p-4 bg-blue-50 rounded-lg">
+                    <div className="text-2xl font-bold text-blue-600">
+                      {allResults.data.entries?.length || 0}
+                    </div>
+                    <div className="text-sm text-blue-800">分析币种总数</div>
+                  </div>
+                  <div className="text-center p-4 bg-green-50 rounded-lg">
+                    <div className="text-2xl font-bold text-green-600">
+                      #{allResults.data.batchId}
+                    </div>
+                    <div className="text-sm text-green-800">批次ID</div>
+                  </div>
+                  <div className="text-center p-4 bg-purple-50 rounded-lg">
+                    <div className="text-2xl font-bold text-purple-600">
+                      {allResults.data.algorithm?.dataPoints}
+                    </div>
+                    <div className="text-sm text-purple-800">数据点配置</div>
+                  </div>
+                  <div className="text-center p-4 bg-orange-50 rounded-lg">
+                    <div className="text-2xl font-bold text-orange-600">
+                      实时分析
+                    </div>
+                    <div className="text-sm text-orange-800">分析状态</div>
+                  </div>
+                </div>
+
+                {allResults.data.stats && (
+                  <div>
+                    <h4 className="font-medium mb-3">风险分布统计</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+                      {allResults.data.stats.map((stat: any) => (
+                        <div key={stat.category} className="text-center p-3 border rounded-lg">
+                          <div className="font-medium">{stat.count}</div>
+                          <div className="text-sm text-muted-foreground">{stat.category}</div>
+                          <div className="text-xs text-gray-500">
+                            平均: {stat.avgVolatility?.toFixed(2)}%
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="batches" className="space-y-4">
+          {/* 批次信息 */}
+          {batchesData?.data?.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Database className="h-5 w-5" />
+                  历史分析批次
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {batchesData.data.map((batch: VolatilityBatch) => (
+                    <div key={batch.id} className="border rounded-lg p-4">
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div className="text-center">
+                          <div className="text-lg font-bold text-purple-600">
+                            #{batch.id}
+                          </div>
+                          <div className="text-sm text-muted-foreground">批次编号</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-lg font-bold text-blue-600">
+                            {batch.totalAnalyzed}
+                          </div>
+                          <div className="text-sm text-muted-foreground">分析币种</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-lg font-bold text-green-600">
+                            {batch.timeframe}
+                          </div>
+                          <div className="text-sm text-muted-foreground">时间周期</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-lg font-bold text-orange-600">
+                            {new Date(batch.createdAt).toLocaleDateString()}
+                          </div>
+                          <div className="text-sm text-muted-foreground">创建时间</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="settings" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>自动调度设置</CardTitle>
+              <CardDescription>
+                配置波动性分析的自动运行计划
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div>
+                  <h4 className="font-medium">启用自动调度</h4>
+                  <p className="text-sm text-muted-foreground">
+                    每小时自动运行波动性分析
+                  </p>
+                </div>
+                <Badge variant={schedulerStatus?.isActive ? "default" : "secondary"}>
+                  {schedulerStatus?.isActive ? "运行中" : "已停止"}
+                </Badge>
+              </div>
+
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div>
+                  <h4 className="font-medium">7天分析频率</h4>
+                  <p className="text-sm text-muted-foreground">
+                    短期波动性分析运行频率
+                  </p>
+                </div>
+                <span className="text-sm font-medium">每小时</span>
+              </div>
+
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div>
+                  <h4 className="font-medium">30天分析频率</h4>
+                  <p className="text-sm text-muted-foreground">
+                    长期波动性分析运行频率
+                  </p>
+                </div>
+                <span className="text-sm font-medium">每日</span>
+              </div>
+
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div>
+                  <h4 className="font-medium">数据质量要求</h4>
+                  <p className="text-sm text-muted-foreground">
+                    确保足够的数据点进行分析
+                  </p>
+                </div>
+                <span className="text-sm font-medium">7天≥8点, 30天≥31点</span>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

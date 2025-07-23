@@ -51,16 +51,6 @@ export const navItems = [
     icon: "ri-pulse-line"
   },
   {
-    label: "30天独立分析",
-    path: "/30day-analysis",
-    icon: "ri-calendar-line"
-  },
-  {
-    label: "完整波动性结果",
-    path: "/all-volatility-results",
-    icon: "ri-list-check-line"
-  },
-  {
     label: "数据库管理",
     path: "/database-management",
     icon: "ri-database-2-line"
