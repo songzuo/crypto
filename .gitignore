@@ -1,188 +1,25 @@
-# Dependencies
 node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
-
-# Build outputs
-dist/
-build/
-out/
-*.min.js
-*.min.css
-
-# Environment files
-.env
-.env.local
-.env.*.local
-.env.example
-.env.backup
-
-# Local development configs
-.config/
-.local/
-
-# IDE and editor files
-.idea/
 .vscode/
-*.swp
-*.swo
-*~
-.project
-.classpath
-.settings/
+.DS_Store
+*.log
+.env
 
-# AI tool configs
+# IDE 配置
 .claude/
 .codebuddy/
 .qoder/
-.cursor/
-.windsurf/
+.config/
+.local/
 
-# Logs
-logs/
-*.log
-server_debug.log
-server_output.log
+# 构建产物
+dist/
+*.tar.gz
+*.exe
+*.png
 
-# OS files
-.DS_Store
-Thumbs.db
-desktop.ini
-nul
-
-# Database files
-*.sqlite
-*.sqlite3
-*.db
+# 数据导出
 database_export/
-database_import.sql
-database_import_no_transaction.sql
-import-database.ts
-import_cryptocurrencies.sql
-import_database.py
-init.sql
-create_tables.sql
-postgresql-installer.exe
-*_backup_*.tar.gz
-ultra_fast_backup.tar.gz
 ultra_fast_export/
 
-# Test files
-test-*.js
-test-*.ts
-test-*.py
-test-*.html
-test-*.bat
-*_test.js
-*_test.ts
-*_test.py
-check_*.js
-check_*.py
-quick_check.py
-simple_check.py
-debug_*.py
-debug_*.js
-test_*.js
-test_*.ts
-test_*.py
-test_*.html
-test_*.bat
-test_*.tsx
-
-# Temporary files
-tmp/
-temp/
-*.tmp
-*.temp
-
-# Client build artifacts
-client2/
-vine-standalone/
-
-# Docker
-docker-compose.yml
-Dockerfile
-
-# Scripts (keep only essential ones)
-debug-server.bat
-debug-vite.bat
-fix_and_import.py
-generate_sql_import.py
-generate_sql_import_no_transaction.sql
-import_with_neon_method.js
-one_click_restore.js
-one_click_restore_local.cjs
-restore_after_install.py
-set_claude_path.ps1
-setup-dev.bat
-setup-dev.sh
-start-docker.bat
-start-local.bat
-start_app.bat
-start_server.bat
-
-# Additional test/temp patterns
-simple-*.js
-simple-*.ts
-simple-*.bat
-simple-*.ps1
-simple-*.cjs
-standalone-*.js
-standalone-*.bat
-standalone-*.ps1
-standalone-*.cjs
-start-*.js
-start-*.bat
-start-*.ps1
-start-*.cjs
-run-*.bat
-run-*.ps1
-check_*.ps1
-check_*.bat
-full-*.js
-full-*.ts
-test_*.html
-*_server.js
-*_server.ts
-
-# Documentation (keep README, remove drafts)
-LOCAL_DEVELOPMENT.md
-QUICK_START.md
-STANDALONE_SERVICE_README.md
-VINE_HISTORICAL_DATA_SYSTEM.md
-WEB_SCRAPER_README.md
-"\u4e2d\u56fd\u5927\u5168\u6570\u636e\u91c7\u96c6\u6d41\u7a0b\u8bf4\u660e.md"
-
-# Server files (keep only production)
-server.js
-simple-server.ts
-standalone-service.ts
-standalone-web-service.ts
-standalone-web-simple.ts
-full-stack-server.js
-run-server.js
-
-# Client source (keep only production)
-client/src/pages/BasicDataCollection.tsx
-client/src/pages/SimpleHome.tsx
-client/src/pages/VINEHistoricalData.tsx
-client/src/pages/WebScraper.tsx
-
-# Test pages
-client/src/pages/TestPage.tsx
-client/src/pages/*Test*.tsx
-
-# Config files
-env.example
-vite.build.config.ts
-
-# Misc
-data.txt
-debug_screenshot.png
-"\u5408\u4f19\u534f\u8bae_\u4e2a\u4eba\u4fdd\u969c.docx"
-"\u5408\u4f19\u534f\u8bae_\u4e2a\u4eba\u4fdd\u969c.md"
-"\u5408\u4f19\u534f\u8bae\u6295\u8d44\u8bf4\u660e.md"
+# 误创建文件
+nul
