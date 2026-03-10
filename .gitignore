@@ -23,3 +23,36 @@ ultra_fast_export/
 
 # 误创建文件
 nul
+
+# 测试文件
+test-*.js
+test-*.ts
+test-*.html
+test-*.bat
+test_*.js
+test_*.py
+
+# 调试脚本
+debug-*.bat
+debug-*.js
+check_*.js
+check_*.py
+quick_check.py
+simple_check.py
+
+# 临时/一次性脚本
+*.bat
+*.ps1
+one_click_restore*
+fix_and_import.py
+import_database.py
+import_with_neon_method.js
+restore_after_install.py
+generate_sql_import.py
+set_claude_path.ps1
+
+# 数据文件
+data.txt
+
+# 临时测试文件
+simple-test-server-*.js

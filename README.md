@@ -1,67 +1,76 @@
-# Crypto - 加密货币交易与分析系统
+# Crypto - 加密货币分析平台
 
-## 项目概述
+## 项目简介
 
-加密货币交易机器人、数据分析工具和相关基础设施的集合。
+一个功能完整的加密货币分析平台，提供技术分析、波动率分析、新闻爬取和多 API 聚合功能。
 
-## 主要功能
+## 核心功能
 
-- 🤖 自动化交易策略 (freqtrade)
-- 📊 市场数据分析
-- 🔍 信号生成与回测
-- 💰 多交易所支持
+- 📊 **技术分析** - K 线图表、指标分析、趋势预测
+- 📈 **波动率分析** - 实时波动率计算、风险评估
+- 📰 **新闻爬取** - 自动抓取加密货币相关新闻
+- 🔌 **多 API 聚合** - 整合多个交易所和行情 API
 
 ## 技术栈
 
-- Python
-- Freqtrade
-- PostgreSQL
-- Docker
+**前端**
+- React 18 + Vite
+- Tailwind CSS
+- TypeScript
+
+**后端**
+- Express.js
+- PostgreSQL (Drizzle ORM)
+- Node.js
 
 ## 快速开始
 
+### 安装依赖
+
 ```bash
-# 克隆仓库
-git clone <repo-url>
-cd Crypto
+npm install
+```
 
-# 安装依赖
-pip install -r requirements.txt
+### 配置环境
 
-# 配置环境变量
+```bash
+# 复制环境配置示例
 cp .env.example .env
 
-# 启动服务
-docker-compose up -d
+# 编辑 .env 文件，配置数据库和 API 密钥
+```
+
+### 运行项目
+
+```bash
+# 开发模式
+npm run dev
+
+# 构建生产版本
+npm run build
+
+# 启动生产服务
+npm start
+
+# 数据库迁移
+npm run db:push
 ```
 
 ## 项目结构
 
 ```
 Crypto/
-├── freqtrade/          # 交易机器人配置
-├── strategies/         # 交易策略
-├── data/              # 市场数据
-├── notebooks/         # 分析笔记本
-└── scripts/           # 工具脚本
+├── client/          # React 前端
+├── server/          # Express 后端服务
+├── shared/          # 共享类型和工具
+└── database/        # 数据库脚本
 ```
-
-## 相关项目
-
-- [iflow](../iflow) - 主工作流系统
-- [api3](../api3) - API 探针服务
-
-## 状态
-
-🟡 开发中
 
 ## 注意事项
 
-- 交易有风险，投资需谨慎
-- 建议在测试环境充分验证策略
-- 定期备份配置和数据
+⚠️ 投资有风险，入市需谨慎  
+⚠️ 本工具仅供学习研究使用
 
 ---
 
 *最后更新：2026-03-09*
-*由 ClawX 自主创建*
